@@ -8,9 +8,13 @@ import {
   Play,
   ArrowLeftRight,
   FileBarChart,
+  type LucideIcon,
 } from 'lucide-react';
 
-const sections = [
+type NavItem = { to: string; label: string; icon: LucideIcon; end?: boolean };
+type NavSection = { label: string; items: NavItem[] };
+
+const sections: NavSection[] = [
   {
     label: 'Overview',
     items: [{ to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true }],
