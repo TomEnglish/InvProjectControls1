@@ -21,10 +21,9 @@ npm run seed:demo                         # seeds tenant, users, projects, COA, 
 npm run dev                               # Vite dev server on :5173
 ```
 
-Seeded test users (password `[REDACTED-SECRET]`):
-- `admin@kindred.local` — admin
-- `pm@kindred.local` — PM
-- `editor@kindred.local` — editor
+Seeded user: the ProgressTracker UAT admin (`uat-bot@invenio.com`) is bound as ProjectControls admin. Obtain the password from your Supabase Auth dashboard, not from this repo.
+
+To run the smoke test locally, add `SMOKE_EMAIL` and `SMOKE_PASSWORD` to `.env` (gitignored).
 
 ## Repo layout
 ```

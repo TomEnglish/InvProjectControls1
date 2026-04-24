@@ -20,8 +20,12 @@ async function main() {
   loadEnv();
   const url = process.env.SUPABASE_URL!;
   const anon = process.env.VITE_SUPABASE_ANON_KEY!;
-  const email = 'uat-bot@invenio.com';
-  const password = '[REDACTED-SECRET]';
+  const email = process.env.SMOKE_EMAIL;
+  const password = process.env.SMOKE_PASSWORD;
+  if (!email || !password) {
+    console.error('Set SMOKE_EMAIL and SMOKE_PASSWORD in .env (gitignored) before running.');
+    process.exit(1);
+  }
 
   const sb = createClient(url, anon, {
     auth: { persistSession: false },
