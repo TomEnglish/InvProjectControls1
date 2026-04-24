@@ -1,0 +1,65 @@
+@import "tailwindcss";
+
+@theme {
+  /* InvenioStyle — semantic design tokens (CSS variables driving Tailwind utilities) */
+  --color-canvas: #f7fafc;
+  --color-surface: #ffffff;
+  --color-raised: #ffffff;
+  --color-line: #e2e8f0;
+  --color-text: #2d3748;
+  --color-text-muted: #718096;
+
+  /* Brand */
+  --color-primary: #1a365d;
+  --color-primary-light: #2c5282;
+  --color-accent: #dd6b20;
+  --color-accent-light: #ed8936;
+
+  /* Status */
+  --color-status-active: #38a169;
+  --color-status-active-bg: #c6f6d5;
+  --color-status-active-fg: #276749;
+  --color-status-draft-bg: #fefcbf;
+  --color-status-draft-fg: #975a16;
+  --color-status-locked-bg: #bee3f8;
+  --color-status-locked-fg: #2a4365;
+  --color-status-closed-bg: #e2e8f0;
+  --color-status-closed-fg: #4a5568;
+  --color-status-pending-bg: #fed7d7;
+  --color-status-pending-fg: #9b2c2c;
+  --color-status-approved-bg: #c6f6d5;
+  --color-status-approved-fg: #276749;
+
+  /* Variance */
+  --color-variance-favourable: #38a169;
+  --color-variance-unfavourable: #e53e3e;
+  --color-variance-neutral: #718096;
+
+  /* Layout */
+  --sidebar-w: 240px;
+  --topbar-h: 56px;
+}
+
+html[data-theme="dark"] {
+  --color-canvas: #0f172a;
+  --color-surface: #1e293b;
+  --color-raised: #334155;
+  --color-line: #334155;
+  --color-text: #f1f5f9;
+  --color-text-muted: #94a3b8;
+}
+
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  background-color: var(--color-canvas);
+  color: var(--color-text);
+  margin: 0;
+}
+
+.font-mono {
+  font-family: 'Cascadia Code', 'Fira Code', ui-monospace, monospace;
+}

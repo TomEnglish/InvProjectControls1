@@ -1,0 +1,1128 @@
+<!DOCTYPE html>
+<!-- saved from url=(0045)https://kindredprogressadmindemo.netlify.app/ -->
+<html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kindred Industrial Services — Project Controls Platform</title>
+<script src="./Kindred Industrial Services — Project Controls Platform_files/chart.umd.min.js"></script>
+<style>
+:root {
+  --primary: #1a365d;
+  --primary-light: #2c5282;
+  --accent: #dd6b20;
+  --accent-light: #ed8936;
+  --success: #38a169;
+  --warning: #d69e2e;
+  --danger: #e53e3e;
+  --bg: #f7fafc;
+  --card: #ffffff;
+  --border: #e2e8f0;
+  --text: #2d3748;
+  --text-light: #718096;
+  --sidebar-w: 240px;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); }
+
+/* Layout */
+.app { display:flex; min-height:100vh; }
+.sidebar { width: var(--sidebar-w); background: var(--primary); color:#fff; position:fixed; top:0; left:0; height:100vh; overflow-y:auto; z-index:100; display:flex; flex-direction:column; }
+.sidebar-header { padding:20px 16px; border-bottom:1px solid rgba(255,255,255,.15); }
+.sidebar-header h1 { font-size:14px; font-weight:700; letter-spacing:.5px; text-transform:uppercase; color:#fff; line-height:1.4; }
+.sidebar-header .subtitle { font-size:11px; color: rgba(255,255,255,.6); margin-top:4px; }
+.sidebar-nav { flex:1; padding:12px 0; }
+.nav-section { padding:8px 16px 4px; font-size:10px; text-transform:uppercase; letter-spacing:1px; color:rgba(255,255,255,.4); font-weight:600; }
+.nav-item { display:flex; align-items:center; padding:10px 16px; cursor:pointer; transition: all .15s; font-size:13px; color:rgba(255,255,255,.75); border-left:3px solid transparent; }
+.nav-item:hover { background:rgba(255,255,255,.08); color:#fff; }
+.nav-item.active { background:rgba(255,255,255,.12); color:#fff; border-left-color: var(--accent); }
+.nav-item .icon { width:20px; margin-right:10px; text-align:center; font-size:15px; }
+.nav-item .badge { margin-left:auto; background:var(--accent); color:#fff; font-size:10px; padding:2px 6px; border-radius:10px; font-weight:600; }
+.sidebar-footer { padding:12px 16px; border-top:1px solid rgba(255,255,255,.15); font-size:11px; color:rgba(255,255,255,.4); }
+
+.main { margin-left: var(--sidebar-w); flex:1; }
+.topbar { background:#fff; border-bottom:1px solid var(--border); padding:0 24px; height:56px; display:flex; align-items:center; justify-content:space-between; position:sticky; top:0; z-index:50; }
+.topbar h2 { font-size:16px; font-weight:600; }
+.topbar-actions { display:flex; gap:8px; align-items:center; }
+.breadcrumb { font-size:12px; color:var(--text-light); }
+.breadcrumb span { color:var(--accent); }
+
+.content { padding:24px; max-width:1400px; }
+
+/* Cards */
+.card { background:var(--card); border:1px solid var(--border); border-radius:8px; padding:20px; margin-bottom:16px; }
+.card-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; padding-bottom:12px; border-bottom:1px solid var(--border); }
+.card-header h3 { font-size:15px; font-weight:600; }
+.card-grid { display:grid; gap:16px; }
+.card-grid.cols-2 { grid-template-columns: repeat(2, 1fr); }
+.card-grid.cols-3 { grid-template-columns: repeat(3, 1fr); }
+.card-grid.cols-4 { grid-template-columns: repeat(4, 1fr); }
+
+/* KPI Cards */
+.kpi { text-align:center; padding:16px; }
+.kpi .value { font-size:28px; font-weight:700; color:var(--primary); }
+.kpi .label { font-size:11px; text-transform:uppercase; letter-spacing:.5px; color:var(--text-light); margin-top:4px; }
+.kpi .change { font-size:12px; margin-top:6px; }
+.kpi .change.up { color:var(--success); }
+.kpi .change.down { color:var(--danger); }
+
+/* Status badges */
+.status { display:inline-block; padding:3px 10px; border-radius:12px; font-size:11px; font-weight:600; }
+.status.active { background:#c6f6d5; color:#276749; }
+.status.draft { background:#fefcbf; color:#975a16; }
+.status.locked { background:#bee3f8; color:#2a4365; }
+.status.closed { background:#e2e8f0; color:#4a5568; }
+.status.pending { background:#fed7d7; color:#9b2c2c; }
+.status.approved { background:#c6f6d5; color:#276749; }
+
+/* Buttons */
+.btn { display:inline-flex; align-items:center; gap:6px; padding:8px 16px; border:none; border-radius:6px; font-size:13px; font-weight:500; cursor:pointer; transition: all .15s; }
+.btn-primary { background:var(--primary); color:#fff; }
+.btn-primary:hover { background:var(--primary-light); }
+.btn-accent { background:var(--accent); color:#fff; }
+.btn-accent:hover { background:var(--accent-light); }
+.btn-outline { background:transparent; border:1px solid var(--border); color:var(--text); }
+.btn-outline:hover { background:var(--bg); }
+.btn-success { background:var(--success); color:#fff; }
+.btn-danger { background:var(--danger); color:#fff; }
+.btn-sm { padding:5px 10px; font-size:12px; }
+.btn-group { display:flex; gap:8px; }
+
+/* Tables */
+.table-wrap { overflow-x:auto; }
+table { width:100%; border-collapse:collapse; font-size:13px; }
+th { background:var(--bg); padding:10px 12px; text-align:left; font-weight:600; font-size:11px; text-transform:uppercase; letter-spacing:.5px; color:var(--text-light); border-bottom:2px solid var(--border); position:sticky; top:0; }
+td { padding:9px 12px; border-bottom:1px solid var(--border); }
+tr:hover { background:#f0f4f8; }
+tr.selected { background:#ebf8ff; }
+
+/* Forms */
+.form-grid { display:grid; gap:16px; }
+.form-grid.cols-2 { grid-template-columns: 1fr 1fr; }
+.form-grid.cols-3 { grid-template-columns: 1fr 1fr 1fr; }
+.form-grid.cols-4 { grid-template-columns: 1fr 1fr 1fr 1fr; }
+.form-group { display:flex; flex-direction:column; }
+.form-group label { font-size:12px; font-weight:600; color:var(--text-light); margin-bottom:4px; text-transform:uppercase; letter-spacing:.3px; }
+.form-group input, .form-group select, .form-group textarea { padding:8px 12px; border:1px solid var(--border); border-radius:6px; font-size:13px; font-family:inherit; transition: border-color .15s; }
+.form-group input:focus, .form-group select:focus { outline:none; border-color:var(--primary); box-shadow:0 0 0 3px rgba(26,54,93,.1); }
+.form-group .hint { font-size:11px; color:var(--text-light); margin-top:3px; }
+.form-row { display:flex; gap:12px; align-items:flex-end; }
+
+/* Tabs */
+.tabs { display:flex; border-bottom:2px solid var(--border); margin-bottom:20px; }
+.tab { padding:10px 20px; cursor:pointer; font-size:13px; font-weight:500; color:var(--text-light); border-bottom:2px solid transparent; margin-bottom:-2px; transition: all .15s; }
+.tab:hover { color:var(--text); }
+.tab.active { color:var(--primary); border-bottom-color:var(--primary); font-weight:600; }
+
+/* Progress bars */
+.progress-bar { background:#e2e8f0; border-radius:4px; height:8px; overflow:hidden; }
+.progress-bar .fill { height:100%; border-radius:4px; transition:width .3s; }
+.progress-bar .fill.green { background:var(--success); }
+.progress-bar .fill.orange { background:var(--accent); }
+.progress-bar .fill.red { background:var(--danger); }
+.progress-bar .fill.blue { background:var(--primary-light); }
+
+/* Milestone grid */
+.milestone-grid { display:grid; grid-template-columns: repeat(8, 1fr); gap:8px; margin-top:12px; }
+.milestone-cell { text-align:center; padding:8px; background:var(--bg); border-radius:6px; border:1px solid var(--border); }
+.milestone-cell .m-label { font-size:10px; font-weight:600; color:var(--text-light); text-transform:uppercase; }
+.milestone-cell .m-desc { font-size:11px; margin-top:2px; color:var(--text); }
+.milestone-cell .m-pct { font-size:16px; font-weight:700; color:var(--primary); margin-top:4px; }
+.milestone-cell .m-wt { font-size:10px; color:var(--text-light); margin-top:2px; }
+.milestone-cell input { width:100%; text-align:center; padding:4px; font-size:13px; border:1px solid var(--border); border-radius:4px; margin-top:4px; }
+
+/* Modal */
+.modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:1000; display:flex; align-items:center; justify-content:center; }
+.modal { background:#fff; border-radius:12px; padding:24px; max-width:700px; width:90%; max-height:85vh; overflow-y:auto; }
+.modal h3 { font-size:17px; margin-bottom:16px; }
+
+/* Alerts */
+.alert { padding:12px 16px; border-radius:6px; font-size:13px; margin-bottom:12px; display:flex; align-items:center; gap:8px; }
+.alert.info { background:#ebf8ff; color:#2a4365; border:1px solid #bee3f8; }
+.alert.success { background:#f0fff4; color:#276749; border:1px solid #c6f6d5; }
+.alert.warning { background:#fffff0; color:#975a16; border:1px solid #fefcbf; }
+
+/* Charts */
+.chart-container { position:relative; height:300px; }
+.chart-container.sm { height:200px; }
+
+/* Utility */
+.flex { display:flex; }
+.items-center { align-items:center; }
+.justify-between { justify-content:space-between; }
+.gap-2 { gap:8px; }
+.gap-4 { gap:16px; }
+.mt-2 { margin-top:8px; }
+.mt-4 { margin-top:16px; }
+.mb-2 { margin-bottom:8px; }
+.mb-4 { margin-bottom:16px; }
+.text-right { text-align:right; }
+.text-center { text-align:center; }
+.font-mono { font-family: 'Cascadia Code', 'Fira Code', monospace; }
+.text-sm { font-size:12px; }
+.text-muted { color:var(--text-light); }
+.w-full { width:100%; }
+.hidden { display:none; }
+
+/* Responsive */
+@media (max-width:1200px) {
+  .card-grid.cols-4 { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width:768px) {
+  .sidebar { width:60px; }
+  .sidebar .nav-item span, .sidebar-header h1, .sidebar-header .subtitle, .nav-section { display:none; }
+  .main { margin-left:60px; }
+  .card-grid.cols-2, .card-grid.cols-3 { grid-template-columns:1fr; }
+  .form-grid.cols-2, .form-grid.cols-3 { grid-template-columns:1fr; }
+}
+</style>
+</head>
+<body>
+
+<div class="app" id="app">
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <h1>Kindred Industrial Services</h1>
+      <div class="subtitle">Project Controls Platform</div>
+    </div>
+    <nav class="sidebar-nav">
+      <div class="nav-section">Overview</div>
+      <div class="nav-item active" data-page="dashboard" onclick="navigate(&#39;dashboard&#39;)">
+        <span class="icon">■</span><span>Dashboard</span>
+      </div>
+      <div class="nav-section">Setup</div>
+      <div class="nav-item" data-page="projects" onclick="navigate(&#39;projects&#39;)">
+        <span class="icon">⚛</span><span>Project Setup</span>
+      </div>
+      <div class="nav-item" data-page="coa" onclick="navigate(&#39;coa&#39;)">
+        <span class="icon">☰</span><span>COA &amp; Unit Rates</span>
+      </div>
+      <div class="nav-item" data-page="roc" onclick="navigate(&#39;roc&#39;)">
+        <span class="icon">⚙</span><span>Rules of Credit</span>
+      </div>
+      <div class="nav-section">Execution</div>
+      <div class="nav-item" data-page="budget" onclick="navigate(&#39;budget&#39;)">
+        <span class="icon">★</span><span>Budget &amp; Baseline</span>
+      </div>
+      <div class="nav-item" data-page="progress" onclick="navigate(&#39;progress&#39;)">
+        <span class="icon">▶</span><span>Progress &amp; EV</span>
+        <span class="badge">Live</span>
+      </div>
+      <div class="nav-item" data-page="changes" onclick="navigate(&#39;changes&#39;)">
+        <span class="icon">⇄</span><span>Change Mgmt</span>
+        <span class="badge">3</span>
+      </div>
+      <div class="nav-section">Analytics</div>
+      <div class="nav-item" data-page="reports" onclick="navigate(&#39;reports&#39;)">
+        <span class="icon">▤</span><span>Reports</span>
+      </div>
+    </nav>
+    <div class="sidebar-footer">
+      v0.1 Prototype · Apr 2026
+    </div>
+  </aside>
+
+  <!-- Main Content -->
+  <div class="main">
+    <div class="topbar">
+      <div>
+        <div class="breadcrumb" id="breadcrumb">Home › <span>Executive Dashboard</span></div>
+        <h2 id="page-title">Executive Dashboard</h2>
+      </div>
+      <div class="topbar-actions">
+        <select id="project-selector" style="padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;" onchange="switchProject(this.value)">
+          <option value="KIS-2026-001">KIS-2026-001 — Turnaround Alpha</option>
+          <option value="KIS-2026-002">KIS-2026-002 — Unit 12 Expansion</option>
+        </select>
+        <div style="width:32px;height:32px;border-radius:50%;background:var(--primary);color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;">JM</div>
+      </div>
+    </div>
+
+    <div class="content" id="page-content">
+    <div class="card-grid cols-4">
+      <div class="card kpi"><div class="value">39.1%</div><div class="label">Overall Earned</div><div class="change up">+2.3% this period</div></div>
+      <div class="card kpi"><div class="value">72,300</div><div class="label">Earned Hours</div><div class="change up">of 185,000 budget</div></div>
+      <div class="card kpi"><div class="value">1.061</div><div class="label">CPI</div><div class="change up">Under budget</div></div>
+      <div class="card kpi"><div class="value">0.931</div><div class="label">SPI</div><div class="change down">Behind schedule</div></div>
+    </div>
+    <div class="card-grid cols-2">
+      <div class="card">
+        <div class="card-header"><h3>Earned Value by Discipline</h3></div>
+        <div class="chart-container"><canvas id="chart-ev-disc" width="626" height="300" style="display: block; box-sizing: border-box; height: 300px; width: 626px;"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-header"><h3>S-Curve — Cumulative Progress</h3></div>
+        <div class="chart-container"><canvas id="chart-scurve" width="626" height="300" style="display: block; box-sizing: border-box; height: 300px; width: 626px;"></canvas></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header"><h3>Discipline Summary</h3><div class="btn-group"><button class="btn btn-outline btn-sm" onclick="navigate(&#39;progress&#39;)">View Details</button></div></div>
+      <div class="table-wrap"><table>
+        <tbody><tr><th>Discipline</th><th>Records</th><th>Budget Hrs</th><th>Earned Hrs</th><th>Actual Hrs</th><th>% Complete</th><th>CPI</th><th>Progress</th></tr>
+        <tr>
+            <td><strong>Civil</strong></td><td>225</td>
+            <td class="text-right font-mono">28,500</td>
+            <td class="text-right font-mono">11,740</td>
+            <td class="text-right font-mono">11,200</td>
+            <td class="text-right font-mono">41.2%</td>
+            <td class="text-right font-mono" style="color:var(--success)">1.05</td>
+            <td style="width:120px"><div class="progress-bar"><div class="fill green" style="width:41.2%"></div></div></td>
+          </tr><tr>
+            <td><strong>Pipe</strong></td><td>419</td>
+            <td class="text-right font-mono">62,000</td>
+            <td class="text-right font-mono">23,870</td>
+            <td class="text-right font-mono">22,900</td>
+            <td class="text-right font-mono">38.5%</td>
+            <td class="text-right font-mono" style="color:var(--success)">1.04</td>
+            <td style="width:120px"><div class="progress-bar"><div class="fill green" style="width:38.5%"></div></div></td>
+          </tr><tr>
+            <td><strong>Steel</strong></td><td>185</td>
+            <td class="text-right font-mono">24,000</td>
+            <td class="text-right font-mono">10,560</td>
+            <td class="text-right font-mono">9,800</td>
+            <td class="text-right font-mono">44.0%</td>
+            <td class="text-right font-mono" style="color:var(--success)">1.08</td>
+            <td style="width:120px"><div class="progress-bar"><div class="fill green" style="width:44.0%"></div></div></td>
+          </tr><tr>
+            <td><strong>Electrical</strong></td><td>319</td>
+            <td class="text-right font-mono">38,500</td>
+            <td class="text-right font-mono">13,170</td>
+            <td class="text-right font-mono">12,400</td>
+            <td class="text-right font-mono">34.2%</td>
+            <td class="text-right font-mono" style="color:var(--success)">1.06</td>
+            <td style="width:120px"><div class="progress-bar"><div class="fill green" style="width:34.2%"></div></div></td>
+          </tr><tr>
+            <td><strong>Mechanical</strong></td><td>42</td>
+            <td class="text-right font-mono">12,000</td>
+            <td class="text-right font-mono">3,720</td>
+            <td class="text-right font-mono">3,500</td>
+            <td class="text-right font-mono">31.0%</td>
+            <td class="text-right font-mono" style="color:var(--success)">1.06</td>
+            <td style="width:120px"><div class="progress-bar"><div class="fill green" style="width:31.0%"></div></div></td>
+          </tr><tr>
+            <td><strong>Instrumentation</strong></td><td>196</td>
+            <td class="text-right font-mono">15,000</td>
+            <td class="text-right font-mono">5,520</td>
+            <td class="text-right font-mono">4,900</td>
+            <td class="text-right font-mono">36.8%</td>
+            <td class="text-right font-mono" style="color:var(--success)">1.13</td>
+            <td style="width:120px"><div class="progress-bar"><div class="fill green" style="width:36.8%"></div></div></td>
+          </tr><tr>
+            <td><strong>Site Work</strong></td><td>14</td>
+            <td class="text-right font-mono">5,000</td>
+            <td class="text-right font-mono">3,720</td>
+            <td class="text-right font-mono">3,450</td>
+            <td class="text-right font-mono">52.0%</td>
+            <td class="text-right font-mono" style="color:var(--success)">1.08</td>
+            <td style="width:120px"><div class="progress-bar"><div class="fill green" style="width:52.0%"></div></div></td>
+          </tr>
+      </tbody></table></div>
+    </div></div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+//  DATA LAYER — Sample data grounded in actual Kindred structures
+// ============================================================
+const STATE = {
+  currentPage: 'dashboard',
+  currentProject: 'KIS-2026-001',
+  projects: [
+    { id:'KIS-2026-001', name:'Turnaround Alpha', client:'ExxonMobil Baytown', status:'active', startDate:'2026-01-15', endDate:'2026-12-31', manager:'Jerry Molina', budgetHrs:185000, earnedHrs:72300, actualHrs:68150 },
+    { id:'KIS-2026-002', name:'Unit 12 Expansion', client:'Chevron Phillips', status:'draft', startDate:'2026-06-01', endDate:'2027-06-30', manager:'Jerry Molina', budgetHrs:320000, earnedHrs:0, actualHrs:0 }
+  ],
+  disciplines: [
+    { name:'Civil', records:225, earnedPct:0.412, budgetHrs:28500, earnedHrs:11740, actualHrs:11200, color:'#3182ce' },
+    { name:'Pipe', records:419, earnedPct:0.385, budgetHrs:62000, earnedHrs:23870, actualHrs:22900, color:'#dd6b20' },
+    { name:'Steel', records:185, earnedPct:0.440, budgetHrs:24000, earnedHrs:10560, actualHrs:9800, color:'#805ad5' },
+    { name:'Electrical', records:319, earnedPct:0.342, budgetHrs:38500, earnedHrs:13170, actualHrs:12400, color:'#38a169' },
+    { name:'Mechanical', records:42, earnedPct:0.310, budgetHrs:12000, earnedHrs:3720, actualHrs:3500, color:'#d69e2e' },
+    { name:'Instrumentation', records:196, earnedPct:0.368, budgetHrs:15000, earnedHrs:5520, actualHrs:4900, color:'#e53e3e' },
+    { name:'Site Work', records:14, earnedPct:0.520, budgetHrs:5000, earnedHrs:3720, actualHrs:3450, color:'#718096' }
+  ],
+  coaCodes: [
+    { prime:'100', code:'101', desc:'Concrete Foundations', parent:'100', level:2, um:'CY', baseRate:8.5, pfAdj:1.12, pfRate:9.52 },
+    { prime:'100', code:'102', desc:'Concrete Piles', parent:'100', level:2, um:'EA', baseRate:12.0, pfAdj:1.08, pfRate:12.96 },
+    { prime:'100', code:'103', desc:'Structural Backfill', parent:'100', level:2, um:'CY', baseRate:4.2, pfAdj:1.15, pfRate:4.83 },
+    { prime:'200', code:'201', desc:'Carbon Steel Pipe <2"', parent:'200', level:2, um:'LF', baseRate:1.85, pfAdj:1.10, pfRate:2.04 },
+    { prime:'200', code:'202', desc:'Carbon Steel Pipe 2"-6"', parent:'200', level:2, um:'LF', baseRate:2.40, pfAdj:1.10, pfRate:2.64 },
+    { prime:'200', code:'203', desc:'Carbon Steel Pipe 8"-12"', parent:'200', level:2, um:'LF', baseRate:3.60, pfAdj:1.10, pfRate:3.96 },
+    { prime:'200', code:'210', desc:'Alloy Pipe', parent:'200', level:2, um:'LF', baseRate:5.20, pfAdj:1.25, pfRate:6.50 },
+    { prime:'300', code:'301', desc:'Structural Steel Erection', parent:'300', level:2, um:'TONS', baseRate:28.0, pfAdj:1.05, pfRate:29.40 },
+    { prime:'400', code:'401', desc:'Cable Tray', parent:'400', level:2, um:'LF', baseRate:1.40, pfAdj:1.12, pfRate:1.57 },
+    { prime:'400', code:'402', desc:'Conduit', parent:'400', level:2, um:'LF', baseRate:0.85, pfAdj:1.12, pfRate:0.95 },
+    { prime:'500', code:'501', desc:'Equipment Setting', parent:'500', level:2, um:'EA', baseRate:45.0, pfAdj:1.08, pfRate:48.60 },
+    { prime:'600', code:'601', desc:'Instrument Installation', parent:'600', level:2, um:'EA', baseRate:6.5, pfAdj:1.10, pfRate:7.15 },
+  ],
+  rocTemplates: [
+    { discipline:'Civil', milestones:['Excavation','Formwork','Rebar','Concrete','Strip Forms','Backfill','Grade/Finish','Punch List'], weights:[0.10,0.15,0.20,0.25,0.10,0.10,0.05,0.05] },
+    { discipline:'Pipe', milestones:['Receive Material','Fit-Up/Stage','Tack Weld','Final Weld','NDE/Test','Insulate','Paint','Punch List'], weights:[0.05,0.15,0.15,0.25,0.15,0.10,0.10,0.05] },
+    { discipline:'Steel', milestones:['Receive Material','Fit-Up','Bolt-Up','Torque/Weld','Deck Install','Handrail','Touch-Up Paint','Punch List'], weights:[0.05,0.10,0.20,0.25,0.15,0.10,0.10,0.05] },
+    { discipline:'Electrical', milestones:['Lay Cable Tray','Pull Cable','Terminate','Megger Test','Energize','Label/Tag','Commission','Punch List'], weights:[0.10,0.20,0.15,0.15,0.15,0.05,0.10,0.10] },
+    { discipline:'Mechanical', milestones:['Set Equipment','Align','Grout','Connect Pipe','Connect Elec','Lube/Fill','Run Test','Punch List'], weights:[0.20,0.15,0.10,0.10,0.10,0.10,0.15,0.10] },
+    { discipline:'Instrumentation', milestones:['Mount Device','Run Tubing','Connect','Calibrate','Loop Check','Commission','Document','Punch List'], weights:[0.10,0.15,0.15,0.15,0.15,0.15,0.10,0.05] },
+    { discipline:'Site Work', milestones:['Survey','Clear/Grub','Rough Grade','Compact','Pave/Surface','Drainage','Landscape','Punch List'], weights:[0.05,0.10,0.20,0.20,0.20,0.10,0.10,0.05] },
+  ],
+  auditRecords: [],
+  changeOrders: [
+    { id:'CO-001', date:'2026-03-10', discipline:'Pipe', type:'Scope Add', desc:'Additional 2" CS pipe runs for new tie-ins, DWG P-1045 Rev 3', qtyChange:85, uom:'LF', hrsImpact:204, status:'approved', requestedBy:'Field Engineering' },
+    { id:'CO-002', date:'2026-03-22', discipline:'Electrical', type:'IFC Update', desc:'Revised cable tray routing per E-2010 Rev 2 — qty reduced', qtyChange:-42, uom:'LF', hrsImpact:-59, status:'approved', requestedBy:'Engineering' },
+    { id:'CO-003', date:'2026-04-01', discipline:'Civil', type:'Scope Add', desc:'New foundation pad for emergency generator, DWG C-3020', qtyChange:180, uom:'CY', hrsImpact:1530, status:'pending', requestedBy:'Client' },
+  ],
+  // Sample audit records for progress module
+  sampleRecords: [
+    { rec:1, dwg:'C-1001', rev:'2', discipline:'Civil', desc:'Foundation Pad A-101', fldQty:45.0, uom:'CY', fldWhrs:382.5, milestones:[1.0,1.0,1.0,0.5,0,0,0,0], code:'101' },
+    { rec:2, dwg:'C-1002', rev:'1', discipline:'Civil', desc:'Pile Cap B-201', fldQty:28.0, uom:'CY', fldWhrs:238.0, milestones:[1.0,1.0,0.8,0,0,0,0,0], code:'101' },
+    { rec:3, dwg:'P-2001', rev:'3', discipline:'Pipe', desc:'2" CS — Line 2001-A', fldQty:320.0, uom:'LF', fldWhrs:768.0, milestones:[1.0,1.0,1.0,1.0,0.5,0,0,0], code:'202' },
+    { rec:4, dwg:'P-2002', rev:'2', discipline:'Pipe', desc:'6" CS — Line 2002-B', fldQty:180.0, uom:'LF', fldWhrs:648.0, milestones:[1.0,1.0,0.6,0,0,0,0,0], code:'202' },
+    { rec:5, dwg:'S-3001', rev:'1', discipline:'Steel', desc:'Platform Level 3 Steel', fldQty:12.5, uom:'TONS', fldWhrs:367.5, milestones:[1.0,1.0,1.0,0.8,0,0,0,0], code:'301' },
+    { rec:6, dwg:'E-4001', rev:'2', discipline:'Electrical', desc:'Cable Tray Run CT-101', fldQty:450.0, uom:'LF', fldWhrs:630.0, milestones:[1.0,0.7,0,0,0,0,0,0], code:'401' },
+    { rec:7, dwg:'M-5001', rev:'1', discipline:'Mechanical', desc:'Pump P-101 Setting', fldQty:1.0, uom:'EA', fldWhrs:48.6, milestones:[1.0,1.0,0.5,0,0,0,0,0], code:'501' },
+    { rec:8, dwg:'I-6001', rev:'1', discipline:'Instrumentation', desc:'FT-101 Flow Transmitter', fldQty:1.0, uom:'EA', fldWhrs:7.15, milestones:[1.0,1.0,1.0,1.0,0,0,0,0], code:'601' },
+    { rec:9, dwg:'P-2003', rev:'1', discipline:'Pipe', desc:'8" CS — Line 2003-C', fldQty:95.0, uom:'LF', fldWhrs:376.2, milestones:[1.0,0.5,0,0,0,0,0,0], code:'203' },
+    { rec:10, dwg:'C-1003', rev:'1', discipline:'Civil', desc:'Equipment Pad C-301', fldQty:62.0, uom:'CY', fldWhrs:527.0, milestones:[1.0,1.0,1.0,1.0,0.8,0.5,0,0], code:'101' },
+  ]
+};
+
+// Initialize audit records with earned value calcs
+STATE.sampleRecords.forEach(r => {
+  const roc = STATE.rocTemplates.find(t => t.discipline === r.discipline);
+  if (roc) {
+    let earnPct = 0;
+    for (let i = 0; i < 8; i++) {
+      earnPct += r.milestones[i] * roc.weights[i];
+    }
+    r.earnPct = earnPct;
+    r.ernQty = r.fldQty * earnPct;
+    r.earnWhrs = r.fldWhrs * earnPct;
+  }
+});
+
+// ============================================================
+//  NAVIGATION
+// ============================================================
+function navigate(page) {
+  STATE.currentPage = page;
+  document.querySelectorAll('.nav-item').forEach(el => {
+    el.classList.toggle('active', el.dataset.page === page);
+  });
+  const titles = {
+    dashboard:'Executive Dashboard', projects:'Project Setup', coa:'COA & Unit Rates',
+    roc:'Rules of Credit', budget:'Budget & Baseline', progress:'Progress & Earned Value',
+    changes:'Change Management', reports:'Reports & Analytics'
+  };
+  document.getElementById('page-title').textContent = titles[page] || page;
+  document.getElementById('breadcrumb').innerHTML = 'Home &rsaquo; <span>' + (titles[page]||page) + '</span>';
+  renderPage(page);
+}
+
+function switchProject(id) {
+  STATE.currentProject = id;
+  renderPage(STATE.currentPage);
+}
+
+function renderPage(page) {
+  const c = document.getElementById('page-content');
+  const fn = pages[page];
+  if (fn) { c.innerHTML = fn(); postRender(page); }
+}
+
+function postRender(page) {
+  if (page === 'dashboard') renderDashboardCharts();
+  if (page === 'progress') setupProgressHandlers();
+  if (page === 'reports') renderReportCharts();
+  if (page === 'budget') renderBudgetChart();
+}
+
+// ============================================================
+//  PAGE RENDERERS
+// ============================================================
+const pages = {};
+
+// ---------- DASHBOARD ----------
+pages.dashboard = () => {
+  const p = STATE.projects.find(x => x.id === STATE.currentProject);
+  const totalBudget = STATE.disciplines.reduce((s,d)=>s+d.budgetHrs,0);
+  const totalEarned = STATE.disciplines.reduce((s,d)=>s+d.earnedHrs,0);
+  const totalActual = STATE.disciplines.reduce((s,d)=>s+d.actualHrs,0);
+  const overallPct = (totalEarned/totalBudget*100).toFixed(1);
+  const cpi = (totalEarned/totalActual).toFixed(3);
+  const spi = (totalEarned/(totalBudget*0.42)).toFixed(3); // planned ~42%
+  return `
+    <div class="card-grid cols-4">
+      <div class="card kpi"><div class="value">${overallPct}%</div><div class="label">Overall Earned</div><div class="change up">+2.3% this period</div></div>
+      <div class="card kpi"><div class="value">${numberFmt(totalEarned)}</div><div class="label">Earned Hours</div><div class="change up">of ${numberFmt(totalBudget)} budget</div></div>
+      <div class="card kpi"><div class="value">${cpi}</div><div class="label">CPI</div><div class="change ${parseFloat(cpi)>=1?'up':'down'}">${parseFloat(cpi)>=1?'Under budget':'Over budget'}</div></div>
+      <div class="card kpi"><div class="value">${spi}</div><div class="label">SPI</div><div class="change ${parseFloat(spi)>=1?'up':'down'}">${parseFloat(spi)>=1?'Ahead':'Behind'} schedule</div></div>
+    </div>
+    <div class="card-grid cols-2">
+      <div class="card">
+        <div class="card-header"><h3>Earned Value by Discipline</h3></div>
+        <div class="chart-container"><canvas id="chart-ev-disc"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-header"><h3>S-Curve — Cumulative Progress</h3></div>
+        <div class="chart-container"><canvas id="chart-scurve"></canvas></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header"><h3>Discipline Summary</h3><div class="btn-group"><button class="btn btn-outline btn-sm" onclick="navigate('progress')">View Details</button></div></div>
+      <div class="table-wrap"><table>
+        <tr><th>Discipline</th><th>Records</th><th>Budget Hrs</th><th>Earned Hrs</th><th>Actual Hrs</th><th>% Complete</th><th>CPI</th><th>Progress</th></tr>
+        ${STATE.disciplines.map(d => {
+          const pct = (d.earnedPct*100).toFixed(1);
+          const cpi = (d.earnedHrs/d.actualHrs).toFixed(2);
+          const barColor = parseFloat(cpi)>=1?'green':(parseFloat(cpi)>=0.95?'orange':'red');
+          return `<tr>
+            <td><strong>${d.name}</strong></td><td>${d.records}</td>
+            <td class="text-right font-mono">${numberFmt(d.budgetHrs)}</td>
+            <td class="text-right font-mono">${numberFmt(d.earnedHrs)}</td>
+            <td class="text-right font-mono">${numberFmt(d.actualHrs)}</td>
+            <td class="text-right font-mono">${pct}%</td>
+            <td class="text-right font-mono" style="color:${parseFloat(cpi)>=1?'var(--success)':'var(--danger)'}">${cpi}</td>
+            <td style="width:120px"><div class="progress-bar"><div class="fill ${barColor}" style="width:${pct}%"></div></div></td>
+          </tr>`;
+        }).join('')}
+      </table></div>
+    </div>`;
+};
+
+// ---------- PROJECT SETUP ----------
+pages.projects = () => {
+  const p = STATE.projects.find(x => x.id === STATE.currentProject);
+  return `
+    <div class="alert info">Configure project parameters, disciplines, and import quantity takeoffs from engineered drawings.</div>
+    <div class="card">
+      <div class="card-header"><h3>Project Information</h3><span class="status ${p.status}">${p.status}</span></div>
+      <div class="form-grid cols-3">
+        <div class="form-group"><label>Project ID</label><input value="${p.id}" readonly style="background:#f7fafc"></div>
+        <div class="form-group"><label>Project Name</label><input value="${p.name}"></div>
+        <div class="form-group"><label>Client</label><input value="${p.client}"></div>
+        <div class="form-group"><label>Start Date</label><input type="date" value="${p.startDate}"></div>
+        <div class="form-group"><label>End Date</label><input type="date" value="${p.endDate}"></div>
+        <div class="form-group"><label>Project Manager</label><input value="${p.manager}"></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header"><h3>Active Disciplines</h3><button class="btn btn-outline btn-sm">+ Add Discipline</button></div>
+      <div class="table-wrap"><table>
+        <tr><th>Discipline</th><th>Records</th><th>ROC Template</th><th>Budget Hours</th><th>Status</th><th>Actions</th></tr>
+        ${STATE.disciplines.map(d => `<tr>
+          <td><strong>${d.name}</strong></td><td>${d.records}</td>
+          <td>${d.name} Standard (8 milestones)</td>
+          <td class="font-mono">${numberFmt(d.budgetHrs)}</td>
+          <td><span class="status active">Active</span></td>
+          <td><button class="btn btn-outline btn-sm">Configure</button></td>
+        </tr>`).join('')}
+      </table></div>
+    </div>
+    <div class="card">
+      <div class="card-header"><h3>Quantity Takeoff Import</h3></div>
+      <div class="form-grid cols-2">
+        <div class="form-group">
+          <label>Import Source</label>
+          <select>
+            <option>Upload Excel (.xlsx) — Unified 61-Column Format</option>
+            <option>Upload CSV</option>
+            <option>Manual Entry</option>
+          </select>
+          <span class="hint">Accepts the standard Kindred Industrial Services unified audit format</span>
+        </div>
+        <div class="form-group">
+          <label>Target Discipline</label>
+          <select>
+            <option>Civil</option><option>Pipe</option><option>Steel</option>
+            <option>Electrical</option><option>Mechanical</option><option>Instrumentation</option><option>Site Work</option>
+          </select>
+        </div>
+      </div>
+      <div class="mt-4 btn-group">
+        <button class="btn btn-primary" onclick="alert('File picker would open — import validates against 61-column unified schema')">Upload & Validate</button>
+        <button class="btn btn-outline">Download Template</button>
+      </div>
+    </div>`;
+};
+
+// ---------- COA & UNIT RATES ----------
+pages.coa = () => {
+  return `
+    <div class="tabs">
+      <div class="tab active" onclick="showCoaTab('codes')">Cost Codes (COA)</div>
+      <div class="tab" onclick="showCoaTab('rates')">Unit Rates</div>
+    </div>
+    <div id="coa-codes">
+      <div class="card">
+        <div class="card-header"><h3>Cost of Account Structure</h3><div class="btn-group"><button class="btn btn-primary btn-sm">+ Add Code</button><button class="btn btn-outline btn-sm">Import from COA Report</button></div></div>
+        <div class="table-wrap"><table>
+          <tr><th>Prime</th><th>Code</th><th>Description</th><th>Parent</th><th>Level</th><th>UOM</th><th>Base U/R</th><th>PF Adjust</th><th>PF U/R</th><th>Actions</th></tr>
+          ${STATE.coaCodes.map(c => `<tr>
+            <td class="font-mono">${c.prime}</td>
+            <td class="font-mono"><strong>${c.code}</strong></td>
+            <td>${c.desc}</td>
+            <td class="font-mono">${c.parent}</td>
+            <td class="text-center">${c.level}</td>
+            <td>${c.um}</td>
+            <td class="text-right font-mono">${c.baseRate.toFixed(2)}</td>
+            <td class="text-right font-mono">${c.pfAdj.toFixed(2)}</td>
+            <td class="text-right font-mono" style="font-weight:600">${c.pfRate.toFixed(2)}</td>
+            <td><button class="btn btn-outline btn-sm">Edit</button></td>
+          </tr>`).join('')}
+        </table></div>
+      </div>
+    </div>
+    <div id="coa-rates" class="hidden">
+      <div class="card">
+        <div class="card-header"><h3>Unit Rate Setup</h3><div class="btn-group"><button class="btn btn-primary btn-sm">+ New Rate</button></div></div>
+        <div class="alert info">Unit rates define hours-per-unit for each cost code. PF Rate = Base U/R x PF Adjustment factor. These rates flow into budget calculations and earned value computations.</div>
+        <div class="form-grid cols-4 mt-4">
+          <div class="form-group"><label>Cost Code</label><select><option>201 — CS Pipe &lt;2"</option><option>202 — CS Pipe 2"-6"</option><option>203 — CS Pipe 8"-12"</option></select></div>
+          <div class="form-group"><label>Base Unit Rate</label><input type="number" value="2.40" step="0.01"></div>
+          <div class="form-group"><label>PF Adjustment</label><input type="number" value="1.10" step="0.01"></div>
+          <div class="form-group"><label>Effective PF U/R</label><input value="2.64" readonly style="background:#f7fafc;font-weight:600"></div>
+        </div>
+        <div class="mt-4"><button class="btn btn-primary">Save Rate</button></div>
+      </div>
+    </div>`;
+};
+
+// ---------- RULES OF CREDIT ----------
+pages.roc = () => {
+  return `
+    <div class="alert info">Rules of Credit define the milestone steps and weight distribution for each discipline. Weights must sum to 1.00 (100%).</div>
+    <div class="card">
+      <div class="card-header"><h3>ROC Templates by Discipline</h3><button class="btn btn-primary btn-sm">+ New Template</button></div>
+      ${STATE.rocTemplates.map(roc => {
+        const total = roc.weights.reduce((s,w)=>s+w,0);
+        return `
+        <div style="margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid var(--border);">
+          <div class="flex justify-between items-center mb-2">
+            <h4 style="font-size:14px;">${roc.discipline}</h4>
+            <div class="flex gap-2 items-center">
+              <span class="text-sm text-muted">Total: <strong style="color:${Math.abs(total-1)<0.001?'var(--success)':'var(--danger)'}">${(total*100).toFixed(1)}%</strong></span>
+              <button class="btn btn-outline btn-sm">Edit</button>
+            </div>
+          </div>
+          <div class="milestone-grid">
+            ${roc.milestones.map((m,i) => `
+              <div class="milestone-cell">
+                <div class="m-label">M${i+1}</div>
+                <div class="m-desc">${m}</div>
+                <div class="m-pct">${(roc.weights[i]*100).toFixed(0)}%</div>
+              </div>
+            `).join('')}
+          </div>
+        </div>`;
+      }).join('')}
+    </div>`;
+};
+
+// ---------- BUDGET & BASELINE ----------
+pages.budget = () => {
+  const p = STATE.projects.find(x => x.id === STATE.currentProject);
+  const totalOB = STATE.disciplines.reduce((s,d)=>s+d.budgetHrs,0);
+  const approvedChanges = STATE.changeOrders.filter(c=>c.status==='approved').reduce((s,c)=>s+c.hrsImpact,0);
+  const pendingChanges = STATE.changeOrders.filter(c=>c.status==='pending').reduce((s,c)=>s+c.hrsImpact,0);
+  const cb = totalOB + approvedChanges;
+  const fb = cb + pendingChanges;
+  return `
+    <div class="card-grid cols-3">
+      <div class="card kpi" style="border-left:4px solid var(--primary)"><div class="value">${numberFmt(totalOB)}</div><div class="label">Original Budget (Hrs)</div><div class="text-sm text-muted mt-2">Locked at baseline</div></div>
+      <div class="card kpi" style="border-left:4px solid var(--accent)"><div class="value">${numberFmt(cb)}</div><div class="label">Current Budget (Hrs)</div><div class="text-sm text-muted mt-2">OB + Approved Changes (${approvedChanges>=0?'+':''}${numberFmt(approvedChanges)})</div></div>
+      <div class="card kpi" style="border-left:4px solid var(--warning)"><div class="value">${numberFmt(fb)}</div><div class="label">Forecast Budget (Hrs)</div><div class="text-sm text-muted mt-2">CB + Pending (${pendingChanges>=0?'+':''}${numberFmt(pendingChanges)})</div></div>
+    </div>
+    <div class="card-grid cols-2">
+      <div class="card">
+        <div class="card-header"><h3>Budget by Discipline</h3></div>
+        <div class="chart-container"><canvas id="chart-budget"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-header"><h3>Baseline Controls</h3></div>
+        <div class="alert ${p.status==='active'?'success':'warning'}">${p.status==='active'?'Baseline is LOCKED. Changes require formal Change Order approval.':'Baseline not yet locked. Complete setup and lock to begin tracking.'}</div>
+        <div class="mt-4">
+          <div class="form-group mb-4"><label>Baseline Lock Date</label><input type="date" value="2026-02-01" ${p.status==='active'?'readonly style="background:#f7fafc"':''}></div>
+          <div class="btn-group">
+            ${p.status==='active'
+              ? '<button class="btn btn-outline">View Baseline Snapshot</button><button class="btn btn-outline">Export Baseline</button>'
+              : '<button class="btn btn-success">Lock Baseline</button><button class="btn btn-outline">Preview Baseline</button>'}
+          </div>
+        </div>
+        <div class="mt-4" style="padding:12px;background:var(--bg);border-radius:6px;">
+          <h4 style="font-size:12px;color:var(--text-light);margin-bottom:8px;">THREE-BUDGET MODEL</h4>
+          <p class="text-sm"><strong>Original Budget:</strong> Frozen at lock — never changes</p>
+          <p class="text-sm mt-2"><strong>Current Budget:</strong> OB + approved change orders</p>
+          <p class="text-sm mt-2"><strong>Forecast Budget:</strong> CB + pending changes + trends</p>
+        </div>
+      </div>
+    </div>`;
+};
+
+// ---------- PROGRESS & EARNED VALUE ----------
+pages.progress = () => {
+  const currentDisc = 'All';
+  return `
+    <div class="flex justify-between items-center mb-4">
+      <div class="flex gap-2">
+        <select id="disc-filter" onchange="filterProgress()" style="padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;">
+          <option value="All">All Disciplines</option>
+          ${STATE.disciplines.map(d => `<option value="${d.name}">${d.name}</option>`).join('')}
+        </select>
+        <input placeholder="Search DWG, Desc..." style="padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;width:220px;" id="progress-search" oninput="filterProgress()">
+      </div>
+      <div class="btn-group">
+        <button class="btn btn-primary" onclick="showAddRecordModal()">+ New Record</button>
+        <button class="btn btn-outline">Import IFC Qty</button>
+        <button class="btn btn-outline">Export</button>
+      </div>
+    </div>
+    <div class="card">
+      <div class="table-wrap"><table id="progress-table">
+        <tr>
+          <th>Rec</th><th>DWG</th><th>Rev</th><th>Discipline</th><th>Description</th>
+          <th>FLD QTY</th><th>UOM</th><th>FLD WHRS</th>
+          <th>M1</th><th>M2</th><th>M3</th><th>M4</th><th>M5</th><th>M6</th><th>M7</th><th>M8</th>
+          <th>Earn %</th><th>ERN QTY</th><th>EARN WHRS</th><th></th>
+        </tr>
+        ${renderProgressRows(STATE.sampleRecords)}
+      </table></div>
+    </div>
+    <div id="record-detail" class="hidden"></div>
+    <div id="add-record-modal" class="hidden"></div>`;
+};
+
+function renderProgressRows(records) {
+  return records.map(r => {
+    const pctColor = r.earnPct >= 0.8 ? 'var(--success)' : r.earnPct >= 0.4 ? 'var(--accent)' : 'var(--text)';
+    return `<tr onclick="showRecordDetail(${r.rec})" style="cursor:pointer">
+      <td class="font-mono">${r.rec}</td>
+      <td class="font-mono"><strong>${r.dwg}</strong></td>
+      <td>${r.rev}</td>
+      <td>${r.discipline}</td>
+      <td>${r.desc}</td>
+      <td class="text-right font-mono">${r.fldQty.toFixed(1)}</td>
+      <td>${r.uom}</td>
+      <td class="text-right font-mono">${r.fldWhrs.toFixed(1)}</td>
+      ${r.milestones.map(m => `<td class="text-center font-mono" style="font-size:12px;color:${m>=1?'var(--success)':m>0?'var(--accent)':'#cbd5e0'}">${m>=1?'1.0':m>0?m.toFixed(1):'-'}</td>`).join('')}
+      <td class="text-right font-mono" style="font-weight:600;color:${pctColor}">${(r.earnPct*100).toFixed(1)}%</td>
+      <td class="text-right font-mono">${r.ernQty.toFixed(1)}</td>
+      <td class="text-right font-mono">${r.earnWhrs.toFixed(1)}</td>
+      <td><button class="btn btn-outline btn-sm" onclick="event.stopPropagation();editMilestones(${r.rec})">Update</button></td>
+    </tr>`;
+  }).join('');
+}
+
+function filterProgress() {
+  const disc = document.getElementById('disc-filter').value;
+  const search = document.getElementById('progress-search').value.toLowerCase();
+  let filtered = STATE.sampleRecords.filter(r => {
+    if (disc !== 'All' && r.discipline !== disc) return false;
+    if (search && !r.dwg.toLowerCase().includes(search) && !r.desc.toLowerCase().includes(search)) return false;
+    return true;
+  });
+  const tbody = document.getElementById('progress-table');
+  const header = tbody.querySelector('tr:first-child').outerHTML;
+  tbody.innerHTML = header + renderProgressRows(filtered);
+}
+
+function setupProgressHandlers() {
+  // Already wired via onclick attributes
+}
+
+function showRecordDetail(recNo) {
+  const r = STATE.sampleRecords.find(x => x.rec === recNo);
+  const roc = STATE.rocTemplates.find(t => t.discipline === r.discipline);
+  const detail = document.getElementById('record-detail');
+  detail.classList.remove('hidden');
+  detail.innerHTML = `
+    <div class="card mt-4" style="border-left:4px solid var(--accent);">
+      <div class="card-header">
+        <h3>Record #${r.rec} — ${r.dwg} Rev ${r.rev}</h3>
+        <button class="btn btn-outline btn-sm" onclick="document.getElementById('record-detail').classList.add('hidden')">Close</button>
+      </div>
+      <div class="form-grid cols-4 mb-4">
+        <div class="form-group"><label>Discipline</label><input value="${r.discipline}" readonly style="background:#f7fafc"></div>
+        <div class="form-group"><label>Description</label><input value="${r.desc}"></div>
+        <div class="form-group"><label>FLD QTY</label><input type="number" value="${r.fldQty}" step="0.1"></div>
+        <div class="form-group"><label>FLD WHRS</label><input type="number" value="${r.fldWhrs}" step="0.1"></div>
+      </div>
+      <h4 style="font-size:13px;margin-bottom:8px;">Milestone Progress (ROC: ${r.discipline})</h4>
+      <div class="milestone-grid">
+        ${roc.milestones.map((m,i) => `
+          <div class="milestone-cell">
+            <div class="m-label">M${i+1}</div>
+            <div class="m-desc">${m}</div>
+            <div class="m-wt">Weight: ${(roc.weights[i]*100).toFixed(0)}%</div>
+            <input type="number" min="0" max="1" step="0.1" value="${r.milestones[i]}"
+              data-rec="${r.rec}" data-mi="${i}" onchange="updateMilestone(this)">
+          </div>
+        `).join('')}
+      </div>
+      <div class="flex justify-between items-center mt-4" style="padding:12px;background:var(--bg);border-radius:6px;">
+        <div><strong>Earned %:</strong> <span class="font-mono" style="font-size:18px;color:var(--primary)">${(r.earnPct*100).toFixed(1)}%</span></div>
+        <div><strong>ERN QTY:</strong> <span class="font-mono">${r.ernQty.toFixed(2)}</span></div>
+        <div><strong>EARN WHRS:</strong> <span class="font-mono">${r.earnWhrs.toFixed(2)}</span></div>
+        <button class="btn btn-success" onclick="alert('Progress saved — audit trail entry created')">Save Progress</button>
+      </div>
+    </div>`;
+}
+
+function updateMilestone(input) {
+  const recNo = parseInt(input.dataset.rec);
+  const mi = parseInt(input.dataset.mi);
+  const val = Math.min(1, Math.max(0, parseFloat(input.value) || 0));
+  input.value = val;
+  const r = STATE.sampleRecords.find(x => x.rec === recNo);
+  r.milestones[mi] = val;
+  const roc = STATE.rocTemplates.find(t => t.discipline === r.discipline);
+  let earnPct = 0;
+  for (let i = 0; i < 8; i++) earnPct += r.milestones[i] * roc.weights[i];
+  r.earnPct = earnPct;
+  r.ernQty = r.fldQty * earnPct;
+  r.earnWhrs = r.fldWhrs * earnPct;
+  showRecordDetail(recNo);
+  filterProgress();
+}
+
+function editMilestones(recNo) {
+  showRecordDetail(recNo);
+}
+
+function showAddRecordModal() {
+  const modal = document.getElementById('add-record-modal');
+  modal.classList.remove('hidden');
+  modal.innerHTML = `
+    <div class="modal-overlay" onclick="if(event.target===this)document.getElementById('add-record-modal').classList.add('hidden')">
+      <div class="modal">
+        <h3>Add New Audit Record</h3>
+        <div class="form-grid cols-2">
+          <div class="form-group"><label>Drawing Number</label><input placeholder="e.g. P-2050"></div>
+          <div class="form-group"><label>Revision</label><input placeholder="e.g. 1"></div>
+          <div class="form-group"><label>Discipline</label><select>
+            ${STATE.disciplines.map(d=>`<option>${d.name}</option>`).join('')}
+          </select></div>
+          <div class="form-group"><label>Cost Code</label><select>
+            ${STATE.coaCodes.map(c=>`<option value="${c.code}">${c.code} — ${c.desc}</option>`).join('')}
+          </select></div>
+          <div class="form-group"><label>Description</label><input placeholder="Line item description"></div>
+          <div class="form-group"><label>UOM</label><select><option>LF</option><option>CY</option><option>EA</option><option>TONS</option><option>SF</option></select></div>
+          <div class="form-group"><label>IFC Quantity</label><input type="number" placeholder="0.0"></div>
+          <div class="form-group"><label>Field Work Hours</label><input type="number" placeholder="Auto-calc from U/R" readonly style="background:#f7fafc"></div>
+        </div>
+        <div class="mt-4 btn-group">
+          <button class="btn btn-primary" onclick="alert('Record added — earned value initialized at 0%');document.getElementById('add-record-modal').classList.add('hidden')">Add Record</button>
+          <button class="btn btn-outline" onclick="document.getElementById('add-record-modal').classList.add('hidden')">Cancel</button>
+        </div>
+      </div>
+    </div>`;
+}
+
+// ---------- CHANGE MANAGEMENT ----------
+pages.changes = () => {
+  return `
+    <div class="flex justify-between items-center mb-4">
+      <div class="flex gap-2">
+        <select style="padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;">
+          <option>All Statuses</option><option>Pending</option><option>Approved</option><option>Rejected</option>
+        </select>
+      </div>
+      <button class="btn btn-primary" onclick="showChangeOrderModal()">+ New Change Order</button>
+    </div>
+    <div class="card">
+      <div class="card-header"><h3>Change Orders</h3></div>
+      <div class="table-wrap"><table>
+        <tr><th>CO #</th><th>Date</th><th>Discipline</th><th>Type</th><th>Description</th><th>Qty Change</th><th>UOM</th><th>Hrs Impact</th><th>Status</th><th>Requested By</th></tr>
+        ${STATE.changeOrders.map(co => `<tr>
+          <td class="font-mono"><strong>${co.id}</strong></td>
+          <td>${co.date}</td>
+          <td>${co.discipline}</td>
+          <td>${co.type}</td>
+          <td>${co.desc}</td>
+          <td class="text-right font-mono" style="color:${co.qtyChange>=0?'var(--success)':'var(--danger)'}">${co.qtyChange>=0?'+':''}${co.qtyChange}</td>
+          <td>${co.uom}</td>
+          <td class="text-right font-mono" style="color:${co.hrsImpact>=0?'var(--danger)':'var(--success)'}">${co.hrsImpact>=0?'+':''}${numberFmt(co.hrsImpact)}</td>
+          <td><span class="status ${co.status}">${co.status}</span></td>
+          <td>${co.requestedBy}</td>
+        </tr>`).join('')}
+      </table></div>
+    </div>
+    <div class="card-grid cols-2 mt-4">
+      <div class="card">
+        <div class="card-header"><h3>Impact Summary</h3></div>
+        <div class="table-wrap"><table>
+          <tr><th></th><th>Approved</th><th>Pending</th><th>Total</th></tr>
+          <tr><td>Qty Changes</td><td class="font-mono text-right">+43</td><td class="font-mono text-right">+180</td><td class="font-mono text-right">+223</td></tr>
+          <tr><td>Hours Impact</td><td class="font-mono text-right">+145</td><td class="font-mono text-right">+1,530</td><td class="font-mono text-right">+1,675</td></tr>
+          <tr><td>Budget Impact</td><td class="font-mono text-right" style="color:var(--success)">0.08%</td><td class="font-mono text-right" style="color:var(--warning)">0.83%</td><td class="font-mono text-right">0.91%</td></tr>
+        </table></div>
+      </div>
+      <div class="card">
+        <div class="card-header"><h3>Approval Workflow</h3></div>
+        <div style="padding:12px;background:var(--bg);border-radius:6px;">
+          <div class="flex items-center gap-4 mb-2">
+            <div style="width:24px;height:24px;border-radius:50%;background:var(--success);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;">1</div>
+            <div><strong class="text-sm">Field Request</strong><div class="text-sm text-muted">Originator submits CO</div></div>
+          </div>
+          <div style="width:2px;height:16px;background:var(--border);margin-left:11px;"></div>
+          <div class="flex items-center gap-4 mb-2">
+            <div style="width:24px;height:24px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;">2</div>
+            <div><strong class="text-sm">PC Review</strong><div class="text-sm text-muted">Project Controls evaluates impact</div></div>
+          </div>
+          <div style="width:2px;height:16px;background:var(--border);margin-left:11px;"></div>
+          <div class="flex items-center gap-4 mb-2">
+            <div style="width:24px;height:24px;border-radius:50%;background:var(--primary);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;">3</div>
+            <div><strong class="text-sm">PM Approval</strong><div class="text-sm text-muted">Project Manager approves/rejects</div></div>
+          </div>
+          <div style="width:2px;height:16px;background:var(--border);margin-left:11px;"></div>
+          <div class="flex items-center gap-4">
+            <div style="width:24px;height:24px;border-radius:50%;background:var(--success);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;">4</div>
+            <div><strong class="text-sm">Budget Update</strong><div class="text-sm text-muted">Current Budget adjusted automatically</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div id="co-modal" class="hidden"></div>`;
+};
+
+function showChangeOrderModal() {
+  const modal = document.getElementById('co-modal');
+  modal.classList.remove('hidden');
+  modal.innerHTML = `
+    <div class="modal-overlay" onclick="if(event.target===this)document.getElementById('co-modal').classList.add('hidden')">
+      <div class="modal">
+        <h3>New Change Order</h3>
+        <div class="form-grid cols-2">
+          <div class="form-group"><label>Discipline</label><select>${STATE.disciplines.map(d=>`<option>${d.name}</option>`).join('')}</select></div>
+          <div class="form-group"><label>Type</label><select><option>Scope Add</option><option>Scope Reduction</option><option>IFC Update</option><option>Design Change</option><option>Client Directive</option></select></div>
+          <div class="form-group" style="grid-column:span 2"><label>Description</label><textarea rows="2" placeholder="Describe the change and reference drawing numbers..."></textarea></div>
+          <div class="form-group"><label>Quantity Change</label><input type="number" placeholder="+ or -"></div>
+          <div class="form-group"><label>UOM</label><select><option>LF</option><option>CY</option><option>EA</option><option>TONS</option></select></div>
+          <div class="form-group"><label>Hours Impact</label><input type="number" placeholder="Auto-calc from U/R" readonly style="background:#f7fafc"></div>
+          <div class="form-group"><label>Requested By</label><input placeholder="e.g. Field Engineering"></div>
+        </div>
+        <div class="mt-4 btn-group">
+          <button class="btn btn-primary" onclick="alert('Change Order CO-004 created — pending PC review');document.getElementById('co-modal').classList.add('hidden')">Submit for Review</button>
+          <button class="btn btn-outline" onclick="document.getElementById('co-modal').classList.add('hidden')">Cancel</button>
+        </div>
+      </div>
+    </div>`;
+}
+
+// ---------- REPORTS ----------
+pages.reports = () => {
+  return `
+    <div class="tabs">
+      <div class="tab active" onclick="showReportTab('ev')">Earned Value</div>
+      <div class="tab" onclick="showReportTab('disc')">By Discipline</div>
+      <div class="tab" onclick="showReportTab('export')">Export</div>
+    </div>
+    <div id="report-ev">
+      <div class="card-grid cols-2">
+        <div class="card">
+          <div class="card-header"><h3>Budget vs Earned vs Actual (Hours)</h3></div>
+          <div class="chart-container"><canvas id="chart-report-ev"></canvas></div>
+        </div>
+        <div class="card">
+          <div class="card-header"><h3>CPI / SPI Trend</h3></div>
+          <div class="chart-container"><canvas id="chart-report-perf"></canvas></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header"><h3>Variance Analysis</h3></div>
+        <div class="table-wrap"><table>
+          <tr><th>Discipline</th><th>BCWS</th><th>BCWP</th><th>ACWP</th><th>SV</th><th>CV</th><th>CPI</th><th>SPI</th><th>EAC</th></tr>
+          ${STATE.disciplines.map(d => {
+            const bcws = d.budgetHrs * 0.42;
+            const bcwp = d.earnedHrs;
+            const acwp = d.actualHrs;
+            const sv = bcwp - bcws;
+            const cv = bcwp - acwp;
+            const cpi = (bcwp/acwp).toFixed(3);
+            const spi = (bcwp/bcws).toFixed(3);
+            const eac = (d.budgetHrs / parseFloat(cpi)).toFixed(0);
+            return `<tr>
+              <td><strong>${d.name}</strong></td>
+              <td class="text-right font-mono">${numberFmt(Math.round(bcws))}</td>
+              <td class="text-right font-mono">${numberFmt(bcwp)}</td>
+              <td class="text-right font-mono">${numberFmt(acwp)}</td>
+              <td class="text-right font-mono" style="color:${sv>=0?'var(--success)':'var(--danger)'}">${sv>=0?'+':''}${numberFmt(Math.round(sv))}</td>
+              <td class="text-right font-mono" style="color:${cv>=0?'var(--success)':'var(--danger)'}">${cv>=0?'+':''}${numberFmt(Math.round(cv))}</td>
+              <td class="text-right font-mono" style="color:${parseFloat(cpi)>=1?'var(--success)':'var(--danger)'}">${cpi}</td>
+              <td class="text-right font-mono" style="color:${parseFloat(spi)>=1?'var(--success)':'var(--danger)'}">${spi}</td>
+              <td class="text-right font-mono">${numberFmt(parseInt(eac))}</td>
+            </tr>`;
+          }).join('')}
+        </table></div>
+      </div>
+    </div>
+    <div id="report-disc" class="hidden">
+      <div class="card">
+        <div class="card-header"><h3>Discipline Breakdown</h3></div>
+        <div class="chart-container"><canvas id="chart-disc-breakdown"></canvas></div>
+      </div>
+    </div>
+    <div id="report-export" class="hidden">
+      <div class="card">
+        <div class="card-header"><h3>Export Reports</h3></div>
+        <div class="form-grid cols-2">
+          <div class="form-group"><label>Report Type</label><select>
+            <option>Quarterly Management Report (QMR)</option>
+            <option>Earned Value Summary</option>
+            <option>Discipline Detail Report</option>
+            <option>Change Order Log</option>
+            <option>Variance Analysis</option>
+          </select></div>
+          <div class="form-group"><label>Format</label><select>
+            <option>Excel (.xlsx)</option>
+            <option>PDF</option>
+            <option>Word (.docx)</option>
+          </select></div>
+          <div class="form-group"><label>Period</label><select>
+            <option>Current Period</option><option>Last 3 Periods</option><option>Project-to-Date</option>
+          </select></div>
+          <div class="form-group"><label>Disciplines</label><select multiple style="height:100px">
+            ${STATE.disciplines.map(d=>`<option selected>${d.name}</option>`).join('')}
+          </select></div>
+        </div>
+        <div class="mt-4"><button class="btn btn-primary" onclick="alert('Report generated and downloaded')">Generate Report</button></div>
+      </div>
+    </div>`;
+};
+
+// ============================================================
+//  TAB SWITCHERS
+// ============================================================
+function showCoaTab(tab) {
+  document.getElementById('coa-codes').classList.toggle('hidden', tab !== 'codes');
+  document.getElementById('coa-rates').classList.toggle('hidden', tab !== 'rates');
+  document.querySelectorAll('#page-content .tabs .tab').forEach((el, i) => {
+    el.classList.toggle('active', (tab === 'codes' && i === 0) || (tab === 'rates' && i === 1));
+  });
+}
+
+function showReportTab(tab) {
+  ['ev','disc','export'].forEach(t => {
+    const el = document.getElementById('report-'+t);
+    if (el) el.classList.toggle('hidden', t !== tab);
+  });
+  document.querySelectorAll('#page-content .tabs .tab').forEach((el, i) => {
+    el.classList.toggle('active', (tab==='ev'&&i===0)||(tab==='disc'&&i===1)||(tab==='export'&&i===2));
+  });
+  if (tab === 'disc') {
+    setTimeout(() => {
+      const ctx = document.getElementById('chart-disc-breakdown');
+      if (ctx) new Chart(ctx, {
+        type:'doughnut',
+        data:{ labels:STATE.disciplines.map(d=>d.name), datasets:[{ data:STATE.disciplines.map(d=>d.budgetHrs), backgroundColor:STATE.disciplines.map(d=>d.color) }] },
+        options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{ position:'right' } } }
+      });
+    }, 50);
+  }
+}
+
+// ============================================================
+//  CHART RENDERING
+// ============================================================
+function renderDashboardCharts() {
+  // EV by discipline
+  const ctx1 = document.getElementById('chart-ev-disc');
+  if (ctx1) new Chart(ctx1, {
+    type:'bar',
+    data:{
+      labels: STATE.disciplines.map(d=>d.name),
+      datasets:[
+        { label:'Budget Hrs', data:STATE.disciplines.map(d=>d.budgetHrs), backgroundColor:'rgba(26,54,93,.15)', borderColor:'var(--primary)', borderWidth:1 },
+        { label:'Earned Hrs', data:STATE.disciplines.map(d=>d.earnedHrs), backgroundColor:'rgba(56,161,105,.6)', borderColor:'var(--success)', borderWidth:1 },
+        { label:'Actual Hrs', data:STATE.disciplines.map(d=>d.actualHrs), backgroundColor:'rgba(221,107,32,.5)', borderColor:'var(--accent)', borderWidth:1 }
+      ]
+    },
+    options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{ position:'top' } }, scales:{ y:{ beginAtZero:true, ticks:{ callback: v=>numberFmt(v) } } } }
+  });
+
+  // S-curve
+  const ctx2 = document.getElementById('chart-scurve');
+  if (ctx2) {
+    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const planned = [2,6,14,25,38,52,65,76,85,92,97,100];
+    const earned =  [1.5,5,12,22, 0,0,0,0,0,0,0,0]; // only through Apr
+    const actual =  [1.2,4.5,11,21, 0,0,0,0,0,0,0,0];
+    new Chart(ctx2, {
+      type:'line',
+      data:{
+        labels: months,
+        datasets:[
+          { label:'Planned %', data:planned, borderColor:'var(--primary)', borderDash:[5,5], fill:false, tension:0.3 },
+          { label:'Earned %', data:earned.map(v=>v||null), borderColor:'var(--success)', fill:false, tension:0.3, pointRadius:4 },
+          { label:'Actual %', data:actual.map(v=>v||null), borderColor:'var(--accent)', fill:false, tension:0.3, pointRadius:4 }
+        ]
+      },
+      options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{ position:'top' } }, scales:{ y:{ beginAtZero:true, max:100, ticks:{ callback:v=>v+'%' } } } }
+    });
+  }
+}
+
+function renderBudgetChart() {
+  const ctx = document.getElementById('chart-budget');
+  if (ctx) new Chart(ctx, {
+    type:'bar',
+    data:{
+      labels: STATE.disciplines.map(d=>d.name),
+      datasets:[
+        { label:'Original Budget', data:STATE.disciplines.map(d=>d.budgetHrs), backgroundColor:'rgba(26,54,93,.7)' },
+        { label:'Current Budget', data:STATE.disciplines.map(d=>d.budgetHrs * 1.008), backgroundColor:'rgba(221,107,32,.6)' },
+        { label:'Forecast', data:STATE.disciplines.map(d=>d.budgetHrs * 1.015), backgroundColor:'rgba(214,158,46,.5)' }
+      ]
+    },
+    options:{ responsive:true, maintainAspectRatio:false, scales:{ y:{ beginAtZero:true, ticks:{ callback:v=>numberFmt(v) } } } }
+  });
+}
+
+function renderReportCharts() {
+  const ctx1 = document.getElementById('chart-report-ev');
+  if (ctx1) new Chart(ctx1, {
+    type:'bar',
+    data:{
+      labels: STATE.disciplines.map(d=>d.name),
+      datasets:[
+        { label:'BCWS (Planned)', data:STATE.disciplines.map(d=>Math.round(d.budgetHrs*0.42)), backgroundColor:'rgba(26,54,93,.3)', borderColor:'var(--primary)', borderWidth:1 },
+        { label:'BCWP (Earned)', data:STATE.disciplines.map(d=>d.earnedHrs), backgroundColor:'rgba(56,161,105,.6)', borderColor:'var(--success)', borderWidth:1 },
+        { label:'ACWP (Actual)', data:STATE.disciplines.map(d=>d.actualHrs), backgroundColor:'rgba(221,107,32,.5)', borderColor:'var(--accent)', borderWidth:1 }
+      ]
+    },
+    options:{ responsive:true, maintainAspectRatio:false, scales:{ y:{ beginAtZero:true, ticks:{ callback:v=>numberFmt(v) } } } }
+  });
+
+  const ctx2 = document.getElementById('chart-report-perf');
+  if (ctx2) {
+    const periods = ['Period 1','Period 2','Period 3','Period 4'];
+    new Chart(ctx2, {
+      type:'line',
+      data:{
+        labels: periods,
+        datasets:[
+          { label:'CPI', data:[1.02,1.04,1.06,1.061], borderColor:'var(--success)', fill:false, tension:0.3 },
+          { label:'SPI', data:[0.88,0.92,0.95,0.93], borderColor:'var(--accent)', fill:false, tension:0.3 },
+          { label:'Target (1.0)', data:[1,1,1,1], borderColor:'#cbd5e0', borderDash:[5,5], fill:false, pointRadius:0 }
+        ]
+      },
+      options:{ responsive:true, maintainAspectRatio:false, scales:{ y:{ min:0.7, max:1.3 } } }
+    });
+  }
+}
+
+// ============================================================
+//  UTILITIES
+// ============================================================
+function numberFmt(n) {
+  return Number(n).toLocaleString('en-US', { maximumFractionDigits:0 });
+}
+
+// ============================================================
+//  INIT
+// ============================================================
+document.addEventListener('DOMContentLoaded', () => {
+  navigate('dashboard');
+});
+</script>
+
+
+</body></html>
