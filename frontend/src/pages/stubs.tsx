@@ -13,7 +13,6 @@ function StubPage({ title, children }: { title: string; children?: ReactNode }) 
   );
 }
 
-export const DashboardPage = () => <StubPage title="Executive Dashboard" />;
 export const ProjectSetupPage = () => <StubPage title="Project Setup" />;
 export const CoaPage = () => <StubPage title="COA & Unit Rates" />;
 export const RocPage = () => <StubPage title="Rules of Credit" />;

@@ -4,8 +4,8 @@ import { AuthGuard } from './components/layout/AuthGuard';
 import { ProjectScopeGuard } from './components/layout/ProjectScopeGuard';
 import { AppShell } from './components/layout/AppShell';
 import { LoginPage } from './pages/Login';
+import { DashboardPage } from './pages/Dashboard';
 import {
-  DashboardPage,
   ProjectSetupPage,
   CoaPage,
   RocPage,
