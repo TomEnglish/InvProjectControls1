@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/Button';
 import { Field, inputClass } from '@/components/ui/FormField';
 import { StatusChip } from '@/components/ui/StatusChip';
 import { fmt } from '@/lib/format';
+import { AddDisciplineModal } from '@/components/projects/AddDisciplineModal';
 
 type Project = {
   id: string;
@@ -80,6 +81,8 @@ export function ProjectSetupPage() {
   useEffect(() => {
     setDraft(project ?? null);
   }, [project]);
+
+  const [addDisciplineOpen, setAddDisciplineOpen] = useState(false);
 
   const saveProject = useMutation({
     mutationFn: async (payload: Partial<Project>) => {
@@ -195,7 +198,7 @@ export function ProjectSetupPage() {
           title="Active Disciplines"
           actions={
             canEdit && !locked ? (
-              <Button variant="outline" size="sm" disabled>
+              <Button variant="outline" size="sm" onClick={() => setAddDisciplineOpen(true)}>
                 + Add Discipline
               </Button>
             ) : undefined
@@ -273,6 +276,13 @@ export function ProjectSetupPage() {
           </Button>
         </div>
       </Card>
+
+      <AddDisciplineModal
+        open={addDisciplineOpen}
+        onClose={() => setAddDisciplineOpen(false)}
+        projectId={projectId}
+        existingCodes={(disciplines ?? []).map((d) => d.discipline_code)}
+      />
     </div>
   );
 }

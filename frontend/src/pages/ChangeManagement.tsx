@@ -16,6 +16,7 @@ import { StatusChip } from '@/components/ui/StatusChip';
 import { fmt } from '@/lib/format';
 import { ApprovalStepper } from '@/components/changes/ApprovalStepper';
 import { NewChangeOrderModal } from '@/components/changes/NewChangeOrderModal';
+import { CoDecisionModal, type CoDecisionKind } from '@/components/changes/CoDecisionModal';
 
 function NoProject() {
   return (
@@ -35,6 +36,10 @@ export function ChangeManagementPage() {
   const [statusFilter, setStatusFilter] = useState<string>('All');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
+  const [decision, setDecision] = useState<
+    | { kind: CoDecisionKind; stage: 'pc_review' | 'approve'; coId: string; coNumber: string }
+    | null
+  >(null);
 
   const { data: cos, isLoading, error } = useChangeOrders(projectId);
   const { data: rollup } = useBudgetRollup(projectId);
@@ -47,26 +52,27 @@ export function ChangeManagementPage() {
   const selected = filtered.find((c) => c.id === selectedId) ?? null;
 
   const pcReview = useMutation({
-    mutationFn: async ({ id, decision }: { id: string; decision: 'forward' | 'reject' }) => {
+    mutationFn: async ({ id, decision, notes }: { id: string; decision: CoDecisionKind; notes: string | null }) => {
       const { error } = await supabase.rpc('co_pc_review', {
         p_co_id: id,
         p_decision: decision,
-        p_notes: null,
+        p_notes: notes,
       });
       if (error) throw error;
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['change-orders', projectId] });
       qc.invalidateQueries({ queryKey: ['budget-rollup', projectId] });
+      setDecision(null);
     },
   });
 
   const approve = useMutation({
-    mutationFn: async ({ id, decision }: { id: string; decision: 'forward' | 'reject' }) => {
+    mutationFn: async ({ id, decision, notes }: { id: string; decision: CoDecisionKind; notes: string | null }) => {
       const { error } = await supabase.rpc('co_approve', {
         p_co_id: id,
         p_decision: decision,
-        p_notes: null,
+        p_notes: notes,
       });
       if (error) throw error;
     },
@@ -74,6 +80,7 @@ export function ChangeManagementPage() {
       qc.invalidateQueries({ queryKey: ['change-orders', projectId] });
       qc.invalidateQueries({ queryKey: ['budget-rollup', projectId] });
       qc.invalidateQueries({ queryKey: ['project-summary', projectId] });
+      setDecision(null);
     },
   });
 
@@ -140,7 +147,7 @@ export function ChangeManagementPage() {
             </thead>
             <tbody>
               {filtered.map((co) => (
-                <ChangeOrderRow
+                <CoRow
                   key={co.id}
                   co={co}
                   selected={co.id === selectedId}
@@ -149,8 +156,12 @@ export function ChangeManagementPage() {
                   pcBusy={pcReview.isPending}
                   approveBusy={approve.isPending}
                   onSelect={() => setSelectedId(co.id === selectedId ? null : co.id)}
-                  onPcReview={(decision) => pcReview.mutate({ id: co.id, decision })}
-                  onApprove={(decision) => approve.mutate({ id: co.id, decision })}
+                  onPcReview={(kind) =>
+                    setDecision({ kind, stage: 'pc_review', coId: co.id, coNumber: co.co_number })
+                  }
+                  onApprove={(kind) =>
+                    setDecision({ kind, stage: 'approve', coId: co.id, coNumber: co.co_number })
+                  }
                 />
               ))}
               {filtered.length === 0 && (
@@ -235,11 +246,35 @@ export function ChangeManagementPage() {
         onClose={() => setModalOpen(false)}
         projectId={projectId}
       />
+
+      {decision && (
+        <CoDecisionModal
+          open
+          onClose={() => setDecision(null)}
+          coNumber={decision.coNumber}
+          verb={
+            decision.kind === 'reject'
+              ? 'Reject'
+              : decision.stage === 'pc_review'
+              ? 'Forward'
+              : 'Approve'
+          }
+          decision={decision.kind}
+          busy={pcReview.isPending || approve.isPending}
+          onConfirm={(notes) => {
+            if (decision.stage === 'pc_review') {
+              pcReview.mutate({ id: decision.coId, decision: decision.kind, notes });
+            } else {
+              approve.mutate({ id: decision.coId, decision: decision.kind, notes });
+            }
+          }}
+        />
+      )}
     </div>
   );
 }
 
-function ChangeOrderRow({
+function CoRow({
   co,
   selected,
   canPcReview,

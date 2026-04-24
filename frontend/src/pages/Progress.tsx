@@ -3,12 +3,14 @@ import { useQuery } from '@tanstack/react-query';
 import { Search } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useProjectStore } from '@/stores/project';
-import { useProgressRecords } from '@/lib/queries';
+import { useProgressRecords, useCurrentUser, hasRole } from '@/lib/queries';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { inputClass } from '@/components/ui/FormField';
 import { ProgressTable } from '@/components/progress/ProgressTable';
 import { RecordDetail } from '@/components/progress/RecordDetail';
+import { NewRecordModal } from '@/components/progress/NewRecordModal';
+import { downloadCsv } from '@/lib/export';
 
 function NoProject() {
   return (
@@ -22,9 +24,12 @@ function NoProject() {
 
 export function ProgressPage() {
   const projectId = useProjectStore((s) => s.currentProjectId);
+  const { data: me } = useCurrentUser();
+  const canAddRecord = hasRole(me?.role, 'editor');
   const [discFilter, setDiscFilter] = useState<string>('All');
   const [search, setSearch] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [newRecordOpen, setNewRecordOpen] = useState(false);
 
   const { data: records, isLoading, error } = useProgressRecords(projectId);
 
@@ -106,14 +111,65 @@ export function ProgressPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="primary" disabled>
+          <Button
+            variant="primary"
+            disabled={!canAddRecord}
+            onClick={() => setNewRecordOpen(true)}
+          >
             + New Record
           </Button>
           <Button variant="outline" disabled>
             Import IFC Qty
           </Button>
-          <Button variant="outline" disabled>
-            Export
+          <Button
+            variant="outline"
+            disabled={filtered.length === 0}
+            onClick={() =>
+              downloadCsv(
+                `progress-${new Date().toISOString().slice(0, 10)}.csv`,
+                [
+                  'Rec',
+                  'DWG',
+                  'Rev',
+                  'Discipline',
+                  'Description',
+                  'UOM',
+                  'FLD QTY',
+                  'FLD WHRS',
+                  'M1',
+                  'M2',
+                  'M3',
+                  'M4',
+                  'M5',
+                  'M6',
+                  'M7',
+                  'M8',
+                  'Earn %',
+                  'ERN QTY',
+                  'EARN WHRS',
+                  'COA Code',
+                  'Status',
+                ],
+                filtered.map((r) => [
+                  r.rec_no,
+                  r.dwg,
+                  r.rev,
+                  r.discipline_name,
+                  r.description,
+                  r.uom,
+                  r.fld_qty,
+                  r.fld_whrs,
+                  ...Array.from({ length: 8 }, (_, i) => r.milestones.find((m) => m.seq === i + 1)?.value ?? 0),
+                  (r.earn_pct * 100).toFixed(1) + '%',
+                  r.ern_qty.toFixed(2),
+                  r.earn_whrs.toFixed(2),
+                  r.coa_code,
+                  r.status,
+                ]),
+              )
+            }
+          >
+            Export CSV
           </Button>
         </div>
       </div>
@@ -129,6 +185,12 @@ export function ProgressPage() {
           onClose={() => setSelectedId(null)}
         />
       )}
+
+      <NewRecordModal
+        open={newRecordOpen}
+        onClose={() => setNewRecordOpen(false)}
+        projectId={projectId}
+      />
     </div>
   );
 }
