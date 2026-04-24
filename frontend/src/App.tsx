@@ -5,13 +5,13 @@ import { ProjectScopeGuard } from './components/layout/ProjectScopeGuard';
 import { AppShell } from './components/layout/AppShell';
 import { LoginPage } from './pages/Login';
 import { DashboardPage } from './pages/Dashboard';
+import { ProjectSetupPage } from './pages/ProjectSetup';
+import { ProgressPage } from './pages/Progress';
+import { ChangeManagementPage } from './pages/ChangeManagement';
 import {
-  ProjectSetupPage,
   CoaPage,
   RocPage,
   BudgetPage,
-  ProgressPage,
-  ChangesPage,
   ReportsPage,
 } from './pages/stubs';
 
@@ -53,7 +53,7 @@ export default function App() {
             path="changes"
             element={
               <ProjectScopeGuard>
-                <ChangesPage />
+                <ChangeManagementPage />
               </ProjectScopeGuard>
             }
             handle={{ title: 'Change Management' }}

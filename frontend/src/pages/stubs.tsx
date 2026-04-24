@@ -13,10 +13,7 @@ function StubPage({ title, children }: { title: string; children?: ReactNode }) 
   );
 }
 
-export const ProjectSetupPage = () => <StubPage title="Project Setup" />;
 export const CoaPage = () => <StubPage title="COA & Unit Rates" />;
 export const RocPage = () => <StubPage title="Rules of Credit" />;
 export const BudgetPage = () => <StubPage title="Budget & Baseline" />;
-export const ProgressPage = () => <StubPage title="Progress & Earned Value" />;
-export const ChangesPage = () => <StubPage title="Change Management" />;
 export const ReportsPage = () => <StubPage title="Reports & Analytics" />;
