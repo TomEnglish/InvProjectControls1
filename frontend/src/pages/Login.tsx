@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
+import { AuthLayout } from './auth/AuthLayout';
 
 export function LoginPage() {
   const nav = useNavigate();
@@ -26,14 +27,8 @@ export function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[color:var(--color-canvas)]">
-      <form
-        onSubmit={onSubmit}
-        className="w-[360px] bg-[color:var(--color-surface)] border border-[color:var(--color-line)] rounded-lg p-6"
-      >
-        <h1 className="text-lg font-semibold mb-1">Invenio ProjectControls</h1>
-        <p className="text-xs text-[color:var(--color-text-muted)] mb-4">Sign in to continue</p>
-
+    <AuthLayout title="Invenio ProjectControls" subtitle="Sign in to continue">
+      <form onSubmit={onSubmit}>
         <label className="block text-xs font-semibold uppercase tracking-wide text-[color:var(--color-text-muted)] mb-1">
           Email
         </label>
@@ -43,19 +38,27 @@ export function LoginPage() {
           required
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          className="w-full px-3 py-2 mb-3 border border-[color:var(--color-line)] rounded-md text-sm"
+          className="w-full px-3 py-2 mb-3 border border-[color:var(--color-line)] rounded-md text-sm bg-[color:var(--color-canvas)]"
         />
 
-        <label className="block text-xs font-semibold uppercase tracking-wide text-[color:var(--color-text-muted)] mb-1">
-          Password
-        </label>
+        <div className="flex items-baseline justify-between mb-1">
+          <label className="text-xs font-semibold uppercase tracking-wide text-[color:var(--color-text-muted)]">
+            Password
+          </label>
+          <Link
+            to="/forgot-password"
+            className="text-xs text-[color:var(--color-primary)] hover:underline"
+          >
+            Forgot password?
+          </Link>
+        </div>
         <input
           type="password"
           autoComplete="current-password"
           required
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          className="w-full px-3 py-2 mb-4 border border-[color:var(--color-line)] rounded-md text-sm"
+          className="w-full px-3 py-2 mb-4 border border-[color:var(--color-line)] rounded-md text-sm bg-[color:var(--color-canvas)]"
         />
 
         {error && (
@@ -73,6 +76,6 @@ export function LoginPage() {
           {submitting ? 'Signing in…' : 'Sign in'}
         </button>
       </form>
-    </div>
+    </AuthLayout>
   );
 }

@@ -4,6 +4,9 @@ import { AuthGuard } from './components/layout/AuthGuard';
 import { ProjectScopeGuard } from './components/layout/ProjectScopeGuard';
 import { AppShell } from './components/layout/AppShell';
 import { LoginPage } from './pages/Login';
+import { ForgotPasswordPage } from './pages/auth/ForgotPassword';
+import { UpdatePasswordPage } from './pages/auth/UpdatePassword';
+import { PendingAssignmentPage } from './pages/auth/PendingAssignment';
 import { DashboardPage } from './pages/Dashboard';
 import { ProjectSetupPage } from './pages/ProjectSetup';
 import { ProgressPage } from './pages/Progress';
@@ -20,6 +23,10 @@ export default function App() {
     <AuthProvider>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+        <Route path="/update-password" element={<UpdatePasswordPage mode="recovery" />} />
+        <Route path="/accept-invite" element={<UpdatePasswordPage mode="invite" />} />
+        <Route path="/pending-assignment" element={<PendingAssignmentPage />} />
         <Route
           element={
             <AuthGuard>
