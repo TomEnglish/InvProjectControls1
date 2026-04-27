@@ -1,46 +1,70 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { AuthLayout } from './AuthLayout';
 
 type Mode = 'recovery' | 'invite';
 
-export function UpdatePasswordPage({ mode }: { mode: Mode }) {
+// Supabase's default email templates use the OTP/PKCE flow:
+//   {{ .SiteURL }}/{path}?token_hash=…&type=recovery|invite|signup
+// We exchange token_hash → session via verifyOtp, then let the user set a
+// password. The legacy hash-fragment flow (#access_token=…) is also handled
+// for backwards compatibility in case the email template ever gets reverted.
+export function UpdatePasswordPage({ mode: forcedMode }: { mode?: Mode } = {}) {
   const nav = useNavigate();
+  const [searchParams] = useSearchParams();
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [tokenReady, setTokenReady] = useState<boolean | null>(null);
 
-  // Supabase parses the URL hash on load and emits PASSWORD_RECOVERY (recovery)
-  // or SIGNED_IN with a fresh session (invite). Either way, after that event
-  // fires we have an authenticated session and can call updateUser({ password }).
+  const otpType = searchParams.get('type');
+  const mode: Mode =
+    forcedMode ?? (otpType === 'invite' || otpType === 'signup' ? 'invite' : 'recovery');
+
   useEffect(() => {
-    let resolved = false;
-    const settle = (ok: boolean) => {
-      if (!resolved) {
-        resolved = true;
-        setTokenReady(ok);
+    let cancelled = false;
+
+    const init = async () => {
+      const tokenHash = searchParams.get('token_hash');
+
+      if (tokenHash && otpType) {
+        const { error: otpError } = await supabase.auth.verifyOtp({
+          token_hash: tokenHash,
+          type: otpType as 'recovery' | 'invite' | 'signup' | 'email_change' | 'magiclink',
+        });
+        if (!cancelled) setTokenReady(!otpError);
+        return;
       }
+
+      // Legacy implicit flow — Supabase auto-parses #access_token from the URL
+      // hash on client init. Wait briefly for it to settle.
+      const { data } = await supabase.auth.getSession();
+      if (data.session) {
+        if (!cancelled) setTokenReady(true);
+        return;
+      }
+
+      const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
+        if (event === 'PASSWORD_RECOVERY' || (event === 'SIGNED_IN' && session)) {
+          if (!cancelled) setTokenReady(true);
+        }
+      });
+      const timeout = setTimeout(() => {
+        if (!cancelled) setTokenReady(false);
+      }, 4000);
+      return () => {
+        sub.subscription.unsubscribe();
+        clearTimeout(timeout);
+      };
     };
 
-    supabase.auth.getSession().then(({ data }) => {
-      if (data.session) settle(true);
-    });
-
-    const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'PASSWORD_RECOVERY' || (event === 'SIGNED_IN' && session)) {
-        settle(true);
-      }
-    });
-
-    const timeout = setTimeout(() => settle(false), 4000);
+    void init();
     return () => {
-      sub.subscription.unsubscribe();
-      clearTimeout(timeout);
+      cancelled = true;
     };
-  }, []);
+  }, [searchParams, otpType]);
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();

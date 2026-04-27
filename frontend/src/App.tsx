@@ -24,6 +24,7 @@ export default function App() {
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+        <Route path="/reset-password" element={<UpdatePasswordPage />} />
         <Route path="/update-password" element={<UpdatePasswordPage mode="recovery" />} />
         <Route path="/accept-invite" element={<UpdatePasswordPage mode="invite" />} />
         <Route path="/pending-assignment" element={<PendingAssignmentPage />} />
