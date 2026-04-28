@@ -30,8 +30,12 @@ export function Modal({
   return (
     <div
       className="is-modal-backdrop"
+      role="presentation"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
+      }}
+      onKeyDown={(e) => {
+        if (e.key === 'Escape' && e.target === e.currentTarget) onClose();
       }}
     >
       <div

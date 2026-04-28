@@ -21,7 +21,7 @@ const SIGNED_URL_TTL = 60 * 15; // 15 minutes
 function sanitise(name: string): string {
   return name
     .normalize('NFKD')
-    .replace(/[^\w.\-]/g, '_')
+    .replace(/[^\w.-]/g, '_')
     .slice(-160);
 }
 

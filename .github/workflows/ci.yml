@@ -39,6 +39,15 @@ jobs:
       - name: Typecheck (all workspaces)
         run: npm run typecheck
 
+      - name: Lint frontend
+        run: npm run lint --workspace frontend
+
+      - name: Unit tests
+        run: npm run test --workspace frontend
+        env:
+          VITE_SUPABASE_URL: https://example.supabase.co
+          VITE_SUPABASE_ANON_KEY: ci-placeholder-anon-key
+
       - name: Build frontend
         run: npm run build
         env:
@@ -48,6 +57,21 @@ jobs:
           # compiler + Vite pipeline, not env wiring.
           VITE_SUPABASE_URL: https://example.supabase.co
           VITE_SUPABASE_ANON_KEY: ci-placeholder-anon-key
+
+      - name: Bundle-size guard
+        # Fail if the gzipped JS bundle exceeds 300 KB. Spec budget is 250 KB
+        # but we have headroom; bump the threshold once code-splitting lands.
+        run: |
+          set -e
+          MAX_GZIP=$((300 * 1024))
+          for f in frontend/dist/assets/index-*.js; do
+            SIZE=$(gzip -c "$f" | wc -c)
+            echo "$f: $SIZE bytes (gzipped)"
+            if [ "$SIZE" -gt "$MAX_GZIP" ]; then
+              echo "::error file=$f::Gzipped JS exceeds $MAX_GZIP bytes"
+              exit 1
+            fi
+          done
 
       - name: Upload build artifact
         if: success()
