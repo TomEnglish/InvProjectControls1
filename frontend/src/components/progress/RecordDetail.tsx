@@ -5,6 +5,7 @@ import { useRocMilestonesForDiscipline, type ProgressRecord } from '@/lib/querie
 import { Card, CardHeader } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { fmt } from '@/lib/format';
+import { AttachmentsList } from '@/components/attachments/AttachmentsList';
 
 type Props = {
   record: ProgressRecord;
@@ -205,6 +206,11 @@ export function RecordDetail({ record, projectId, onClose }: Props) {
           <div className="is-stat-label">EARN WHRS</div>
           <div className="font-mono text-base mt-0.5">{liveEarnWhrs.toFixed(2)}</div>
         </div>
+      </div>
+
+      <div className="mt-5 pt-4 border-t border-[color:var(--color-line)]">
+        <h4 className="text-sm font-semibold mb-3">Attachments</h4>
+        <AttachmentsList entity="audit_record" entityId={record.id} compact />
       </div>
     </Card>
   );

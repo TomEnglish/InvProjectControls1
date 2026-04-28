@@ -285,6 +285,42 @@ export function useBudgetRollup(projectId: string | null) {
 }
 
 // ─────────────────────────────────────────────────────────────────────
+// Attachments — file metadata for audit records and change orders
+// ─────────────────────────────────────────────────────────────────────
+export type AttachmentEntity = 'audit_record' | 'change_order' | 'report';
+
+export type AttachmentRow = {
+  id: string;
+  entity: AttachmentEntity;
+  entity_id: string;
+  path: string;
+  original_filename: string;
+  mime_type: string | null;
+  size_bytes: number | null;
+  uploaded_by: string | null;
+  uploaded_at: string;
+};
+
+export function useAttachments(entity: AttachmentEntity, entityId: string | null) {
+  return useQuery({
+    queryKey: ['attachments', entity, entityId] as const,
+    enabled: !!entityId,
+    queryFn: async (): Promise<AttachmentRow[]> => {
+      const { data, error } = await supabase
+        .from('attachments')
+        .select(
+          'id, entity, entity_id, path, original_filename, mime_type, size_bytes, uploaded_by, uploaded_at',
+        )
+        .eq('entity', entity)
+        .eq('entity_id', entityId!)
+        .order('uploaded_at', { ascending: false });
+      if (error) throw error;
+      return (data ?? []) as AttachmentRow[];
+    },
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────
 // COA — Cost-of-account library
 // ─────────────────────────────────────────────────────────────────────
 export type CoaCodeRow = {
