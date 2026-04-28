@@ -1,5 +1,4 @@
-import { Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider } from './lib/auth';
+import { createBrowserRouter, Navigate } from 'react-router-dom';
 import { AuthGuard } from './components/layout/AuthGuard';
 import { ProjectScopeGuard } from './components/layout/ProjectScopeGuard';
 import { AppShell } from './components/layout/AppShell';
@@ -11,73 +10,63 @@ import { DashboardPage } from './pages/Dashboard';
 import { ProjectSetupPage } from './pages/ProjectSetup';
 import { ProgressPage } from './pages/Progress';
 import { ChangeManagementPage } from './pages/ChangeManagement';
-import {
-  CoaPage,
-  RocPage,
-  BudgetPage,
-  ReportsPage,
-} from './pages/stubs';
+import { CoaPage, RocPage, BudgetPage, ReportsPage } from './pages/stubs';
 
-export default function App() {
-  return (
-    <AuthProvider>
-      <Routes>
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-        <Route path="/reset-password" element={<UpdatePasswordPage />} />
-        <Route path="/update-password" element={<UpdatePasswordPage mode="recovery" />} />
-        <Route path="/accept-invite" element={<UpdatePasswordPage mode="invite" />} />
-        <Route path="/pending-assignment" element={<PendingAssignmentPage />} />
-        <Route
-          element={
-            <AuthGuard>
-              <AppShell />
-            </AuthGuard>
-          }
-        >
-          <Route index element={<DashboardPage />} handle={{ title: 'Executive Dashboard' }} />
-          <Route path="projects" element={<ProjectSetupPage />} handle={{ title: 'Project Setup' }} />
-          <Route path="coa" element={<CoaPage />} handle={{ title: 'COA & Unit Rates' }} />
-          <Route path="roc" element={<RocPage />} handle={{ title: 'Rules of Credit' }} />
-          <Route
-            path="budget"
-            element={
-              <ProjectScopeGuard>
-                <BudgetPage />
-              </ProjectScopeGuard>
-            }
-            handle={{ title: 'Budget & Baseline' }}
-          />
-          <Route
-            path="progress"
-            element={
-              <ProjectScopeGuard>
-                <ProgressPage />
-              </ProjectScopeGuard>
-            }
-            handle={{ title: 'Progress & Earned Value' }}
-          />
-          <Route
-            path="changes"
-            element={
-              <ProjectScopeGuard>
-                <ChangeManagementPage />
-              </ProjectScopeGuard>
-            }
-            handle={{ title: 'Change Management' }}
-          />
-          <Route
-            path="reports"
-            element={
-              <ProjectScopeGuard>
-                <ReportsPage />
-              </ProjectScopeGuard>
-            }
-            handle={{ title: 'Reports & Analytics' }}
-          />
-        </Route>
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </AuthProvider>
-  );
-}
+export const router = createBrowserRouter([
+  { path: '/login', element: <LoginPage /> },
+  { path: '/forgot-password', element: <ForgotPasswordPage /> },
+  { path: '/reset-password', element: <UpdatePasswordPage /> },
+  { path: '/update-password', element: <UpdatePasswordPage mode="recovery" /> },
+  { path: '/accept-invite', element: <UpdatePasswordPage mode="invite" /> },
+  { path: '/pending-assignment', element: <PendingAssignmentPage /> },
+  {
+    element: (
+      <AuthGuard>
+        <AppShell />
+      </AuthGuard>
+    ),
+    children: [
+      { index: true, element: <DashboardPage />, handle: { title: 'Executive Dashboard' } },
+      { path: '/projects', element: <ProjectSetupPage />, handle: { title: 'Project Setup' } },
+      { path: '/coa', element: <CoaPage />, handle: { title: 'COA & Unit Rates' } },
+      { path: '/roc', element: <RocPage />, handle: { title: 'Rules of Credit' } },
+      {
+        path: '/budget',
+        element: (
+          <ProjectScopeGuard>
+            <BudgetPage />
+          </ProjectScopeGuard>
+        ),
+        handle: { title: 'Budget & Baseline' },
+      },
+      {
+        path: '/progress',
+        element: (
+          <ProjectScopeGuard>
+            <ProgressPage />
+          </ProjectScopeGuard>
+        ),
+        handle: { title: 'Progress & Earned Value' },
+      },
+      {
+        path: '/changes',
+        element: (
+          <ProjectScopeGuard>
+            <ChangeManagementPage />
+          </ProjectScopeGuard>
+        ),
+        handle: { title: 'Change Management' },
+      },
+      {
+        path: '/reports',
+        element: (
+          <ProjectScopeGuard>
+            <ReportsPage />
+          </ProjectScopeGuard>
+        ),
+        handle: { title: 'Reports & Analytics' },
+      },
+    ],
+  },
+  { path: '*', element: <Navigate to="/" replace /> },
+]);
