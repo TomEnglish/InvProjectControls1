@@ -37,9 +37,24 @@ const ANSI = {
 function loadEnv() {
   try {
     const raw = readFileSync(resolve(process.cwd(), '.env'), 'utf8');
-    for (const line of raw.split('\n')) {
-      const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*)\s*$/);
-      if (m && !process.env[m[1]!]) process.env[m[1]!] = m[2]!.replace(/^"|"$/g, '');
+    for (const line of raw.split(/\r?\n/)) {
+      // Skip blanks and comments.
+      if (!line.trim() || line.trim().startsWith('#')) continue;
+      const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*?)\s*$/);
+      if (!m) continue;
+      const key = m[1]!;
+      let value = m[2]!;
+      // Strip a single matching quote-pair (single or double).
+      if (
+        (value.startsWith('"') && value.endsWith('"')) ||
+        (value.startsWith("'") && value.endsWith("'"))
+      ) {
+        value = value.slice(1, -1);
+      }
+      // Strip a stray trailing CR in case the file has CRLF and the regex
+      // missed it (belt-and-braces).
+      value = value.replace(/\r$/, '');
+      if (!process.env[key]) process.env[key] = value;
     }
   } catch {}
 }
@@ -94,9 +109,17 @@ async function main() {
     process.exit(1);
   }
 
+  // Diagnostic print — masks password but reveals length and any whitespace
+  // that snuck through .env parsing. If the length looks wrong, the .env
+  // value has trailing whitespace or extra chars.
+  const passMasked =
+    password.length > 2
+      ? password[0] + '*'.repeat(password.length - 2) + password[password.length - 1]
+      : '**';
   console.log(`${ANSI.bold}Smoke runner${ANSI.reset}`);
   console.log(`  target:   ${url}`);
   console.log(`  user:     ${email}`);
+  console.log(`  password: ${passMasked} (${password.length} chars)`);
   console.log(`  destructive: ${includeDestructive ? ANSI.yellow + 'on' + ANSI.reset : ANSI.dim + 'off' + ANSI.reset}\n`);
 
   const sb = createClient(url, anon, {
