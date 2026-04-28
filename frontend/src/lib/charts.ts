@@ -24,5 +24,5 @@ ChartJS.register(
 );
 
 ChartJS.defaults.font.family =
-  "'Segoe UI', system-ui, -apple-system, sans-serif";
+  "'Inter', system-ui, -apple-system, sans-serif";
 ChartJS.defaults.font.size = 12;
