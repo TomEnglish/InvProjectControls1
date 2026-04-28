@@ -11,7 +11,7 @@ import {
 } from '@/lib/queries';
 import { Card, CardHeader } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
-import { inputClass } from '@/components/ui/FormField';
+import { selectClass } from '@/components/ui/FormField';
 import { StatusChip } from '@/components/ui/StatusChip';
 import { fmt } from '@/lib/format';
 import { ApprovalStepper } from '@/components/changes/ApprovalStepper';
@@ -88,17 +88,13 @@ export function ChangeManagementPage() {
   if (isLoading) {
     return (
       <Card>
-        <div className="h-[300px] bg-[color:var(--color-canvas)] rounded animate-pulse" />
+        <div className="is-skeleton" style={{ height: 280, width: '100%' }} />
       </Card>
     );
   }
   if (error) {
     return (
-      <Card>
-        <div className="text-sm text-[color:var(--color-variance-unfavourable)]">
-          {(error as Error).message}
-        </div>
-      </Card>
+      <div className="is-toast is-toast-danger">{(error as Error).message}</div>
     );
   }
 
@@ -106,11 +102,12 @@ export function ChangeManagementPage() {
   const pendingHrs = rollup?.pending_changes_hrs ?? 0;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <div className="flex justify-between items-center flex-wrap gap-2">
         <select
           aria-label="Status filter"
-          className={inputClass}
+          className={selectClass}
+          style={{ width: 200 }}
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
         >
@@ -129,20 +126,28 @@ export function ChangeManagementPage() {
         </Button>
       </div>
 
-      <Card>
-        <CardHeader title="Change Orders" />
+      <div className="is-surface overflow-hidden">
+        <div className="px-6 py-4 border-b border-[color:var(--color-line)]">
+          <h3 className="text-sm font-semibold">Change Orders</h3>
+          <p className="text-xs text-[color:var(--color-text-muted)] mt-0.5">
+            Click a row to view its approval stage.
+          </p>
+        </div>
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="is-table">
             <thead>
-              <tr className="bg-[color:var(--color-canvas)]">
-                {['CO #', 'Date', 'Discipline', 'Type', 'Description', 'Qty', 'UOM', 'Hrs Impact', 'Status', 'Requested By', ''].map((h) => (
-                  <th
-                    key={h}
-                    className="px-3 py-2.5 text-left text-[11px] uppercase tracking-wide font-semibold text-[color:var(--color-text-muted)] border-b-2 border-[color:var(--color-line)]"
-                  >
-                    {h}
-                  </th>
-                ))}
+              <tr>
+                <th>CO #</th>
+                <th>Date</th>
+                <th>Discipline</th>
+                <th>Type</th>
+                <th>Description</th>
+                <th style={{ textAlign: 'right' }}>Qty</th>
+                <th>UOM</th>
+                <th style={{ textAlign: 'right' }}>Hrs Impact</th>
+                <th>Status</th>
+                <th>Requested By</th>
+                <th></th>
               </tr>
             </thead>
             <tbody>
@@ -166,10 +171,7 @@ export function ChangeManagementPage() {
               ))}
               {filtered.length === 0 && (
                 <tr>
-                  <td
-                    colSpan={11}
-                    className="px-3 py-6 text-center text-[color:var(--color-text-muted)] text-sm"
-                  >
+                  <td colSpan={11} className="text-center text-[color:var(--color-text-muted)] py-6">
                     No change orders match.
                   </td>
                 </tr>
@@ -177,55 +179,59 @@ export function ChangeManagementPage() {
             </tbody>
           </table>
         </div>
-      </Card>
+      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <Card>
           <CardHeader title="Impact Summary" />
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-[color:var(--color-text-muted)] text-[11px] uppercase tracking-wide">
-                <th className="text-left py-1"></th>
-                <th className="text-right py-1">Approved</th>
-                <th className="text-right py-1">Pending</th>
-                <th className="text-right py-1">Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr className="border-t border-[color:var(--color-line)]">
-                <td className="py-2">Hours Impact</td>
-                <td className="text-right font-mono">{fmt.int(approvedHrs)}</td>
-                <td className="text-right font-mono">{fmt.int(pendingHrs)}</td>
-                <td className="text-right font-mono font-semibold">{fmt.int(approvedHrs + pendingHrs)}</td>
-              </tr>
-              {rollup && (
-                <tr className="border-t border-[color:var(--color-line)]">
-                  <td className="py-2">Budget Impact</td>
-                  <td
-                    className="text-right font-mono"
-                    style={{ color: 'var(--color-variance-favourable)' }}
-                  >
-                    {rollup.original_budget > 0
-                      ? fmt.pct(approvedHrs / rollup.original_budget)
-                      : '—'}
-                  </td>
-                  <td
-                    className="text-right font-mono"
-                    style={{ color: 'var(--color-accent)' }}
-                  >
-                    {rollup.original_budget > 0
-                      ? fmt.pct(pendingHrs / rollup.original_budget)
-                      : '—'}
-                  </td>
-                  <td className="text-right font-mono">
-                    {rollup.original_budget > 0
-                      ? fmt.pct((approvedHrs + pendingHrs) / rollup.original_budget)
-                      : '—'}
+          <div className="overflow-x-auto -mx-6 -mb-6 mt-2">
+            <table className="is-table">
+              <thead>
+                <tr>
+                  <th></th>
+                  <th style={{ textAlign: 'right' }}>Approved</th>
+                  <th style={{ textAlign: 'right' }}>Pending</th>
+                  <th style={{ textAlign: 'right' }}>Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Hours Impact</td>
+                  <td className="text-right font-mono">{fmt.int(approvedHrs)}</td>
+                  <td className="text-right font-mono">{fmt.int(pendingHrs)}</td>
+                  <td className="text-right font-mono font-semibold">
+                    {fmt.int(approvedHrs + pendingHrs)}
                   </td>
                 </tr>
-              )}
-            </tbody>
-          </table>
+                {rollup && (
+                  <tr>
+                    <td>Budget Impact</td>
+                    <td
+                      className="text-right font-mono"
+                      style={{ color: 'var(--color-variance-favourable)' }}
+                    >
+                      {rollup.original_budget > 0
+                        ? fmt.pct(approvedHrs / rollup.original_budget)
+                        : '—'}
+                    </td>
+                    <td
+                      className="text-right font-mono"
+                      style={{ color: 'var(--color-warn)' }}
+                    >
+                      {rollup.original_budget > 0
+                        ? fmt.pct(pendingHrs / rollup.original_budget)
+                        : '—'}
+                    </td>
+                    <td className="text-right font-mono">
+                      {rollup.original_budget > 0
+                        ? fmt.pct((approvedHrs + pendingHrs) / rollup.original_budget)
+                        : '—'}
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </Card>
 
         <Card>
@@ -234,9 +240,9 @@ export function ChangeManagementPage() {
           />
           <ApprovalStepper status={selected?.status ?? null} />
           {!selected && (
-            <div className="mt-3 text-xs text-[color:var(--color-text-muted)]">
+            <p className="mt-3 text-xs text-[color:var(--color-text-muted)]">
               Click a CO above to view its stage.
-            </div>
+            </p>
           )}
         </Card>
       </div>
@@ -256,8 +262,8 @@ export function ChangeManagementPage() {
             decision.kind === 'reject'
               ? 'Reject'
               : decision.stage === 'pc_review'
-              ? 'Forward'
-              : 'Approve'
+                ? 'Forward'
+                : 'Approve'
           }
           decision={decision.kind}
           busy={pcReview.isPending || approve.isPending}
@@ -299,46 +305,44 @@ function CoRow({
     co.qty_change > 0
       ? 'var(--color-variance-favourable)'
       : co.qty_change < 0
-      ? 'var(--color-variance-unfavourable)'
-      : 'var(--color-text)';
+        ? 'var(--color-variance-unfavourable)'
+        : 'var(--color-text)';
   const hrsColor =
     co.hrs_impact > 0
       ? 'var(--color-variance-unfavourable)'
       : co.hrs_impact < 0
-      ? 'var(--color-variance-favourable)'
-      : 'var(--color-text)';
+        ? 'var(--color-variance-favourable)'
+        : 'var(--color-text)';
 
   return (
     <tr
       onClick={onSelect}
-      className={`cursor-pointer border-b border-[color:var(--color-line)] ${
-        selected ? 'bg-[color:var(--color-status-locked-bg)]' : 'hover:bg-[color:var(--color-canvas)]'
-      }`}
+      className="cursor-pointer"
+      style={selected ? { background: 'var(--color-primary-soft)' } : undefined}
     >
-      <td className="px-3 py-2 font-mono"><strong>{co.co_number}</strong></td>
-      <td className="px-3 py-2">{co.date}</td>
-      <td className="px-3 py-2">{co.discipline_name ?? '—'}</td>
-      <td className="px-3 py-2">{co.type}</td>
-      <td className="px-3 py-2 max-w-md">{co.description}</td>
-      <td className="px-3 py-2 text-right font-mono" style={{ color: qtyColor }}>
+      <td className="font-mono font-semibold">{co.co_number}</td>
+      <td>{co.date}</td>
+      <td>{co.discipline_name ?? '—'}</td>
+      <td className="capitalize">{co.type.replace(/_/g, ' ')}</td>
+      <td className="max-w-md">{co.description}</td>
+      <td className="text-right font-mono" style={{ color: qtyColor }}>
         {co.qty_change > 0 ? '+' : ''}
         {co.qty_change}
       </td>
-      <td className="px-3 py-2">{co.uom}</td>
-      <td className="px-3 py-2 text-right font-mono" style={{ color: hrsColor }}>
+      <td>{co.uom}</td>
+      <td className="text-right font-mono" style={{ color: hrsColor }}>
         {co.hrs_impact > 0 ? '+' : ''}
         {fmt.int(co.hrs_impact)}
       </td>
-      <td className="px-3 py-2"><StatusChip kind={co.status} /></td>
-      <td className="px-3 py-2">{co.requested_by}</td>
-      <td
-        className="px-3 py-2"
-        onClick={(e) => e.stopPropagation()}
-      >
+      <td>
+        <StatusChip kind={co.status} />
+      </td>
+      <td>{co.requested_by}</td>
+      <td onClick={(e) => e.stopPropagation()}>
         <div className="flex gap-1 flex-wrap">
           {co.status === 'pending' && canPcReview && (
             <>
-              <Button size="sm" variant="success" disabled={pcBusy} onClick={() => onPcReview('forward')}>
+              <Button size="sm" variant="primary" disabled={pcBusy} onClick={() => onPcReview('forward')}>
                 Forward
               </Button>
               <Button size="sm" variant="danger" disabled={pcBusy} onClick={() => onPcReview('reject')}>
@@ -348,7 +352,7 @@ function CoRow({
           )}
           {co.status === 'pc_reviewed' && canApprove && (
             <>
-              <Button size="sm" variant="success" disabled={approveBusy} onClick={() => onApprove('forward')}>
+              <Button size="sm" variant="primary" disabled={approveBusy} onClick={() => onApprove('forward')}>
                 Approve
               </Button>
               <Button size="sm" variant="danger" disabled={approveBusy} onClick={() => onApprove('reject')}>

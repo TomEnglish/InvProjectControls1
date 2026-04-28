@@ -204,46 +204,34 @@ export function ProjectSetupPage() {
             ) : undefined
           }
         />
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+        <div className="overflow-x-auto rounded-md border border-[color:var(--color-line)]">
+          <table className="is-table">
             <thead>
               <tr>
-                {['Discipline', 'Code', 'Budget Hours', 'ROC Template', 'Status'].map((h) => (
-                  <th
-                    key={h}
-                    className="px-3 py-2.5 text-left text-[11px] uppercase tracking-wide font-semibold text-[color:var(--color-text-muted)] bg-[color:var(--color-canvas)] border-b-2 border-[color:var(--color-line)]"
-                  >
-                    {h}
-                  </th>
-                ))}
+                <th>Discipline</th>
+                <th>Code</th>
+                <th style={{ textAlign: 'right' }}>Budget Hours</th>
+                <th>ROC Template</th>
+                <th>Status</th>
               </tr>
             </thead>
             <tbody>
               {(disciplines ?? []).map((d) => (
-                <tr key={d.id} className="hover:bg-[color:var(--color-canvas)]">
-                  <td className="px-3 py-2 border-b border-[color:var(--color-line)]">
-                    <strong>{d.display_name}</strong>
-                  </td>
-                  <td className="px-3 py-2 font-mono border-b border-[color:var(--color-line)]">
-                    {d.discipline_code}
-                  </td>
-                  <td className="px-3 py-2 text-right font-mono border-b border-[color:var(--color-line)]">
-                    {fmt.int(d.budget_hrs)}
-                  </td>
-                  <td className="px-3 py-2 border-b border-[color:var(--color-line)]">
+                <tr key={d.id}>
+                  <td className="font-semibold">{d.display_name}</td>
+                  <td className="font-mono">{d.discipline_code}</td>
+                  <td className="text-right font-mono">{fmt.int(d.budget_hrs)}</td>
+                  <td className="text-[color:var(--color-text-muted)]">
                     {d.roc_template_id ? `${d.discipline_code} Standard (8 milestones)` : '— none —'}
                   </td>
-                  <td className="px-3 py-2 border-b border-[color:var(--color-line)]">
+                  <td>
                     <StatusChip kind={d.is_active ? 'active' : 'closed'} />
                   </td>
                 </tr>
               ))}
               {disciplines && disciplines.length === 0 && (
                 <tr>
-                  <td
-                    colSpan={5}
-                    className="px-3 py-6 text-center text-[color:var(--color-text-muted)] text-sm"
-                  >
+                  <td colSpan={5} className="text-center text-[color:var(--color-text-muted)] py-6">
                     No disciplines yet.
                   </td>
                 </tr>
@@ -254,12 +242,10 @@ export function ProjectSetupPage() {
       </Card>
 
       <Card>
-        <CardHeader title="Quantity Takeoff Import" />
-        <div className="bg-[color:var(--color-canvas)] rounded-md p-4 text-sm text-[color:var(--color-text-muted)] mb-4">
-          Accepts the 61-column unified audit workbook (see{' '}
-          <span className="font-mono">ARCHITECTURE.md §XIV</span>). Validation runs row-by-row;
-          the file is rejected whole on any failure.
-        </div>
+        <CardHeader
+          title="Quantity Takeoff Import"
+          caption="61-column unified audit workbook. Validation runs row-by-row; the file is rejected whole on any failure."
+        />
         <div className="flex flex-wrap gap-2">
           <Button
             variant="primary"

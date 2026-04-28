@@ -3,24 +3,36 @@ import type { ReactNode } from 'react';
 export function Field({
   label,
   hint,
+  error,
+  required,
   children,
   className = '',
 }: {
   label: string;
   hint?: string;
+  error?: string;
+  required?: boolean;
   children: ReactNode;
   className?: string;
 }) {
   return (
-    <div className={`flex flex-col ${className}`}>
-      <label className="text-[11px] font-semibold text-[color:var(--color-text-muted)] uppercase tracking-wide mb-1">
+    <div className={`is-form-field ${className}`}>
+      <label className="is-form-label">
         {label}
+        {required && <span className="req">*</span>}
       </label>
       {children}
-      {hint && <span className="text-[11px] text-[color:var(--color-text-muted)] mt-1">{hint}</span>}
+      {error ? (
+        <span className="is-form-error">{error}</span>
+      ) : (
+        hint && <span className="is-form-helper">{hint}</span>
+      )}
     </div>
   );
 }
 
-export const inputClass =
-  'px-3 py-2 border border-[color:var(--color-line)] rounded-md text-sm bg-[color:var(--color-surface)] focus:outline-none focus:ring-2 focus:ring-[color:var(--color-primary)]/30';
+// Drop-in classes for raw inputs/selects/textareas. Prefer importing these
+// over re-styling each field by hand.
+export const inputClass = 'is-form-input';
+export const selectClass = 'is-form-select';
+export const textareaClass = 'is-form-textarea';

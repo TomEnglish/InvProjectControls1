@@ -102,74 +102,68 @@ export function UpdatePasswordPage({ mode: forcedMode }: { mode?: Mode } = {}) {
   if (tokenReady === false) {
     return (
       <AuthLayout
+        eyebrow={mode === 'invite' ? 'Invite' : 'Password reset'}
         title="Link expired or invalid"
         subtitle={
           mode === 'invite'
-            ? 'This invite link has expired or already been used.'
+            ? 'This invite link has expired or already been used. Ask your administrator to send a fresh one.'
             : 'This reset link has expired or already been used.'
         }
         footer={
-          <Link to="/login" className="text-[color:var(--color-primary)] hover:underline">
+          <Link to="/login" className="text-[color:var(--color-primary)] font-medium hover:underline">
             Back to sign in
           </Link>
         }
       >
-        <div className="text-sm text-[color:var(--color-text-muted)]">
-          {mode === 'invite' ? (
-            <>Ask your administrator to send a fresh invite.</>
-          ) : (
-            <>
-              <Link to="/forgot-password" className="text-[color:var(--color-primary)] hover:underline">
-                Request a new reset link
-              </Link>
-              .
-            </>
-          )}
-        </div>
+        {mode !== 'invite' && (
+          <Link to="/forgot-password" className="is-btn is-btn-secondary w-full">
+            Request a new reset link
+          </Link>
+        )}
       </AuthLayout>
     );
   }
 
   return (
-    <AuthLayout title={title} subtitle={subtitle}>
-      <form onSubmit={onSubmit}>
-        <label className="block text-xs font-semibold uppercase tracking-wide text-[color:var(--color-text-muted)] mb-1">
-          New password
-        </label>
-        <input
-          type="password"
-          autoComplete="new-password"
-          required
-          minLength={8}
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          className="w-full px-3 py-2 mb-3 border border-[color:var(--color-line)] rounded-md text-sm bg-[color:var(--color-canvas)]"
-        />
+    <AuthLayout
+      eyebrow={mode === 'invite' ? 'Welcome' : 'Password reset'}
+      title={title}
+      subtitle={subtitle}
+    >
+      <form onSubmit={onSubmit} className="grid gap-4">
+        <div className="is-form-field">
+          <label className="is-form-label">New password</label>
+          <input
+            type="password"
+            autoComplete="new-password"
+            required
+            minLength={8}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className="is-form-input"
+          />
+          <span className="is-form-helper">At least 8 characters.</span>
+        </div>
 
-        <label className="block text-xs font-semibold uppercase tracking-wide text-[color:var(--color-text-muted)] mb-1">
-          Confirm password
-        </label>
-        <input
-          type="password"
-          autoComplete="new-password"
-          required
-          minLength={8}
-          value={confirm}
-          onChange={(e) => setConfirm(e.target.value)}
-          className="w-full px-3 py-2 mb-4 border border-[color:var(--color-line)] rounded-md text-sm bg-[color:var(--color-canvas)]"
-        />
+        <div className="is-form-field">
+          <label className="is-form-label">Confirm password</label>
+          <input
+            type="password"
+            autoComplete="new-password"
+            required
+            minLength={8}
+            value={confirm}
+            onChange={(e) => setConfirm(e.target.value)}
+            className="is-form-input"
+          />
+        </div>
 
-        {error && (
-          <div className="text-xs text-[color:var(--color-status-pending-fg)] bg-[color:var(--color-status-pending-bg)] rounded-md px-3 py-2 mb-3">
-            {error}
-          </div>
-        )}
+        {error && <div className="is-toast is-toast-danger">{error}</div>}
 
         <button
           type="submit"
           disabled={submitting || tokenReady !== true}
-          className="w-full py-2 rounded-md text-sm font-medium text-white disabled:opacity-60"
-          style={{ background: 'var(--color-primary)' }}
+          className="is-btn is-btn-primary w-full mt-2"
         >
           {submitting
             ? 'Saving…'

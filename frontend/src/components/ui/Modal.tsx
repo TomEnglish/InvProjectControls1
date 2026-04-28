@@ -5,12 +5,14 @@ export function Modal({
   open,
   onClose,
   title,
+  caption,
   children,
-  width = 700,
+  width = 560,
 }: {
   open: boolean;
   onClose: () => void;
   title: string;
+  caption?: string;
   children: ReactNode;
   width?: number;
 }) {
@@ -27,7 +29,7 @@ export function Modal({
 
   return (
     <div
-      className="fixed inset-0 z-[1000] bg-black/50 flex items-center justify-center"
+      className="is-modal-backdrop"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
@@ -36,16 +38,21 @@ export function Modal({
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className="bg-[color:var(--color-surface)] rounded-xl p-6 max-h-[85vh] overflow-y-auto w-[90%]"
+        className="is-modal"
         style={{ maxWidth: width }}
       >
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-base font-semibold">{title}</h3>
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h3>{title}</h3>
+            {caption && (
+              <p className="text-sm text-[color:var(--color-text-muted)] mt-1">{caption}</p>
+            )}
+          </div>
           <button
             type="button"
             aria-label="Close"
             onClick={onClose}
-            className="p-1 rounded-md hover:bg-[color:var(--color-canvas)]"
+            className="-m-1 p-1 rounded-md text-[color:var(--color-text-muted)] hover:bg-[color:var(--color-raised)] hover:text-[color:var(--color-text)] transition-colors"
           >
             <X size={18} />
           </button>

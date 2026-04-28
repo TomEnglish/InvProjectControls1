@@ -47,7 +47,7 @@ export function CoDecisionModal({ open, onClose, coNumber, verb, decision, onCon
           Cancel
         </Button>
         <Button
-          variant={rejectMode ? 'danger' : 'success'}
+          variant={rejectMode ? 'danger' : 'primary'}
           disabled={confirmDisabled}
           onClick={() => onConfirm(notes.trim() || null)}
         >

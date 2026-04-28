@@ -44,18 +44,28 @@ const sections: NavSection[] = [
 export function Sidebar() {
   return (
     <aside
-      className="fixed top-0 left-0 h-screen flex flex-col text-white overflow-y-auto z-50"
-      style={{ width: 'var(--sidebar-w)', background: 'var(--color-primary)' }}
+      className="fixed top-0 left-0 h-screen flex flex-col overflow-y-auto z-50 bg-[color:var(--color-surface)] border-r border-[color:var(--color-line)]"
+      style={{ width: 'var(--sidebar-w)' }}
     >
-      <div className="px-4 py-5 border-b border-white/15">
-        <h1 className="text-sm font-bold tracking-wider uppercase">Invenio</h1>
-        <div className="text-xs text-white/60 mt-1">ProjectControls</div>
+      <div className="px-4 py-5 border-b border-[color:var(--color-line)]">
+        <a href="/" className="flex items-center gap-2.5">
+          <img src="/brand/invenio-mark.svg" alt="" className="w-8 h-8 dark:hidden" />
+          <img src="/brand/invenio-mark-dark.svg" alt="" className="w-8 h-8 hidden dark:block" />
+          <div>
+            <div className="text-sm font-extrabold text-[color:var(--color-primary)] tracking-tight leading-none">
+              Invenio
+            </div>
+            <div className="text-[11px] text-[color:var(--color-text-muted)] mt-0.5">
+              ProjectControls
+            </div>
+          </div>
+        </a>
       </div>
 
-      <nav className="flex-1 py-3">
+      <nav className="flex-1 py-2">
         {sections.map((section) => (
-          <div key={section.label}>
-            <div className="px-4 pt-2 pb-1 text-[10px] uppercase tracking-widest text-white/40 font-semibold">
+          <div key={section.label} className="mb-1">
+            <div className="px-4 pt-3 pb-1.5 text-[10px] uppercase tracking-widest text-[color:var(--color-text-subtle)] font-bold">
               {section.label}
             </div>
             {section.items.map(({ to, label, icon: Icon, end }) => (
@@ -65,10 +75,10 @@ export function Sidebar() {
                 end={end}
                 className={({ isActive }) =>
                   [
-                    'flex items-center gap-3 px-4 py-2.5 text-sm border-l-[3px] transition-colors',
+                    'flex items-center gap-2.5 mx-2 px-2.5 py-2 text-sm rounded-md font-medium transition-colors',
                     isActive
-                      ? 'bg-white/10 text-white border-[color:var(--color-accent)]'
-                      : 'text-white/75 border-transparent hover:bg-white/5 hover:text-white',
+                      ? 'bg-[color:var(--color-primary-soft)] text-[color:var(--color-primary)]'
+                      : 'text-[color:var(--color-text-muted)] hover:bg-[color:var(--color-raised)] hover:text-[color:var(--color-text)]',
                   ].join(' ')
                 }
               >
@@ -80,7 +90,7 @@ export function Sidebar() {
         ))}
       </nav>
 
-      <div className="px-4 py-3 border-t border-white/15 text-[11px] text-white/40">
+      <div className="px-4 py-3 border-t border-[color:var(--color-line)] text-[11px] text-[color:var(--color-text-subtle)]">
         v0.1 · Phase 0
       </div>
     </aside>

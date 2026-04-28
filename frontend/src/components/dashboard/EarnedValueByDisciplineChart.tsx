@@ -12,22 +12,25 @@ export function EarnedValueByDisciplineChart({ disciplines }: { disciplines: Dis
       {
         label: 'Budget Hrs',
         data: disciplines.map((d) => d.budget_hrs),
-        backgroundColor: 'rgba(26, 54, 93, 0.15)',
-        borderColor: 'var(--color-primary)',
+        // sky-700 @ 18%
+        backgroundColor: 'rgba(3, 105, 161, 0.18)',
+        borderColor: '#0369a1',
         borderWidth: 1,
       },
       {
         label: 'Earned Hrs',
         data: disciplines.map((d) => d.earned_hrs),
-        backgroundColor: 'rgba(56, 161, 105, 0.6)',
-        borderColor: 'var(--color-variance-favourable)',
+        // emerald-600 @ 60%
+        backgroundColor: 'rgba(5, 150, 105, 0.6)',
+        borderColor: '#059669',
         borderWidth: 1,
       },
       {
         label: 'Actual Hrs',
         data: disciplines.map((d) => d.actual_hrs),
-        backgroundColor: 'rgba(221, 107, 32, 0.5)',
-        borderColor: 'var(--color-accent)',
+        // cyan-600 @ 55%
+        backgroundColor: 'rgba(8, 145, 178, 0.55)',
+        borderColor: '#0891b2',
         borderWidth: 1,
       },
     ],

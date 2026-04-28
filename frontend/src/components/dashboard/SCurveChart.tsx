@@ -58,7 +58,8 @@ export function SCurveChart({ periods, summary }: Props) {
       {
         label: 'Planned (BCWS)',
         data: plannedSeries,
-        borderColor: 'var(--color-primary)',
+        borderColor: '#0369a1',
+        backgroundColor: 'rgba(3, 105, 161, 0.08)',
         borderDash: [5, 5],
         tension: 0.3,
         pointRadius: 3,
@@ -67,7 +68,8 @@ export function SCurveChart({ periods, summary }: Props) {
       {
         label: 'Earned (BCWP)',
         data: earnedSeries,
-        borderColor: 'var(--color-variance-favourable)',
+        borderColor: '#059669',
+        backgroundColor: 'rgba(5, 150, 105, 0.1)',
         tension: 0.3,
         pointRadius: 4,
         fill: false,
@@ -75,7 +77,8 @@ export function SCurveChart({ periods, summary }: Props) {
       {
         label: 'Actual (ACWP)',
         data: actualSeries,
-        borderColor: 'var(--color-accent)',
+        borderColor: '#0891b2',
+        backgroundColor: 'rgba(8, 145, 178, 0.1)',
         tension: 0.3,
         pointRadius: 4,
         fill: false,

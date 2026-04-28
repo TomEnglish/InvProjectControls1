@@ -14,24 +14,24 @@ export function PendingAssignmentPage() {
 
   return (
     <AuthLayout
+      eyebrow="Account access"
       title="Pending organisation assignment"
       subtitle="Your account isn't bound to an organisation yet."
     >
-      <div className="text-sm text-[color:var(--color-text-muted)] space-y-3">
-        <p>
-          Signed in as <span className="font-medium text-[color:var(--color-text)]">{user?.email}</span>.
-          An administrator needs to attach you to a tenant before you can use ProjectControls.
-        </p>
-        <p>If you believe this is a mistake, ask the admin who invited you to re-issue the invite.</p>
-      </div>
+      <div className="grid gap-4">
+        <div className="is-toast is-toast-info">
+          Signed in as <span className="font-semibold">{user?.email}</span>. An administrator
+          needs to attach you to a tenant before you can use ProjectControls.
+        </div>
 
-      <button
-        type="button"
-        onClick={onSignOut}
-        className="mt-5 w-full py-2 rounded-md text-sm font-medium border border-[color:var(--color-line)] hover:bg-[color:var(--color-canvas)]"
-      >
-        Sign out
-      </button>
+        <p className="text-sm text-[color:var(--color-text-muted)] leading-relaxed">
+          If you believe this is a mistake, ask the admin who invited you to re-issue the invite.
+        </p>
+
+        <button type="button" onClick={onSignOut} className="is-btn is-btn-outline w-full mt-2">
+          Sign out
+        </button>
+      </div>
     </AuthLayout>
   );
 }

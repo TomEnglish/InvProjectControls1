@@ -2,83 +2,77 @@ import { useNavigate } from 'react-router-dom';
 import { fmt } from '@/lib/format';
 import type { DisciplineRollup } from '@/lib/queries';
 
+const headers = [
+  { label: 'Discipline', align: 'left' },
+  { label: 'Records', align: 'right' },
+  { label: 'Budget Hrs', align: 'right' },
+  { label: 'Earned Hrs', align: 'right' },
+  { label: 'Actual Hrs', align: 'right' },
+  { label: '% Complete', align: 'right' },
+  { label: 'CPI', align: 'right' },
+  { label: 'Progress', align: 'left' },
+] as const;
+
 export function DisciplineSummaryTable({ disciplines }: { disciplines: DisciplineRollup[] }) {
   const nav = useNavigate();
   if (disciplines.length === 0) {
     return (
-      <div className="text-sm text-[color:var(--color-text-muted)]">
-        No active disciplines yet. Configure them in{' '}
-        <button
-          type="button"
-          className="underline text-[color:var(--color-primary)]"
-          onClick={() => nav('/projects')}
-        >
-          Project Setup
+      <div className="is-empty py-10">
+        <div className="is-empty-title">No active disciplines</div>
+        <p className="is-empty-caption">
+          Configure project disciplines to start tracking earned value.
+        </p>
+        <button type="button" className="is-btn is-btn-secondary" onClick={() => nav('/projects')}>
+          Open Project Setup
         </button>
-        .
       </div>
     );
   }
 
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm border-collapse">
+    <div className="overflow-x-auto rounded-md border border-[color:var(--color-line)]">
+      <table className="is-table">
         <thead>
           <tr>
-            {['Discipline', 'Records', 'Budget Hrs', 'Earned Hrs', 'Actual Hrs', '% Complete', 'CPI', 'Progress'].map(
-              (h) => (
-                <th
-                  key={h}
-                  className="px-3 py-2.5 text-left text-[11px] uppercase tracking-wide font-semibold text-[color:var(--color-text-muted)] bg-[color:var(--color-canvas)] border-b-2 border-[color:var(--color-line)]"
-                >
-                  {h}
-                </th>
-              ),
-            )}
+            {headers.map((h) => (
+              <th key={h.label} style={{ textAlign: h.align }}>
+                {h.label}
+              </th>
+            ))}
           </tr>
         </thead>
         <tbody>
           {disciplines.map((d) => {
             const cpiFav = d.cpi != null && d.cpi >= 1;
             const cpiWarn = d.cpi != null && d.cpi >= 0.95 && d.cpi < 1;
-            const cpiColor = cpiFav
-              ? 'var(--color-variance-favourable)'
-              : cpiWarn
-              ? 'var(--color-accent)'
-              : 'var(--color-variance-unfavourable)';
             const barColor = cpiFav
               ? 'var(--color-variance-favourable)'
               : cpiWarn
-              ? 'var(--color-accent)'
-              : 'var(--color-variance-unfavourable)';
+                ? 'var(--color-warn)'
+                : 'var(--color-variance-unfavourable)';
+            const cpiColor = cpiFav
+              ? 'var(--color-variance-favourable)'
+              : cpiWarn
+                ? 'var(--color-warn)'
+                : 'var(--color-variance-unfavourable)';
             return (
-              <tr key={d.discipline_id} className="hover:bg-[color:var(--color-canvas)]">
-                <td className="px-3 py-2 border-b border-[color:var(--color-line)]">
-                  <strong>{d.display_name}</strong>
-                </td>
-                <td className="px-3 py-2 border-b border-[color:var(--color-line)]">{d.records}</td>
-                <td className="px-3 py-2 text-right font-mono border-b border-[color:var(--color-line)]">
-                  {fmt.int(d.budget_hrs)}
-                </td>
-                <td className="px-3 py-2 text-right font-mono border-b border-[color:var(--color-line)]">
-                  {fmt.int(d.earned_hrs)}
-                </td>
-                <td className="px-3 py-2 text-right font-mono border-b border-[color:var(--color-line)]">
-                  {fmt.int(d.actual_hrs)}
-                </td>
-                <td className="px-3 py-2 text-right font-mono border-b border-[color:var(--color-line)]">
-                  {fmt.pct(d.earned_pct)}
-                </td>
-                <td
-                  className="px-3 py-2 text-right font-mono border-b border-[color:var(--color-line)]"
-                  style={{ color: cpiColor }}
-                >
+              <tr key={d.discipline_id}>
+                <td className="font-semibold">{d.display_name}</td>
+                <td className="text-right font-mono">{d.records}</td>
+                <td className="text-right font-mono">{fmt.int(d.budget_hrs)}</td>
+                <td className="text-right font-mono">{fmt.int(d.earned_hrs)}</td>
+                <td className="text-right font-mono">{fmt.int(d.actual_hrs)}</td>
+                <td className="text-right font-mono">{fmt.pct(d.earned_pct)}</td>
+                <td className="text-right font-mono" style={{ color: cpiColor }}>
                   {fmt.ratio(d.cpi ?? undefined)}
                 </td>
-                <td className="px-3 py-2 border-b border-[color:var(--color-line)]" style={{ width: 120 }}>
-                  <div className="bg-[color:var(--color-canvas)] rounded h-2 overflow-hidden">
+                <td style={{ width: 120 }}>
+                  <div
+                    className="rounded-full h-1.5 overflow-hidden"
+                    style={{ background: 'var(--color-raised)' }}
+                  >
                     <div
-                      className="h-full rounded transition-[width]"
+                      className="h-full transition-[width]"
                       style={{
                         width: `${Math.min(100, Math.max(0, d.earned_pct * 100))}%`,
                         background: barColor,

@@ -1,4 +1,5 @@
 import type { ChangeOrder } from '@/lib/queries';
+import { Check } from 'lucide-react';
 
 const STAGES = [
   { key: 'submitted', label: 'Field Request', desc: 'Originator submits CO' },
@@ -28,38 +29,44 @@ export function ApprovalStepper({ status }: { status: ChangeOrder['status'] | nu
   const isRejected = status === 'rejected';
 
   return (
-    <div className="space-y-1.5">
+    <div>
       {STAGES.map((s, i) => {
-        const reached = !isRejected && i <= active;
+        const reached = !isRejected && i < active;
         const current = !isRejected && i === active;
-        const bg = reached
-          ? current
-            ? 'var(--color-accent)'
-            : 'var(--color-variance-favourable)'
-          : 'var(--color-line)';
+        const dotBg = reached
+          ? 'var(--color-success)'
+          : current
+            ? 'var(--color-primary)'
+            : 'var(--color-line-strong)';
+        const labelColor = reached || current ? 'var(--color-text)' : 'var(--color-text-muted)';
         return (
           <div key={s.key}>
-            <div className="flex items-center gap-3">
+            <div className="flex items-start gap-3">
               <div
-                className="w-6 h-6 rounded-full text-white flex items-center justify-center text-[11px] font-semibold"
-                style={{ background: bg }}
+                className="w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold shrink-0 text-white"
+                style={{ background: dotBg }}
               >
-                {i + 1}
+                {reached ? <Check size={14} /> : i + 1}
               </div>
-              <div>
-                <div className="text-sm font-semibold">{s.label}</div>
-                <div className="text-xs text-[color:var(--color-text-muted)]">{s.desc}</div>
+              <div className="pt-0.5">
+                <div className="text-sm font-semibold" style={{ color: labelColor }}>
+                  {s.label}
+                </div>
+                <div className="text-xs text-[color:var(--color-text-muted)] mt-0.5">{s.desc}</div>
               </div>
             </div>
             {i < STAGES.length - 1 && (
-              <div className="w-0.5 h-3 bg-[color:var(--color-line)] ml-[11px]" />
+              <div
+                className="ml-[13px] my-1 w-px h-4"
+                style={{ background: 'var(--color-line)' }}
+              />
             )}
           </div>
         );
       })}
       {isRejected && (
-        <div className="mt-3 text-xs text-[color:var(--color-status-pending-fg)] bg-[color:var(--color-status-pending-bg)] rounded-md px-3 py-2">
-          Rejected.
+        <div className="is-toast is-toast-danger mt-4">
+          This change order was rejected.
         </div>
       )}
     </div>

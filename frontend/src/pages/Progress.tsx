@@ -64,19 +64,17 @@ export function ProgressPage() {
   if (isLoading) {
     return (
       <Card>
-        <div className="h-6 bg-[color:var(--color-canvas)] rounded w-48 animate-pulse mb-3" />
-        <div className="h-[400px] bg-[color:var(--color-canvas)] rounded animate-pulse" />
+        <div className="is-skeleton mb-3" style={{ width: 200 }} />
+        <div className="is-skeleton" style={{ height: 400, width: '100%' }} />
       </Card>
     );
   }
 
   if (error) {
     return (
-      <Card>
-        <div className="text-sm text-[color:var(--color-variance-unfavourable)]">
-          Failed to load records: {(error as Error).message}
-        </div>
-      </Card>
+      <div className="is-toast is-toast-danger">
+        Failed to load records: {(error as Error).message}
+      </div>
     );
   }
 
@@ -174,9 +172,7 @@ export function ProgressPage() {
         </div>
       </div>
 
-      <Card>
-        <ProgressTable records={filtered} selectedId={selectedId} onSelect={setSelectedId} />
-      </Card>
+      <ProgressTable records={filtered} selectedId={selectedId} onSelect={setSelectedId} />
 
       {selected && (
         <RecordDetail

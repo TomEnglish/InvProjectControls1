@@ -7,21 +7,20 @@ type Props = {
   onSelect: (id: string) => void;
 };
 
+const headers = [
+  'Rec', 'DWG', 'Rev', 'Discipline', 'Description', 'FLD QTY', 'UOM', 'FLD WHRS',
+  'M1', 'M2', 'M3', 'M4', 'M5', 'M6', 'M7', 'M8',
+  'Earn %', 'ERN QTY', 'EARN WHRS',
+];
+
 export function ProgressTable({ records, selectedId, onSelect }: Props) {
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-xs">
+    <div className="overflow-x-auto rounded-md border border-[color:var(--color-line)]">
+      <table className="is-table" style={{ fontSize: 13 }}>
         <thead>
-          <tr className="bg-[color:var(--color-canvas)]">
-            {[
-              'Rec', 'DWG', 'Rev', 'Discipline', 'Description', 'FLD QTY', 'UOM', 'FLD WHRS',
-              'M1', 'M2', 'M3', 'M4', 'M5', 'M6', 'M7', 'M8',
-              'Earn %', 'ERN QTY', 'EARN WHRS',
-            ].map((h) => (
-              <th
-                key={h}
-                className="px-2 py-2 text-left font-semibold text-[10px] uppercase tracking-wide text-[color:var(--color-text-muted)] border-b-2 border-[color:var(--color-line)] whitespace-nowrap"
-              >
+          <tr>
+            {headers.map((h) => (
+              <th key={h} className="whitespace-nowrap" style={{ padding: '10px 10px' }}>
                 {h}
               </th>
             ))}
@@ -34,53 +33,60 @@ export function ProgressTable({ records, selectedId, onSelect }: Props) {
               r.earn_pct >= 0.8
                 ? 'var(--color-variance-favourable)'
                 : r.earn_pct >= 0.4
-                ? 'var(--color-accent)'
-                : 'var(--color-text)';
+                  ? 'var(--color-warn)'
+                  : 'var(--color-text)';
             return (
               <tr
                 key={r.id}
                 onClick={() => onSelect(r.id)}
-                className={`cursor-pointer border-b border-[color:var(--color-line)] ${
-                  isSelected ? 'bg-[color:var(--color-status-locked-bg)]' : 'hover:bg-[color:var(--color-canvas)]'
-                }`}
+                className="cursor-pointer"
+                style={
+                  isSelected
+                    ? { background: 'var(--color-primary-soft)' }
+                    : undefined
+                }
               >
-                <td className="px-2 py-1.5 font-mono">{r.rec_no}</td>
-                <td className="px-2 py-1.5 font-mono"><strong>{r.dwg}</strong></td>
-                <td className="px-2 py-1.5">{r.rev}</td>
-                <td className="px-2 py-1.5">{r.discipline_name}</td>
-                <td className="px-2 py-1.5">{r.description}</td>
-                <td className="px-2 py-1.5 text-right font-mono">{r.fld_qty.toFixed(1)}</td>
-                <td className="px-2 py-1.5">{r.uom}</td>
-                <td className="px-2 py-1.5 text-right font-mono">{r.fld_whrs.toFixed(1)}</td>
+                <td style={{ padding: '8px 10px' }} className="font-mono">{r.rec_no}</td>
+                <td style={{ padding: '8px 10px' }} className="font-mono font-semibold">{r.dwg}</td>
+                <td style={{ padding: '8px 10px' }}>{r.rev}</td>
+                <td style={{ padding: '8px 10px' }}>{r.discipline_name}</td>
+                <td style={{ padding: '8px 10px' }}>{r.description}</td>
+                <td style={{ padding: '8px 10px' }} className="text-right font-mono">{r.fld_qty.toFixed(1)}</td>
+                <td style={{ padding: '8px 10px' }}>{r.uom}</td>
+                <td style={{ padding: '8px 10px' }} className="text-right font-mono">{r.fld_whrs.toFixed(1)}</td>
                 {Array.from({ length: 8 }, (_, i) => i + 1).map((seq) => {
                   const val = r.milestones.find((m) => m.seq === seq)?.value ?? 0;
                   const color =
                     val >= 1
                       ? 'var(--color-variance-favourable)'
                       : val > 0
-                      ? 'var(--color-accent)'
-                      : 'var(--color-line)';
+                        ? 'var(--color-warn)'
+                        : 'var(--color-text-subtle)';
                   return (
                     <td
                       key={seq}
-                      className="px-2 py-1.5 text-center font-mono"
-                      style={{ color, fontSize: 11 }}
+                      style={{ padding: '8px 10px', color, fontSize: 12, textAlign: 'center' }}
+                      className="font-mono"
                     >
                       {val >= 1 ? '1.0' : val > 0 ? val.toFixed(1) : '—'}
                     </td>
                   );
                 })}
-                <td className="px-2 py-1.5 text-right font-mono font-semibold" style={{ color: pctColor }}>
+                <td style={{ padding: '8px 10px', color: pctColor }} className="text-right font-mono font-semibold">
                   {fmt.pct(r.earn_pct)}
                 </td>
-                <td className="px-2 py-1.5 text-right font-mono">{r.ern_qty.toFixed(1)}</td>
-                <td className="px-2 py-1.5 text-right font-mono">{r.earn_whrs.toFixed(1)}</td>
+                <td style={{ padding: '8px 10px' }} className="text-right font-mono">{r.ern_qty.toFixed(1)}</td>
+                <td style={{ padding: '8px 10px' }} className="text-right font-mono">{r.earn_whrs.toFixed(1)}</td>
               </tr>
             );
           })}
           {records.length === 0 && (
             <tr>
-              <td colSpan={19} className="px-3 py-6 text-center text-sm text-[color:var(--color-text-muted)]">
+              <td
+                colSpan={19}
+                className="text-center text-[color:var(--color-text-muted)]"
+                style={{ padding: '32px 16px' }}
+              >
                 No records match your filters.
               </td>
             </tr>

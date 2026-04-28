@@ -131,20 +131,20 @@ export function RecordDetail({ record, projectId, onClose }: Props) {
       />
       <div className="mb-4 grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
         <div>
-          <div className="text-[11px] uppercase tracking-wide text-[color:var(--color-text-muted)]">Discipline</div>
-          <div className="font-medium">{record.discipline_name}</div>
+          <div className="is-stat-label">Discipline</div>
+          <div className="font-medium mt-1">{record.discipline_name}</div>
         </div>
         <div>
-          <div className="text-[11px] uppercase tracking-wide text-[color:var(--color-text-muted)]">COA Code</div>
-          <div className="font-mono">{record.coa_code}</div>
+          <div className="is-stat-label">COA Code</div>
+          <div className="font-mono mt-1">{record.coa_code}</div>
         </div>
         <div>
-          <div className="text-[11px] uppercase tracking-wide text-[color:var(--color-text-muted)]">Description</div>
-          <div>{record.description}</div>
+          <div className="is-stat-label">Description</div>
+          <div className="mt-1">{record.description}</div>
         </div>
       </div>
 
-      <h4 className="text-sm font-semibold mb-2">
+      <h4 className="text-sm font-semibold mb-3">
         Milestones{record.discipline_code ? ` — ${record.discipline_code} ROC` : ''}
       </h4>
       <div className="grid grid-cols-4 md:grid-cols-8 gap-2">
@@ -152,19 +152,24 @@ export function RecordDetail({ record, projectId, onClose }: Props) {
           const seq = i + 1;
           const meta = weights.find((m) => m.seq === seq);
           const v = draft[seq] ?? 0;
+          const filled = v > 0;
           return (
             <div
               key={seq}
-              className="bg-[color:var(--color-canvas)] rounded-md p-2 border border-[color:var(--color-line)] text-center"
+              className="rounded-md p-2 border text-center"
+              style={{
+                background: filled ? 'var(--color-primary-soft)' : 'var(--color-raised)',
+                borderColor: filled ? 'var(--color-primary)' : 'var(--color-line)',
+              }}
             >
-              <div className="text-[10px] uppercase tracking-wide text-[color:var(--color-text-muted)]">
+              <div className="text-[10px] uppercase tracking-wide font-bold text-[color:var(--color-text-muted)]">
                 M{seq}
               </div>
-              <div className="text-xs mt-0.5 h-8 overflow-hidden">
+              <div className="text-[11px] mt-0.5 h-8 overflow-hidden text-[color:var(--color-text)]">
                 {meta?.label ?? '—'}
               </div>
-              <div className="text-[10px] text-[color:var(--color-text-muted)]">
-                Weight: {meta ? fmt.pct(meta.weight) : '—'}
+              <div className="text-[10px] text-[color:var(--color-text-subtle)] font-mono">
+                {meta ? fmt.pct(meta.weight) : '—'}
               </div>
               <input
                 type="number"
@@ -173,7 +178,8 @@ export function RecordDetail({ record, projectId, onClose }: Props) {
                 step={0.1}
                 value={v}
                 onChange={(e) => setMilestone(seq, Number(e.target.value))}
-                className="w-full mt-1 text-center px-1 py-0.5 text-sm border border-[color:var(--color-line)] rounded"
+                className="is-form-input w-full mt-1.5 text-center font-mono"
+                style={{ minHeight: 30, padding: '4px 6px', fontSize: 12 }}
                 aria-label={`Milestone ${seq} value`}
               />
             </div>
@@ -181,18 +187,23 @@ export function RecordDetail({ record, projectId, onClose }: Props) {
         })}
       </div>
 
-      <div className="flex items-center justify-between mt-4 p-3 bg-[color:var(--color-canvas)] rounded-md text-sm flex-wrap gap-2">
+      <div
+        className="flex items-center justify-between mt-4 p-4 rounded-md flex-wrap gap-4 text-sm"
+        style={{ background: 'var(--color-raised)' }}
+      >
         <div>
-          <strong>Earned %:</strong>{' '}
-          <span className="font-mono text-base" style={{ color: 'var(--color-primary)' }}>
+          <div className="is-stat-label">Earned %</div>
+          <div className="font-mono text-lg font-bold mt-0.5" style={{ color: 'var(--color-primary)' }}>
             {fmt.pct(liveEarnPct)}
-          </span>
+          </div>
         </div>
         <div>
-          <strong>ERN QTY:</strong> <span className="font-mono">{liveErnQty.toFixed(2)}</span>
+          <div className="is-stat-label">ERN QTY</div>
+          <div className="font-mono text-base mt-0.5">{liveErnQty.toFixed(2)}</div>
         </div>
         <div>
-          <strong>EARN WHRS:</strong> <span className="font-mono">{liveEarnWhrs.toFixed(2)}</span>
+          <div className="is-stat-label">EARN WHRS</div>
+          <div className="font-mono text-base mt-0.5">{liveEarnWhrs.toFixed(2)}</div>
         </div>
       </div>
     </Card>
