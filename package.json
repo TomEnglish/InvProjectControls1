@@ -18,11 +18,14 @@
     "db:diff": "supabase db diff",
     "seed:minimal": "tsx scripts/seed/index.ts minimal",
     "seed:demo": "tsx scripts/seed/index.ts demo",
-    "seed:stress": "tsx scripts/seed/index.ts stress"
+    "seed:stress": "tsx scripts/seed/index.ts stress",
+    "smoke": "tsx scripts/smoke/run.ts",
+    "samples": "tsx scripts/sample/generate-import-workbooks.ts"
   },
   "devDependencies": {
     "tsx": "^4.19.2",
-    "typescript": "^5.6.3"
+    "typescript": "^5.6.3",
+    "xlsx": "^0.18.5"
   },
   "engines": {
     "node": ">=20"
