@@ -66,12 +66,27 @@ Deno.serve(async (req) => {
     db: { schema: 'projectcontrols' },
   });
 
+  // Resolve auth.uid() from the JWT before querying app_users — without an
+  // explicit id filter, RLS returns every user in the tenant and .single()
+  // errors. With multiple admins this would always 403.
+  const { data: userResult, error: userErr } = await callerClient.auth.getUser();
+  if (userErr || !userResult?.user) {
+    return json({ error: 'invalid or expired session', detail: userErr?.message }, 401);
+  }
+  const callerId = userResult.user.id;
+
   const { data: caller, error: callerErr } = await callerClient
     .from('app_users')
     .select('id, tenant_id, role')
-    .single();
-  if (callerErr || !caller) return json({ error: 'caller not bound to tenant' }, 403);
-  if (caller.role !== 'admin') return json({ error: 'admin role required' }, 403);
+    .eq('id', callerId)
+    .maybeSingle();
+  if (callerErr) {
+    return json({ error: 'caller lookup failed', detail: callerErr.message }, 500);
+  }
+  if (!caller) return json({ error: 'caller not bound to a tenant' }, 403);
+  if (caller.role !== 'admin') {
+    return json({ error: `admin role required (you have ${caller.role})` }, 403);
+  }
 
   // 2. Parse + validate payload.
   let body: InvitePayload;

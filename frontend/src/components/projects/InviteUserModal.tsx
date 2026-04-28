@@ -35,10 +35,21 @@ export function InviteUserModal({ open, onClose }: Props) {
           role,
         },
       });
-      if (error) throw error;
-      // The Edge Function returns { error } in the JSON body on failure
-      // even when HTTP status is 4xx — supabase-js surfaces it via `error`,
-      // but some 200-with-error scenarios slip through; double-check.
+      // supabase-js returns a generic "non-2xx" Error on failure but stuffs
+      // the response into error.context. Pull the real JSON body so the
+      // toast shows the function's actual error message instead.
+      if (error) {
+        const ctx = (error as unknown as { context?: Response }).context;
+        if (ctx && typeof ctx.clone === 'function') {
+          try {
+            const body = (await ctx.clone().json()) as { error?: string } | null;
+            if (body?.error) throw new Error(body.error);
+          } catch (e) {
+            if (e instanceof Error && e.message) throw e;
+          }
+        }
+        throw error;
+      }
       const parsed = data as { ok?: boolean; error?: string } | null;
       if (parsed?.error) throw new Error(parsed.error);
       return parsed;
