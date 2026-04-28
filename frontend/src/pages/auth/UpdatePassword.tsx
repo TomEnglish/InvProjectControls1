@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { AuthLayout } from './AuthLayout';
 
@@ -12,6 +13,7 @@ type Mode = 'recovery' | 'invite';
 // for backwards compatibility in case the email template ever gets reverted.
 export function UpdatePasswordPage({ mode: forcedMode }: { mode?: Mode } = {}) {
   const nav = useNavigate();
+  const qc = useQueryClient();
   const [searchParams] = useSearchParams();
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
@@ -84,6 +86,10 @@ export function UpdatePasswordPage({ mode: forcedMode }: { mode?: Mode } = {}) {
       setError(err.message);
       return;
     }
+    // Recovery/invite tokens are scoped sessions; the user_id stays the same
+    // but app-side data may have been bootstrapped between attempts (e.g. an
+    // app_users row added). Drop everything so the dashboard re-fetches clean.
+    qc.clear();
     nav('/', { replace: true });
   };
 
