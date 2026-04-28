@@ -1,20 +1,49 @@
-import { useMemo, useState } from 'react';
-import { Plus, Pencil, Search, ListTree } from 'lucide-react';
+import { useMemo, useRef, useState } from 'react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { Plus, Pencil, Search, ListTree, Upload } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
 import { useCoaCodes, useCurrentUser, hasRole, type CoaCodeRow } from '@/lib/queries';
 import { Button } from '@/components/ui/Button';
 import { selectClass } from '@/components/ui/FormField';
 import { CoaCodeModal } from '@/components/coa/CoaCodeModal';
 import { fmt } from '@/lib/format';
 
+async function fileToBase64(file: File): Promise<string> {
+  const buf = await file.arrayBuffer();
+  const bytes = new Uint8Array(buf);
+  const chunkSize = 0x8000;
+  let bin = '';
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    bin += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+  }
+  return btoa(bin);
+}
+
 export function CoaPage() {
   const { data: codes, isLoading, error } = useCoaCodes();
   const { data: me } = useCurrentUser();
   const canEdit = hasRole(me?.role, 'admin');
 
+  const qc = useQueryClient();
   const [primeFilter, setPrimeFilter] = useState<string>('All');
   const [search, setSearch] = useState('');
   const [editing, setEditing] = useState<CoaCodeRow | null>(null);
   const [creatingNew, setCreatingNew] = useState(false);
+  const fileInput = useRef<HTMLInputElement>(null);
+
+  const importMutation = useMutation({
+    mutationFn: async (file: File) => {
+      const b64 = await fileToBase64(file);
+      const { data, error } = await supabase.functions.invoke('import-coa-codes', {
+        body: { file: b64 },
+      });
+      if (error) throw error;
+      const parsed = data as { ok?: boolean; error?: string; inserted?: number; total?: number };
+      if (parsed?.error) throw new Error(parsed.error);
+      return parsed;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['coa-codes'] }),
+  });
 
   const primes = useMemo(() => {
     const set = new Set<string>();
@@ -60,12 +89,36 @@ export function CoaPage() {
         </div>
         <div className="is-empty-title">No cost codes yet</div>
         <p className="is-empty-caption">
-          Add your first code, or import a COA workbook in Project Setup.
+          Import an existing COA workbook or add your first code by hand.
         </p>
         {canEdit && (
-          <Button variant="primary" onClick={() => setCreatingNew(true)}>
-            <Plus size={14} /> Add cost code
-          </Button>
+          <div className="flex items-center gap-2">
+            <input
+              ref={fileInput}
+              type="file"
+              accept=".xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) importMutation.mutate(f);
+              }}
+            />
+            <Button
+              variant="outline"
+              disabled={importMutation.isPending}
+              onClick={() => fileInput.current?.click()}
+            >
+              <Upload size={14} /> {importMutation.isPending ? 'Importing…' : 'Import workbook'}
+            </Button>
+            <Button variant="primary" onClick={() => setCreatingNew(true)}>
+              <Plus size={14} /> Add cost code
+            </Button>
+          </div>
+        )}
+        {importMutation.error && (
+          <div className="is-toast is-toast-danger mt-3 whitespace-pre-line">
+            {(importMutation.error as Error).message}
+          </div>
         )}
         <CoaCodeModal open={creatingNew} onClose={() => setCreatingNew(false)} />
       </div>
@@ -105,11 +158,41 @@ export function CoaPage() {
           </div>
         </div>
         {canEdit && (
-          <Button variant="primary" onClick={() => setCreatingNew(true)}>
-            <Plus size={14} /> Add cost code
-          </Button>
+          <div className="flex items-center gap-2">
+            <input
+              ref={fileInput}
+              type="file"
+              accept=".xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) importMutation.mutate(f);
+              }}
+            />
+            <Button
+              variant="outline"
+              disabled={importMutation.isPending}
+              onClick={() => fileInput.current?.click()}
+            >
+              <Upload size={14} /> {importMutation.isPending ? 'Importing…' : 'Import'}
+            </Button>
+            <Button variant="primary" onClick={() => setCreatingNew(true)}>
+              <Plus size={14} /> Add cost code
+            </Button>
+          </div>
         )}
       </div>
+
+      {importMutation.isSuccess && importMutation.data && (
+        <div className="is-toast is-toast-success">
+          Imported {importMutation.data.total ?? 0} cost code(s).
+        </div>
+      )}
+      {importMutation.error && (
+        <div className="is-toast is-toast-danger whitespace-pre-line">
+          {(importMutation.error as Error).message}
+        </div>
+      )}
 
       <div className="is-surface overflow-hidden">
         <div className="px-6 py-4 border-b border-[color:var(--color-line)] flex items-baseline justify-between">
