@@ -307,9 +307,9 @@ async function main() {
     if (error) throw new Error(error.message);
   });
 
-  await step('audit_record_ev refreshed for the updated row', async () => {
+  await step('v_audit_record_ev reflects the milestone update', async () => {
     const { data, error } = await sb
-      .from('audit_record_ev')
+      .from('v_audit_record_ev')
       .select('earn_pct, earn_whrs')
       .eq('record_id', createdRecords[0]?.id)
       .single();
