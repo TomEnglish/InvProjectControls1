@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Upload, Download } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useProjectStore } from '@/stores/project';
 import { useCurrentUser, hasRole } from '@/lib/queries';
@@ -11,6 +10,7 @@ import { StatusChip } from '@/components/ui/StatusChip';
 import { fmt } from '@/lib/format';
 import { AddDisciplineModal } from '@/components/projects/AddDisciplineModal';
 import { UsersCard } from '@/components/projects/UsersCard';
+import { ImportRecordsCard } from '@/components/projects/ImportRecordsCard';
 
 type Project = {
   id: string;
@@ -242,27 +242,7 @@ export function ProjectSetupPage() {
         </div>
       </Card>
 
-      <Card>
-        <CardHeader
-          title="Quantity Takeoff Import"
-          caption="61-column unified audit workbook. Validation runs row-by-row; the file is rejected whole on any failure."
-        />
-        <div className="flex flex-wrap gap-2">
-          <Button
-            variant="primary"
-            onClick={() =>
-              alert(
-                'Import edge function arrives in Phase 3. For now use the seed script or direct SQL inserts.',
-              )
-            }
-          >
-            <Upload size={14} /> Upload Workbook
-          </Button>
-          <Button variant="outline" disabled>
-            <Download size={14} /> Download Template
-          </Button>
-        </div>
-      </Card>
+      <ImportRecordsCard projectId={projectId} disabled={!canEdit || locked} />
 
       <UsersCard />
 
