@@ -7,6 +7,10 @@ const threeDp = new Intl.NumberFormat('en-US', {
   minimumFractionDigits: 3,
   maximumFractionDigits: 3,
 });
+const fourDp = new Intl.NumberFormat('en-US', {
+  minimumFractionDigits: 4,
+  maximumFractionDigits: 4,
+});
 const pct = new Intl.NumberFormat('en-US', {
   style: 'percent',
   minimumFractionDigits: 1,
@@ -30,5 +34,10 @@ export const fmt = {
   pct(n: number | null | undefined) {
     if (n == null) return '—';
     return pct.format(n);
+  },
+  /** 4dp number — for unit-rate columns where precision matters. */
+  rate(n: number | null | undefined) {
+    if (n == null) return '—';
+    return fourDp.format(n);
   },
 };

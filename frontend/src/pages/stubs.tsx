@@ -15,20 +15,6 @@ function StubPage({ title, caption }: { title: string; caption: string }) {
   );
 }
 
-export const CoaPage = () => (
-  <StubPage
-    title="COA & Unit Rates"
-    caption="Cost codes and unit-rate library for the tenant. Edit rates in place; bulk-import from the COA report; track base × PF adjustments."
-  />
-);
-
-export const RocPage = () => (
-  <StubPage
-    title="Rules of Credit"
-    caption="Eight-milestone earned-value templates per discipline. Edit weights inline — total must equal 100%."
-  />
-);
-
 export const BudgetPage = () => (
   <StubPage
     title="Budget & Baseline"

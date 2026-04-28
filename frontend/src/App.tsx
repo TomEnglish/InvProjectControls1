@@ -10,7 +10,9 @@ import { DashboardPage } from './pages/Dashboard';
 import { ProjectSetupPage } from './pages/ProjectSetup';
 import { ProgressPage } from './pages/Progress';
 import { ChangeManagementPage } from './pages/ChangeManagement';
-import { CoaPage, RocPage, BudgetPage, ReportsPage } from './pages/stubs';
+import { CoaPage } from './pages/Coa';
+import { RocPage } from './pages/Roc';
+import { BudgetPage, ReportsPage } from './pages/stubs';
 
 export const router = createBrowserRouter([
   { path: '/login', element: <LoginPage /> },

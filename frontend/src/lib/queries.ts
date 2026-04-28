@@ -284,6 +284,89 @@ export function useBudgetRollup(projectId: string | null) {
   });
 }
 
+// ─────────────────────────────────────────────────────────────────────
+// COA — Cost-of-account library
+// ─────────────────────────────────────────────────────────────────────
+export type CoaCodeRow = {
+  id: string;
+  prime: string;
+  code: string;
+  description: string;
+  parent: string | null;
+  level: number;
+  uom: string;
+  base_rate: number;
+  pf_adj: number;
+  pf_rate: number;
+};
+
+export function useCoaCodes() {
+  return useQuery({
+    queryKey: ['coa-codes'] as const,
+    queryFn: async (): Promise<CoaCodeRow[]> => {
+      const { data, error } = await supabase
+        .from('coa_codes')
+        .select('id, prime, code, description, parent, level, uom, base_rate, pf_adj, pf_rate')
+        .order('code');
+      if (error) throw error;
+      return (data ?? []).map((r) => ({
+        ...r,
+        base_rate: Number(r.base_rate),
+        pf_adj: Number(r.pf_adj),
+        pf_rate: Number(r.pf_rate),
+      })) as CoaCodeRow[];
+    },
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// ROC — Rules of Credit templates
+// ─────────────────────────────────────────────────────────────────────
+export type RocTemplateRow = {
+  id: string;
+  discipline_code: string;
+  name: string;
+  version: number;
+  is_default: boolean;
+  milestones: RocMilestone[];
+};
+
+export function useRocTemplates() {
+  return useQuery({
+    queryKey: ['roc-templates'] as const,
+    queryFn: async (): Promise<RocTemplateRow[]> => {
+      const { data: tpls, error: tplsErr } = await supabase
+        .from('roc_templates')
+        .select('id, discipline_code, name, version, is_default')
+        .order('discipline_code');
+      if (tplsErr) throw tplsErr;
+      if (!tpls || tpls.length === 0) return [];
+
+      const { data: ms, error: msErr } = await supabase
+        .from('roc_milestones')
+        .select('template_id, seq, label, weight')
+        .in(
+          'template_id',
+          tpls.map((t) => t.id),
+        )
+        .order('seq');
+      if (msErr) throw msErr;
+
+      const byTpl = new Map<string, RocMilestone[]>();
+      for (const m of ms ?? []) {
+        const list = byTpl.get(m.template_id) ?? [];
+        list.push({ seq: m.seq, label: m.label, weight: Number(m.weight) });
+        byTpl.set(m.template_id, list);
+      }
+
+      return tpls.map((t) => ({
+        ...t,
+        milestones: byTpl.get(t.id) ?? [],
+      }));
+    },
+  });
+}
+
 export function useProgressPeriods(projectId: string | null) {
   return useQuery({
     queryKey: ['progress-periods', projectId] as const,
