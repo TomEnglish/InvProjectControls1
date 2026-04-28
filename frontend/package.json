@@ -14,6 +14,7 @@
   },
   "dependencies": {
     "@invenio/schemas": "*",
+    "@sentry/react": "^10.50.0",
     "@supabase/supabase-js": "^2.46.1",
     "@tanstack/react-query": "^5.59.20",
     "@tanstack/react-table": "^8.20.5",

@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import type { Session, User } from '@supabase/supabase-js';
 import { supabase } from './supabase';
+import { setSentryUser } from './observability';
 
 type AuthContextValue = {
   session: Session | null;
@@ -18,11 +19,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
       setSession(data.session);
+      setSentryUser(data.session?.user ? { id: data.session.user.id } : null);
       setLoading(false);
     });
 
     const { data: sub } = supabase.auth.onAuthStateChange((_event, newSession) => {
       setSession(newSession);
+      setSentryUser(newSession?.user ? { id: newSession.user.id } : null);
     });
 
     return () => sub.subscription.unsubscribe();
