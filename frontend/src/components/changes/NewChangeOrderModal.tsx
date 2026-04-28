@@ -53,11 +53,18 @@ export function NewChangeOrderModal({ open, onClose, projectId }: Props) {
         p_payload: { ...form, project_id: projectId },
       });
       if (error) throw error;
-      return data;
+      return data as string | null;
     },
-    onSuccess: () => {
+    onSuccess: (newCoId) => {
       qc.invalidateQueries({ queryKey: ['change-orders', projectId] });
       qc.invalidateQueries({ queryKey: ['budget-rollup', projectId] });
+      // Notify PC reviewers — fire and forget; failures must never block the
+      // submission workflow.
+      if (newCoId) {
+        void supabase.functions
+          .invoke('co-notify', { body: { co_id: newCoId, event: 'submitted' } })
+          .catch((err) => console.warn('co-notify failed', err));
+      }
       onClose();
     },
   });

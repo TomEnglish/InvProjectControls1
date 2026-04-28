@@ -51,6 +51,15 @@ export function ChangeManagementPage() {
 
   const selected = filtered.find((c) => c.id === selectedId) ?? null;
 
+  // Fire-and-forget notification dispatch. Failures are logged but never
+  // surfaced — the spec is explicit that notify failures must not block the
+  // approval workflow.
+  const notify = (coId: string, event: 'pc_reviewed' | 'approved' | 'rejected') => {
+    void supabase.functions
+      .invoke('co-notify', { body: { co_id: coId, event } })
+      .catch((err) => console.warn('co-notify failed', err));
+  };
+
   const pcReview = useMutation({
     mutationFn: async ({ id, decision, notes }: { id: string; decision: CoDecisionKind; notes: string | null }) => {
       const { error } = await supabase.rpc('co_pc_review', {
@@ -59,10 +68,12 @@ export function ChangeManagementPage() {
         p_notes: notes,
       });
       if (error) throw error;
+      return { id, decision };
     },
-    onSuccess: () => {
+    onSuccess: ({ id, decision }) => {
       qc.invalidateQueries({ queryKey: ['change-orders', projectId] });
       qc.invalidateQueries({ queryKey: ['budget-rollup', projectId] });
+      notify(id, decision === 'forward' ? 'pc_reviewed' : 'rejected');
       setDecision(null);
     },
   });
@@ -75,11 +86,13 @@ export function ChangeManagementPage() {
         p_notes: notes,
       });
       if (error) throw error;
+      return { id, decision };
     },
-    onSuccess: () => {
+    onSuccess: ({ id, decision }) => {
       qc.invalidateQueries({ queryKey: ['change-orders', projectId] });
       qc.invalidateQueries({ queryKey: ['budget-rollup', projectId] });
       qc.invalidateQueries({ queryKey: ['project-summary', projectId] });
+      notify(id, decision === 'forward' ? 'approved' : 'rejected');
       setDecision(null);
     },
   });
