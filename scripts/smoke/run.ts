@@ -47,7 +47,9 @@ function loadEnv() {
 type Result = { name: string; ok: boolean; ms: number; err?: string; skipped?: boolean };
 const results: Result[] = [];
 
-async function step(name: string, fn: () => Promise<void>) {
+class FatalSetupError extends Error {}
+
+async function step(name: string, fn: () => Promise<void>, fatal = false) {
   const t0 = Date.now();
   process.stdout.write(`  ${name}...`);
   try {
@@ -61,6 +63,7 @@ async function step(name: string, fn: () => Promise<void>) {
     results.push({ name, ok: false, ms, err });
     process.stdout.write(` ${ANSI.red}✗${ANSI.reset} ${ANSI.dim}${ms}ms${ANSI.reset}\n`);
     process.stdout.write(`    ${ANSI.red}${err}${ANSI.reset}\n`);
+    if (fatal) throw new FatalSetupError(err);
   }
 }
 
@@ -102,10 +105,14 @@ async function main() {
   // ─────────────────────────────────────────────────────────────────
   console.log(`${ANSI.bold}1. Setup${ANSI.reset}`);
 
-  await step('sign in', async () => {
-    const { error } = await sb.auth.signInWithPassword({ email, password });
-    if (error) throw new Error(error.message);
-  });
+  await step(
+    'sign in',
+    async () => {
+      const { error } = await sb.auth.signInWithPassword({ email, password });
+      if (error) throw new Error(error.message);
+    },
+    /* fatal */ true,
+  );
 
   let projectId = '';
   let disciplineId = '';
@@ -113,36 +120,48 @@ async function main() {
   let createdRecords: { id: string; rec_no: number }[] = [];
   let testCoId = '';
 
-  await step(`fetch project ${PROJECT_CODE}`, async () => {
-    const { data, error } = await sb
-      .from('projects')
-      .select('id')
-      .eq('project_code', PROJECT_CODE)
-      .single();
-    if (error) throw new Error(error.message);
-    projectId = data.id;
-  });
+  await step(
+    `fetch project ${PROJECT_CODE}`,
+    async () => {
+      const { data, error } = await sb
+        .from('projects')
+        .select('id')
+        .eq('project_code', PROJECT_CODE)
+        .single();
+      if (error) throw new Error(error.message);
+      projectId = data.id;
+    },
+    /* fatal */ true,
+  );
 
-  await step('fetch a project_disciplines row (PIPE)', async () => {
-    const { data, error } = await sb
-      .from('project_disciplines')
-      .select('id')
-      .eq('project_id', projectId)
-      .eq('discipline_code', 'PIPE')
-      .single();
-    if (error) throw new Error(error.message);
-    disciplineId = data.id;
-  });
+  await step(
+    'fetch a project_disciplines row (PIPE)',
+    async () => {
+      const { data, error } = await sb
+        .from('project_disciplines')
+        .select('id')
+        .eq('project_id', projectId)
+        .eq('discipline_code', 'PIPE')
+        .single();
+      if (error) throw new Error(error.message);
+      disciplineId = data.id;
+    },
+    /* fatal */ true,
+  );
 
-  await step('fetch a COA code (202 — Carbon Steel Pipe 2"-6")', async () => {
-    const { data, error } = await sb
-      .from('coa_codes')
-      .select('id, code, pf_rate')
-      .eq('code', '202')
-      .single();
-    if (error) throw new Error(error.message);
-    coaSpec = { id: data.id, code: data.code, pf_rate: Number(data.pf_rate) };
-  });
+  await step(
+    'fetch a COA code (202 — Carbon Steel Pipe 2"-6")',
+    async () => {
+      const { data, error } = await sb
+        .from('coa_codes')
+        .select('id, code, pf_rate')
+        .eq('code', '202')
+        .single();
+      if (error) throw new Error(error.message);
+      coaSpec = { id: data.id, code: data.code, pf_rate: Number(data.pf_rate) };
+    },
+    /* fatal */ true,
+  );
 
   // ─────────────────────────────────────────────────────────────────
   // 2. Read paths — exercise the dashboard / reports SQL surface.
@@ -404,6 +423,12 @@ async function main() {
 }
 
 main().catch((e) => {
+  if (e instanceof FatalSetupError) {
+    console.error(
+      `\n${ANSI.red}${ANSI.bold}Aborted in setup.${ANSI.reset} Fix the failure above before re-running. Most common cause: wrong SMOKE_EMAIL/SMOKE_PASSWORD — verify by signing in to the app first.`,
+    );
+    process.exit(2);
+  }
   console.error('\nSMOKE FAILED:', e);
   process.exit(1);
 });
