@@ -6,6 +6,7 @@ import { ChartCard, ChartCardSkeleton } from '@/components/dashboard/ChartCard';
 import { EarnedValueByDisciplineChart } from '@/components/dashboard/EarnedValueByDisciplineChart';
 import { CpiSpiTrendChart } from '@/components/reports/CpiSpiTrendChart';
 import { VarianceAnalysisTable } from '@/components/reports/VarianceAnalysisTable';
+import { PeriodCloseCard } from '@/components/reports/PeriodCloseCard';
 import { Button } from '@/components/ui/Button';
 import { fmt } from '@/lib/format';
 
@@ -96,22 +97,22 @@ export function ReportsPage() {
         />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <ChartCard
-          title="Budget vs Earned vs Actual"
-          caption="Hours by discipline."
-        >
-          {s.disciplines.length === 0 ? (
-            <div className="h-full flex items-center justify-center text-sm text-[color:var(--color-text-muted)]">
-              No active disciplines yet.
-            </div>
-          ) : (
-            <EarnedValueByDisciplineChart disciplines={s.disciplines} />
-          )}
-        </ChartCard>
-        <ChartCard title="CPI / SPI trend" caption="Per locked period.">
-          <CpiSpiTrendChart periods={ps} />
-        </ChartCard>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div className="lg:col-span-2 grid gap-4">
+          <ChartCard title="Budget vs Earned vs Actual" caption="Hours by discipline.">
+            {s.disciplines.length === 0 ? (
+              <div className="h-full flex items-center justify-center text-sm text-[color:var(--color-text-muted)]">
+                No active disciplines yet.
+              </div>
+            ) : (
+              <EarnedValueByDisciplineChart disciplines={s.disciplines} />
+            )}
+          </ChartCard>
+          <ChartCard title="CPI / SPI trend" caption="Per locked period.">
+            <CpiSpiTrendChart periods={ps} />
+          </ChartCard>
+        </div>
+        <PeriodCloseCard projectId={projectId} periods={ps} />
       </div>
 
       <div className="is-surface overflow-hidden">
