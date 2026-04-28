@@ -19,42 +19,62 @@ type Props = {
   onClose: () => void;
 };
 
+type InviteResponse = {
+  ok?: boolean;
+  bound?: boolean;
+  exists?: boolean;
+  email?: string;
+  error?: string;
+};
+
+async function callInvite(payload: {
+  email: string;
+  display_name: string | null;
+  role: UserRole;
+  bind_existing?: boolean;
+}): Promise<InviteResponse> {
+  const { data, error } = await supabase.functions.invoke('admin-invite-user', {
+    body: payload,
+  });
+  if (error) {
+    // supabase-js wraps non-2xx in a generic error; the real JSON body is on
+    // error.context. Pull it out so the toast shows the real message.
+    const ctx = (error as unknown as { context?: Response }).context;
+    if (ctx && typeof ctx.clone === 'function') {
+      try {
+        const body = (await ctx.clone().json()) as InviteResponse;
+        if (body?.error) throw new Error(body.error);
+        if (body) return body;
+      } catch (e) {
+        if (e instanceof Error && e.message) throw e;
+      }
+    }
+    throw error;
+  }
+  return (data ?? {}) as InviteResponse;
+}
+
 export function InviteUserModal({ open, onClose }: Props) {
   const qc = useQueryClient();
   const [email, setEmail] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [role, setRole] = useState<UserRole>('editor');
   const [success, setSuccess] = useState<string | null>(null);
+  const [confirmBind, setConfirmBind] = useState(false);
 
   const invite = useMutation({
-    mutationFn: async () => {
-      const { data, error } = await supabase.functions.invoke('admin-invite-user', {
-        body: {
-          email: email.trim().toLowerCase(),
-          display_name: displayName.trim() || null,
-          role,
-        },
-      });
-      // supabase-js returns a generic "non-2xx" Error on failure but stuffs
-      // the response into error.context. Pull the real JSON body so the
-      // toast shows the function's actual error message instead.
-      if (error) {
-        const ctx = (error as unknown as { context?: Response }).context;
-        if (ctx && typeof ctx.clone === 'function') {
-          try {
-            const body = (await ctx.clone().json()) as { error?: string } | null;
-            if (body?.error) throw new Error(body.error);
-          } catch (e) {
-            if (e instanceof Error && e.message) throw e;
-          }
-        }
-        throw error;
+    mutationFn: async () =>
+      callInvite({
+        email: email.trim().toLowerCase(),
+        display_name: displayName.trim() || null,
+        role,
+      }),
+    onSuccess: (res) => {
+      if (res.exists) {
+        // Switch the modal into a confirmation step.
+        setConfirmBind(true);
+        return;
       }
-      const parsed = data as { ok?: boolean; error?: string } | null;
-      if (parsed?.error) throw new Error(parsed.error);
-      return parsed;
-    },
-    onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['tenant-users'] });
       setSuccess(`Invite sent to ${email}.`);
       setEmail('');
@@ -63,19 +83,83 @@ export function InviteUserModal({ open, onClose }: Props) {
     },
   });
 
+  const bind = useMutation({
+    mutationFn: async () =>
+      callInvite({
+        email: email.trim().toLowerCase(),
+        display_name: displayName.trim() || null,
+        role,
+        bind_existing: true,
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['tenant-users'] });
+      setSuccess(`${email} bound to this tenant as ${role}.`);
+      setConfirmBind(false);
+      setEmail('');
+      setDisplayName('');
+      setRole('editor');
+    },
+  });
+
+  const reset = () => {
+    invite.reset();
+    bind.reset();
+    setSuccess(null);
+    setConfirmBind(false);
+    setEmail('');
+    setDisplayName('');
+    setRole('editor');
+  };
+
+  const handleClose = () => {
+    reset();
+    onClose();
+  };
+
+  if (confirmBind) {
+    return (
+      <Modal
+        open={open}
+        onClose={handleClose}
+        title="User already exists"
+        caption="Bind their existing account to this tenant?"
+      >
+        <div className="grid gap-4">
+          <div className="is-toast is-toast-info">
+            <div>
+              <span className="font-mono font-semibold">{email}</span> already has an Invenio
+              account (probably from a sister app). Binding will give them{' '}
+              <span className="font-semibold">{role}</span> access to this tenant. They'll sign
+              in with their existing password — no invite email is sent.
+            </div>
+          </div>
+
+          {bind.error && (
+            <div className="is-toast is-toast-danger">{(bind.error as Error).message}</div>
+          )}
+
+          <div className="flex justify-end gap-2 pt-1">
+            <Button type="button" variant="outline" onClick={() => setConfirmBind(false)}>
+              Back
+            </Button>
+            <Button
+              type="button"
+              variant="primary"
+              disabled={bind.isPending}
+              onClick={() => bind.mutate()}
+            >
+              {bind.isPending ? 'Binding…' : `Bind as ${role}`}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+    );
+  }
+
   const onSubmit = (e: FormEvent) => {
     e.preventDefault();
     setSuccess(null);
     invite.mutate();
-  };
-
-  const handleClose = () => {
-    invite.reset();
-    setSuccess(null);
-    setEmail('');
-    setDisplayName('');
-    setRole('editor');
-    onClose();
   };
 
   return (

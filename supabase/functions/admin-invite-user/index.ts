@@ -26,6 +26,13 @@ type InvitePayload = {
   email: string;
   role: Role;
   display_name?: string | null;
+  /**
+   * When true, skip the invite-by-email path and instead bind an existing
+   * auth.users record into the caller's tenant via app_users upsert. The
+   * frontend sends this only after the admin has confirmed the existing
+   * account belongs to the right person.
+   */
+  bind_existing?: boolean;
 };
 
 const corsHeaders = {
@@ -101,13 +108,53 @@ Deno.serve(async (req) => {
   if (!email || !email.includes('@')) return json({ error: 'invalid email' }, 400);
   if (!ROLES.includes(role)) return json({ error: 'invalid role' }, 400);
 
-  // 3. Service-role action — invite the user, tagging the metadata that
-  //    handle_new_user() reads to bridge the auth.users row into
-  //    projectcontrols.app_users.
+  // 3. Service-role client. db.schema is set so the bind-existing path can
+  //    upsert into projectcontrols.app_users without an extra client.
   const adminClient = createClient(SUPABASE_URL, SERVICE_KEY, {
     auth: { persistSession: false, autoRefreshToken: false },
+    db: { schema: 'projectcontrols' },
   });
 
+  // 3a. Bind path — colleague already has an auth.users account (e.g. from a
+  //     sister Invenio app). The admin has already confirmed in the UI; we
+  //     just need to upsert the app_users row pointing at the caller's
+  //     tenant. No invite email is sent — the user signs in with their
+  //     existing credentials.
+  if (body.bind_existing) {
+    // listUsers paginates; for pilot scale (<1k auth users across all
+    // Invenio apps in the project) one page is enough.
+    const { data: list, error: listErr } = await adminClient.auth.admin.listUsers({
+      page: 1,
+      perPage: 1000,
+    });
+    if (listErr) return json({ error: 'failed to list users', detail: listErr.message }, 500);
+    const existing = list?.users.find((u) => u.email?.toLowerCase() === email);
+    if (!existing) {
+      return json({ error: 'no auth.users record matches that email' }, 404);
+    }
+
+    const { error: upsertErr } = await adminClient.from('app_users').upsert(
+      {
+        id: existing.id,
+        tenant_id: caller.tenant_id,
+        email,
+        display_name: displayName,
+        role,
+        status: 'active',
+      },
+      { onConflict: 'id' },
+    );
+    if (upsertErr) return json({ error: upsertErr.message }, 400);
+
+    return json(
+      { ok: true, bound: true, user_id: existing.id, email, role },
+      200,
+    );
+  }
+
+  // 3b. Standard invite — send the email, tagging metadata that
+  //     handle_new_user() reads to bridge the auth.users row into
+  //     projectcontrols.app_users.
   const redirectTo = SITE_URL ? `${SITE_URL}/accept-invite` : undefined;
 
   const { data, error } = await adminClient.auth.admin.inviteUserByEmail(email, {
@@ -120,15 +167,10 @@ Deno.serve(async (req) => {
     },
   });
   if (error) {
-    // If the user already exists in auth.users from another flow, return
-    // an actionable message rather than the bare Supabase error string.
     if (/already.*registered|already.*exists/i.test(error.message)) {
-      return json(
-        {
-          error: 'A user with that email already exists. Bind them to this tenant directly or have them reset their password.',
-        },
-        409,
-      );
+      // Signal the frontend to flip to the bind-existing confirmation prompt.
+      // 200 (not 4xx) so supabase-js doesn't surface a generic error.
+      return json({ exists: true, email }, 200);
     }
     return json({ error: error.message }, 400);
   }
