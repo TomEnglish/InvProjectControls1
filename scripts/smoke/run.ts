@@ -76,13 +76,17 @@ async function main() {
   loadEnv();
   const includeDestructive = process.argv.includes('--include-destructive');
 
-  const url = process.env.SUPABASE_URL;
+  // Prefer the VITE_-prefixed values — those are what the deployed frontend
+  // uses, so they're guaranteed to point at prod. SUPABASE_URL without the
+  // prefix is a server-side/seed convenience that often defaults to
+  // localhost:54321 from the .env.example template.
+  const url = process.env.VITE_SUPABASE_URL ?? process.env.SUPABASE_URL;
   const anon = process.env.VITE_SUPABASE_ANON_KEY;
   const email = process.env.SMOKE_EMAIL;
   const password = process.env.SMOKE_PASSWORD;
 
   if (!url || !anon) {
-    console.error('Missing SUPABASE_URL or VITE_SUPABASE_ANON_KEY in .env');
+    console.error('Missing VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY in .env');
     process.exit(1);
   }
   if (!email || !password) {
