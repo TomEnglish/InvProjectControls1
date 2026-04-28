@@ -9,7 +9,7 @@ export function Field({
   className = '',
 }: {
   label: string;
-  hint?: string;
+  hint?: ReactNode;
   error?: string;
   required?: boolean;
   children: ReactNode;

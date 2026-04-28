@@ -15,13 +15,6 @@ function StubPage({ title, caption }: { title: string; caption: string }) {
   );
 }
 
-export const BudgetPage = () => (
-  <StubPage
-    title="Budget & Baseline"
-    caption="Original / current / forecast budget side-by-side. Lock the baseline once setup is complete."
-  />
-);
-
 export const ReportsPage = () => (
   <StubPage
     title="Reports & Analytics"
