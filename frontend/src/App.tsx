@@ -13,7 +13,7 @@ import { ChangeManagementPage } from './pages/ChangeManagement';
 import { CoaPage } from './pages/Coa';
 import { RocPage } from './pages/Roc';
 import { BudgetPage } from './pages/Budget';
-import { ReportsPage } from './pages/stubs';
+import { ReportsPage } from './pages/Reports';
 
 export const router = createBrowserRouter([
   { path: '/login', element: <LoginPage /> },
