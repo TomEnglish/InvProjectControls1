@@ -10,6 +10,7 @@ import { Field, inputClass } from '@/components/ui/FormField';
 import { StatusChip } from '@/components/ui/StatusChip';
 import { fmt } from '@/lib/format';
 import { AddDisciplineModal } from '@/components/projects/AddDisciplineModal';
+import { UsersCard } from '@/components/projects/UsersCard';
 
 type Project = {
   id: string;
@@ -262,6 +263,8 @@ export function ProjectSetupPage() {
           </Button>
         </div>
       </Card>
+
+      <UsersCard />
 
       <AddDisciplineModal
         open={addDisciplineOpen}
