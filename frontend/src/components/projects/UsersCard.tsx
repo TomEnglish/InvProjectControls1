@@ -18,6 +18,7 @@ type TenantUser = {
 };
 
 const ROLE_LABEL: Record<UserRole, string> = {
+  super_admin: 'Super Admin',
   admin: 'Admin',
   pm: 'PM',
   pc_reviewer: 'PC Reviewer',
