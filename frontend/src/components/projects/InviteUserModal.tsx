@@ -1,17 +1,18 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import { Field, inputClass, selectClass } from '@/components/ui/FormField';
-import type { UserRole } from '@/lib/queries';
+import { hasRole, useCurrentUser, type UserRole } from '@/lib/queries';
 
 const ROLES: { value: UserRole; label: string; hint: string }[] = [
-  { value: 'admin', label: 'Admin', hint: 'Full control. Locks baselines, edits COA/ROC, invites users.' },
-  { value: 'pm', label: 'PM', hint: 'Approves change orders, closes projects.' },
-  { value: 'pc_reviewer', label: 'PC Reviewer', hint: 'Forwards/rejects COs at the PC stage.' },
-  { value: 'editor', label: 'Editor', hint: 'Updates milestones, submits COs.' },
-  { value: 'viewer', label: 'Viewer', hint: 'Read-only.' },
+  { value: 'super_admin', label: 'Super Admin', hint: 'Tenant-wide governance and admin delegation.' },
+  { value: 'admin', label: 'Admin', hint: 'Project admin when assigned to project membership.' },
+  { value: 'pm', label: 'PM', hint: 'Approves change orders, closes periods, and manages project execution.' },
+  { value: 'pc_reviewer', label: 'PC Reviewer', hint: 'Forwards or rejects change orders at the PC stage.' },
+  { value: 'editor', label: 'Editor', hint: 'Updates progress records and submits change orders.' },
+  { value: 'viewer', label: 'Viewer', hint: 'Read-only project access.' },
 ];
 
 type Props = {
@@ -61,6 +62,16 @@ export function InviteUserModal({ open, onClose }: Props) {
   const [role, setRole] = useState<UserRole>('editor');
   const [success, setSuccess] = useState<string | null>(null);
   const [confirmBind, setConfirmBind] = useState(false);
+  const { data: me } = useCurrentUser();
+  const roleOptions = hasRole(me?.role, 'super_admin')
+    ? ROLES
+    : ROLES.filter((r) => r.value !== 'super_admin' && r.value !== 'admin');
+
+  useEffect(() => {
+    if (!roleOptions.some((option) => option.value === role)) {
+      setRole('editor');
+    }
+  }, [role, roleOptions]);
 
   const invite = useMutation({
     mutationFn: async () =>
@@ -192,14 +203,14 @@ export function InviteUserModal({ open, onClose }: Props) {
           />
         </Field>
 
-        <Field label="Role" required hint={ROLES.find((r) => r.value === role)?.hint}>
+        <Field label="Role" required hint={roleOptions.find((r) => r.value === role)?.hint}>
           <select
             className={selectClass}
             value={role}
             onChange={(e) => setRole(e.target.value as UserRole)}
             required
           >
-            {ROLES.map((r) => (
+            {roleOptions.map((r) => (
               <option key={r.value} value={r.value}>
                 {r.label}
               </option>

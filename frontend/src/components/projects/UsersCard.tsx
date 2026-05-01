@@ -29,7 +29,7 @@ const ROLE_LABEL: Record<UserRole, string> = {
 export function UsersCard() {
   const qc = useQueryClient();
   const { data: me } = useCurrentUser();
-  const canEdit = hasRole(me?.role, 'admin');
+  const canEdit = hasRole(me?.role, 'super_admin');
   const [inviteOpen, setInviteOpen] = useState(false);
 
   const { data: users, isLoading } = useQuery({
