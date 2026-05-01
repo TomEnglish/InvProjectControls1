@@ -148,6 +148,9 @@ Deno.serve(async (req) => {
     if (existingAppUser && existingAppUser.tenant_id !== caller.tenant_id) {
       return json({ error: 'user already belongs to another tenant' }, 409);
     }
+    if (existing.id === callerId) {
+      return json({ error: 'cannot bind or change your own role' }, 403);
+    }
     if (
       caller.role === 'admin' &&
       (existingAppUser?.role === 'admin' || existingAppUser?.role === 'super_admin')
