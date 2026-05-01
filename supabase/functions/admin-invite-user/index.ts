@@ -137,6 +137,24 @@ Deno.serve(async (req) => {
       return json({ error: 'no auth.users record matches that email' }, 404);
     }
 
+    const { data: existingAppUser, error: existingAppUserErr } = await adminClient
+      .from('app_users')
+      .select('id, tenant_id, role')
+      .eq('id', existing.id)
+      .maybeSingle();
+    if (existingAppUserErr) {
+      return json({ error: existingAppUserErr.message }, 500);
+    }
+    if (existingAppUser && existingAppUser.tenant_id !== caller.tenant_id) {
+      return json({ error: 'user already belongs to another tenant' }, 409);
+    }
+    if (
+      caller.role === 'admin' &&
+      (existingAppUser?.role === 'admin' || existingAppUser?.role === 'super_admin')
+    ) {
+      return json({ error: 'admin cannot modify another admin or super_admin' }, 403);
+    }
+
     const { error: upsertErr } = await adminClient.from('app_users').upsert(
       {
         id: existing.id,
