@@ -18,7 +18,7 @@ function loadEnv() {
     const raw = readFileSync(envPath, 'utf8');
     for (const line of raw.split('\n')) {
       const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*)\s*$/);
-      if (m && !process.env[m[1]!]) process.env[m[1]!] = m[2]!.replace(/^"|"$/g, '');
+      if (m && !process.env[m[1]!]) process.env[m[1]!] = m[2]!.trim().replace(/^['"](.*)['"]$/, '$1');
     }
   } catch {
     // no .env file — ok, fall back to process env
@@ -69,20 +69,48 @@ async function main() {
     })());
   console.log(`  tenant: ${tenantId}`);
 
-  // --- 2. Reuse existing auth users (don't create new ones — the sister app's
-  //       on_auth_user_created trigger would auto-promote any new signup to a
-  //       ProgressTracker admin, which we don't want). Bind any existing users
-  //       to this tenant in projectcontrols.app_users.
-  async function bindExistingUser(email: string, role: string, displayName: string) {
-    const { data: list } = await sb.auth.admin.listUsers();
+  // --- 2. Users: super_admin (always) + legacy UAT admin (if its auth row
+  //       exists). super_admin bootstrap creates the auth.users row when
+  //       missing — required after `supabase db reset --linked` truncates
+  //       auth.users. We do NOT pass `app: 'projectcontrols'` in metadata so
+  //       handle_new_user() does not fire; the explicit app_users upsert
+  //       below is the sole bridge into projectcontrols.
+
+  type UserRole = 'super_admin' | 'admin' | 'pm' | 'pc_reviewer' | 'editor' | 'viewer';
+
+  async function ensureAuthUser(
+    email: string,
+    password: string,
+    displayName: string,
+  ): Promise<string> {
+    const { data: list, error: listErr } = await sb.auth.admin.listUsers({
+      page: 1,
+      perPage: 1000,
+    });
+    if (listErr) throw listErr;
     const existing = list?.users.find((u) => u.email?.toLowerCase() === email.toLowerCase());
-    if (!existing) {
-      console.log(`  (skipping ${email} — not in auth.users; create manually in Supabase Auth first)`);
-      return null;
-    }
+    if (existing) return existing.id;
+    const { data, error } = await sb.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true,
+      user_metadata: { display_name: displayName },
+    });
+    if (error) throw error;
+    if (!data.user) throw new Error(`failed to create auth.users entry for ${email}`);
+    console.log(`  created auth.users: ${email}`);
+    return data.user.id;
+  }
+
+  async function ensureAppUser(
+    userId: string,
+    email: string,
+    role: UserRole,
+    displayName: string,
+  ) {
     const { error } = await sb.from('app_users').upsert(
       {
-        id: existing.id,
+        id: userId,
         tenant_id: tenantId,
         email,
         display_name: displayName,
@@ -93,11 +121,34 @@ async function main() {
     );
     if (error) throw error;
     console.log(`  bound ${email} as ${role}`);
-    return existing.id;
   }
 
-  // UAT admin from ProgressTracker's .env.local — reused for Phase 0 logins.
-  await bindExistingUser('uat-bot@invenio.com', 'admin', 'UAT Admin');
+  // Super admin — first user in the hierarchy. Drives the bootstrap flow
+  // since admin/admin_set_user_role can't mint a super_admin from scratch.
+  const superAdminEmail = process.env.SUPER_ADMIN_EMAIL ?? process.env.SMOKE_EMAIL;
+  const superAdminPassword = process.env.SUPER_ADMIN_PASSWORD ?? process.env.SMOKE_PASSWORD;
+  if (!superAdminEmail || !superAdminPassword) {
+    throw new Error(
+      'SUPER_ADMIN_EMAIL + SUPER_ADMIN_PASSWORD (or SMOKE_EMAIL + SMOKE_PASSWORD) must be set in .env',
+    );
+  }
+  const superAdminId = await ensureAuthUser(superAdminEmail, superAdminPassword, 'Super Admin');
+  await ensureAppUser(superAdminId, superAdminEmail, 'super_admin', 'Super Admin');
+
+  // Legacy UAT admin from ProgressTracker's .env.local. Bound only if its
+  // auth.users row already exists — the seed does not mint it because its
+  // password isn't authoritative here.
+  let uatAdminId: string | null = null;
+  {
+    const { data: list } = await sb.auth.admin.listUsers({ page: 1, perPage: 1000 });
+    const existing = list?.users.find((u) => u.email?.toLowerCase() === 'uat-bot@invenio.com');
+    if (existing) {
+      await ensureAppUser(existing.id, 'uat-bot@invenio.com', 'admin', 'UAT Admin');
+      uatAdminId = existing.id;
+    } else {
+      console.log('  (skipping uat-bot@invenio.com — not in auth.users)');
+    }
+  }
 
   if (mode === 'minimal') {
     console.log('→ Minimal mode complete');
@@ -199,6 +250,25 @@ async function main() {
     projectIds[p.project_code] = data.id;
   }
   console.log(`  projects: ${projectSpecs.length}`);
+
+  // --- 5b. Project membership — gives the legacy UAT admin scoped access to
+  //         KIS-2026-001 so the project-admin gate can be exercised in
+  //         tests. super_admin bypasses project_members and isn't seeded
+  //         here.
+  if (uatAdminId) {
+    const { error: pmErr } = await sb.from('project_members').upsert(
+      {
+        tenant_id: tenantId,
+        project_id: projectIds['KIS-2026-001']!,
+        user_id: uatAdminId,
+        project_role: 'admin',
+        added_by: superAdminId,
+      },
+      { onConflict: 'project_id,user_id' },
+    );
+    if (pmErr) throw pmErr;
+    console.log('  project_members: 1 (uat-bot admin on KIS-2026-001)');
+  }
 
   // --- 6. Project disciplines (budget) — for KIS-2026-001
   const discSpec = [
