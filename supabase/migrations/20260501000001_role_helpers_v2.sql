@@ -88,6 +88,7 @@ begin
     from projectcontrols.project_members pm
     where pm.project_id = p_project_id
       and pm.user_id = auth.uid()
+      and pm.tenant_id = projectcontrols.current_tenant_id()
   ) then
     raise exception 'not a member of project %', p_project_id using errcode = '42501';
   end if;

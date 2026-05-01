@@ -8,17 +8,29 @@
 -- in role_helpers_v2). Read access is still tenant-wide via existing
 -- _tenant_read policies.
 
+alter table projectcontrols.projects
+  add constraint projects_id_tenant_unique unique (id, tenant_id);
+
+alter table projectcontrols.app_users
+  add constraint app_users_id_tenant_unique unique (id, tenant_id);
+
 create table projectcontrols.project_members (
   id uuid primary key default gen_random_uuid(),
   tenant_id uuid not null references projectcontrols.tenants(id) on delete restrict,
-  project_id uuid not null references projectcontrols.projects(id) on delete cascade,
-  user_id uuid not null references projectcontrols.app_users(id) on delete cascade,
+  project_id uuid not null,
+  user_id uuid not null,
   -- Effective role within this project. May differ from app_users.role; e.g.
   -- a tenant-level 'editor' could be 'pm' on one specific project.
   project_role projectcontrols.user_role not null default 'viewer',
   added_by uuid references projectcontrols.app_users(id) on delete set null,
   created_at timestamptz not null default now(),
   updated_at timestamptz,
+  foreign key (project_id, tenant_id)
+    references projectcontrols.projects(id, tenant_id)
+    on delete cascade,
+  foreign key (user_id, tenant_id)
+    references projectcontrols.app_users(id, tenant_id)
+    on delete cascade,
   unique (project_id, user_id)
 );
 
@@ -43,6 +55,7 @@ as $$
     from projectcontrols.project_members pm
     where pm.project_id = p_project_id
       and pm.user_id = p_user_id
+      and pm.tenant_id = projectcontrols.current_tenant_id()
   )
 $$;
 
@@ -80,6 +93,18 @@ create policy "pm_admin_write" on projectcontrols.project_members
         and project_role not in ('admin', 'super_admin')
       )
     )
+    and exists (
+      select 1
+      from projectcontrols.projects p
+      where p.id = project_members.project_id
+        and p.tenant_id = project_members.tenant_id
+    )
+    and exists (
+      select 1
+      from projectcontrols.app_users u
+      where u.id = project_members.user_id
+        and u.tenant_id = project_members.tenant_id
+    )
   );
 
 -- RPCs for managing project membership. Mirrors ProgressTracker's
@@ -101,12 +126,19 @@ declare
   new_id uuid;
 begin
   -- super_admin can act on any project; admin must already be a member.
+  if not exists (
+    select 1 from projectcontrols.projects
+    where id = p_project_id and tenant_id = tid
+  ) then
+    raise exception 'project not in tenant' using errcode = 'P0001';
+  end if;
+
   if caller_role = 'super_admin' then
     null;
   elsif caller_role = 'admin' then
     if not exists (
       select 1 from projectcontrols.project_members
-      where project_id = p_project_id and user_id = auth.uid()
+      where project_id = p_project_id and user_id = auth.uid() and tenant_id = tid
     ) then
       raise exception 'admin not a member of project %', p_project_id using errcode = '42501';
     end if;
@@ -167,7 +199,7 @@ begin
   elsif caller_role = 'admin' then
     if not exists (
       select 1 from projectcontrols.project_members
-      where project_id = p_project_id and user_id = auth.uid()
+      where project_id = p_project_id and user_id = auth.uid() and tenant_id = tid
     ) then
       raise exception 'admin not a member of project %', p_project_id using errcode = '42501';
     end if;
@@ -220,7 +252,7 @@ begin
   elsif caller_role = 'admin' then
     if not exists (
       select 1 from projectcontrols.project_members
-      where project_id = p_project_id and user_id = auth.uid()
+      where project_id = p_project_id and user_id = auth.uid() and tenant_id = tid
     ) then
       raise exception 'admin not a member of project %', p_project_id using errcode = '42501';
     end if;
@@ -279,7 +311,9 @@ as $$
       projectcontrols.current_user_role() = 'super_admin'
       or exists (
         select 1 from projectcontrols.project_members self
-        where self.project_id = p_project_id and self.user_id = auth.uid()
+        where self.project_id = p_project_id
+          and self.user_id = auth.uid()
+          and self.tenant_id = projectcontrols.current_tenant_id()
       )
     )
 $$;
