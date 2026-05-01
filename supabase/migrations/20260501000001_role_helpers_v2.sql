@@ -79,6 +79,15 @@ declare
 begin
   perform projectcontrols.assert_role(min_role);
 
+  if not exists (
+    select 1
+    from projectcontrols.projects p
+    where p.id = p_project_id
+      and p.tenant_id = projectcontrols.current_tenant_id()
+  ) then
+    raise exception 'project not in tenant: %', p_project_id using errcode = '42501';
+  end if;
+
   if r = 'super_admin' then
     return;
   end if;
