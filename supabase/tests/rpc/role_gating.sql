@@ -38,17 +38,13 @@ select has_function('projectcontrols', 'assert_role_for_project',
 
 -- Mutating RPCs are SECURITY DEFINER (so RLS doesn't fight role gating).
 select is(
-  (select prosecdef from pg_proc p
-     join pg_namespace n on n.oid = p.pronamespace
-    where n.nspname = 'projectcontrols' and p.proname = 'co_approve'),
+  (select prosecdef from pg_proc where oid = 'projectcontrols.co_approve(uuid, text, text)'::regprocedure),
   true,
   'co_approve is SECURITY DEFINER'
 );
 
 select is(
-  (select prosecdef from pg_proc p
-     join pg_namespace n on n.oid = p.pronamespace
-    where n.nspname = 'projectcontrols' and p.proname = 'project_lock_baseline'),
+  (select prosecdef from pg_proc where oid = 'projectcontrols.project_lock_baseline(uuid, timestamptz)'::regprocedure),
   true,
   'project_lock_baseline is SECURITY DEFINER'
 );

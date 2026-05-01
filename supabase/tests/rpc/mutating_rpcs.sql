@@ -17,7 +17,7 @@ begin;
 --             actuals_bulk_upsert, period_close, write_audit_log
 --   read:     project_summary, budget_rollup, current_tenant_id,
 --             current_user_role
-select plan(38);
+select plan(41);
 
 -- ─────────────────────────────────────────────────────────────────────
 -- 1. Existence checks for every RPC the frontend depends on.
@@ -42,79 +42,57 @@ select has_function('projectcontrols', 'budget_rollup',       array['uuid'], 'bu
 --    its job, or worse, leak privilege depending on how it's called.
 -- ─────────────────────────────────────────────────────────────────────
 select is(
-  (select prosecdef from pg_proc p
-     join pg_namespace n on n.oid = p.pronamespace
-    where n.nspname = 'projectcontrols' and p.proname = 'coa_code_upsert'),
+  (select prosecdef from pg_proc where oid = 'projectcontrols.coa_code_upsert(jsonb)'::regprocedure),
   true,
   'coa_code_upsert is SECURITY DEFINER'
 );
 select is(
-  (select prosecdef from pg_proc p
-     join pg_namespace n on n.oid = p.pronamespace
-    where n.nspname = 'projectcontrols' and p.proname = 'roc_template_set'),
+  (select prosecdef from pg_proc where oid = 'projectcontrols.roc_template_set(uuid, jsonb)'::regprocedure),
   true,
   'roc_template_set is SECURITY DEFINER'
 );
 select is(
-  (select prosecdef from pg_proc p
-     join pg_namespace n on n.oid = p.pronamespace
-    where n.nspname = 'projectcontrols' and p.proname = 'record_bulk_upsert'),
+  (select prosecdef from pg_proc where oid = 'projectcontrols.record_bulk_upsert(uuid, jsonb)'::regprocedure),
   true,
   'record_bulk_upsert is SECURITY DEFINER'
 );
 select is(
-  (select prosecdef from pg_proc p
-     join pg_namespace n on n.oid = p.pronamespace
-    where n.nspname = 'projectcontrols' and p.proname = 'record_update_milestones'),
+  (select prosecdef from pg_proc where oid = 'projectcontrols.record_update_milestones(uuid, jsonb)'::regprocedure),
   true,
   'record_update_milestones is SECURITY DEFINER'
 );
 select is(
-  (select prosecdef from pg_proc p
-     join pg_namespace n on n.oid = p.pronamespace
-    where n.nspname = 'projectcontrols' and p.proname = 'co_submit'),
+  (select prosecdef from pg_proc where oid = 'projectcontrols.co_submit(jsonb)'::regprocedure),
   true,
   'co_submit is SECURITY DEFINER'
 );
 select is(
-  (select prosecdef from pg_proc p
-     join pg_namespace n on n.oid = p.pronamespace
-    where n.nspname = 'projectcontrols' and p.proname = 'co_pc_review'),
+  (select prosecdef from pg_proc where oid = 'projectcontrols.co_pc_review(uuid, text, text)'::regprocedure),
   true,
   'co_pc_review is SECURITY DEFINER'
 );
 select is(
-  (select prosecdef from pg_proc p
-     join pg_namespace n on n.oid = p.pronamespace
-    where n.nspname = 'projectcontrols' and p.proname = 'co_approve'),
+  (select prosecdef from pg_proc where oid = 'projectcontrols.co_approve(uuid, text, text)'::regprocedure),
   true,
   'co_approve is SECURITY DEFINER'
 );
 select is(
-  (select prosecdef from pg_proc p
-     join pg_namespace n on n.oid = p.pronamespace
-    where n.nspname = 'projectcontrols' and p.proname = 'project_lock_baseline'),
+  (select prosecdef from pg_proc where oid = 'projectcontrols.project_lock_baseline(uuid, timestamptz)'::regprocedure),
   true,
   'project_lock_baseline is SECURITY DEFINER'
 );
 select is(
-  (select prosecdef from pg_proc p
-     join pg_namespace n on n.oid = p.pronamespace
-    where n.nspname = 'projectcontrols' and p.proname = 'admin_set_user_role'),
+  (select prosecdef from pg_proc where oid = 'projectcontrols.admin_set_user_role(uuid, projectcontrols.user_role, text)'::regprocedure),
   true,
   'admin_set_user_role is SECURITY DEFINER'
 );
 select is(
-  (select prosecdef from pg_proc p
-     join pg_namespace n on n.oid = p.pronamespace
-    where n.nspname = 'projectcontrols' and p.proname = 'actuals_bulk_upsert'),
+  (select prosecdef from pg_proc where oid = 'projectcontrols.actuals_bulk_upsert(uuid, uuid, jsonb)'::regprocedure),
   true,
   'actuals_bulk_upsert is SECURITY DEFINER'
 );
 select is(
-  (select prosecdef from pg_proc p
-     join pg_namespace n on n.oid = p.pronamespace
-    where n.nspname = 'projectcontrols' and p.proname = 'period_close'),
+  (select prosecdef from pg_proc where oid = 'projectcontrols.period_close(uuid, uuid)'::regprocedure),
   true,
   'period_close is SECURITY DEFINER'
 );
