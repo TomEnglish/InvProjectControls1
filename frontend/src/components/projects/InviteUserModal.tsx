@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { Modal } from '@/components/ui/Modal';
@@ -63,9 +63,14 @@ export function InviteUserModal({ open, onClose }: Props) {
   const [success, setSuccess] = useState<string | null>(null);
   const [confirmBind, setConfirmBind] = useState(false);
   const { data: me } = useCurrentUser();
-  const roleOptions = hasRole(me?.role, 'super_admin')
-    ? ROLES
-    : ROLES.filter((r) => r.value !== 'super_admin' && r.value !== 'admin');
+  const canManageTenantRoles = hasRole(me?.role, 'super_admin');
+  const roleOptions = useMemo(
+    () =>
+      canManageTenantRoles
+        ? ROLES
+        : ROLES.filter((r) => r.value !== 'super_admin' && r.value !== 'admin'),
+    [canManageTenantRoles],
+  );
 
   useEffect(() => {
     if (!roleOptions.some((option) => option.value === role)) {
