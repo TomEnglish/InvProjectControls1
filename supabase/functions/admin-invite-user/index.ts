@@ -18,9 +18,10 @@
 
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 
-type Role = 'admin' | 'pm' | 'pc_reviewer' | 'editor' | 'viewer';
+type Role = 'super_admin' | 'admin' | 'pm' | 'pc_reviewer' | 'editor' | 'viewer';
 
-const ROLES: readonly Role[] = ['admin', 'pm', 'pc_reviewer', 'editor', 'viewer'];
+const ROLES: readonly Role[] = ['super_admin', 'admin', 'pm', 'pc_reviewer', 'editor', 'viewer'];
+const ADMIN_GRANTABLE_ROLES: readonly Role[] = ['pm', 'pc_reviewer', 'editor', 'viewer'];
 
 type InvitePayload = {
   email: string;
@@ -91,7 +92,7 @@ Deno.serve(async (req) => {
     return json({ error: 'caller lookup failed', detail: callerErr.message }, 500);
   }
   if (!caller) return json({ error: 'caller not bound to a tenant' }, 403);
-  if (caller.role !== 'admin') {
+  if (caller.role !== 'admin' && caller.role !== 'super_admin') {
     return json({ error: `admin role required (you have ${caller.role})` }, 403);
   }
 
@@ -107,6 +108,9 @@ Deno.serve(async (req) => {
   const displayName = body.display_name?.trim() || null;
   if (!email || !email.includes('@')) return json({ error: 'invalid email' }, 400);
   if (!ROLES.includes(role)) return json({ error: 'invalid role' }, 400);
+  if (caller.role === 'admin' && !ADMIN_GRANTABLE_ROLES.includes(role)) {
+    return json({ error: `admin cannot grant role ${role}` }, 403);
+  }
 
   // 3. Service-role client. db.schema is set so the bind-existing path can
   //    upsert into projectcontrols.app_users without an extra client.
