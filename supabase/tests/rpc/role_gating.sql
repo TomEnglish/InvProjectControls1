@@ -10,17 +10,17 @@
 
 begin;
 
-select plan(6);
+select plan(8);
 
--- assert_role compares ranks: viewer < editor < pc_reviewer < pm < admin.
+-- assert_role compares ranks: viewer < editor < pc_reviewer < pm < admin < super_admin.
 -- Reading these via current_user_role() requires a session, so we test the
 -- comparison logic by simulating the ranks directly.
 
--- Sanity: the user_role enum has all five expected values.
+-- Sanity: the user_role enum has all six expected values.
 select set_eq(
   $$ select unnest(enum_range(null::projectcontrols.user_role))::text $$,
-  $$ values ('admin'), ('pm'), ('pc_reviewer'), ('editor'), ('viewer') $$,
-  'user_role enum has the five expected values'
+  $$ values ('super_admin'), ('admin'), ('pm'), ('pc_reviewer'), ('editor'), ('viewer') $$,
+  'user_role enum has the six expected values'
 );
 
 -- Function existence + ownership.
@@ -30,6 +30,11 @@ select has_function('projectcontrols', 'current_tenant_id',
   'current_tenant_id function exists');
 select has_function('projectcontrols', 'current_user_role',
   'current_user_role function exists');
+select has_function('projectcontrols', 'is_super_admin',
+  'is_super_admin function exists');
+select has_function('projectcontrols', 'assert_role_for_project',
+  array['projectcontrols.user_role', 'uuid'],
+  'assert_role_for_project function exists');
 
 -- Mutating RPCs are SECURITY DEFINER (so RLS doesn't fight role gating).
 select is(

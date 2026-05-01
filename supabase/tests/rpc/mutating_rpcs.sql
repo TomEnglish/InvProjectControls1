@@ -174,8 +174,8 @@ select has_column('projectcontrols', 'audit_log', 'created_at', 'audit_log has c
 -- ─────────────────────────────────────────────────────────────────────
 select set_eq(
   $$ select unnest(enum_range(null::projectcontrols.user_role))::text $$,
-  $$ values ('admin'), ('pm'), ('pc_reviewer'), ('editor'), ('viewer') $$,
-  'user_role enum has the five expected values'
+  $$ values ('super_admin'), ('admin'), ('pm'), ('pc_reviewer'), ('editor'), ('viewer') $$,
+  'user_role enum has the six expected values'
 );
 
 select * from finish();
