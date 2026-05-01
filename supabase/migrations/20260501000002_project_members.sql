@@ -69,10 +69,35 @@ create policy "pm_tenant_read" on projectcontrols.project_members
 
 -- Write: super_admin can manage anyone; admin can manage members of projects
 -- they themselves belong to (so a "local admin" can manage their own project
--- but not someone else's). The `using` clause restricts UPDATE/DELETE; the
--- `with check` restricts INSERT/UPDATE.
-create policy "pm_admin_write" on projectcontrols.project_members
-  for all to authenticated
+-- but not someone else's).
+create policy "pm_admin_insert" on projectcontrols.project_members
+  for insert to authenticated
+  with check (
+    tenant_id = projectcontrols.current_tenant_id()
+    and (
+      projectcontrols.current_user_role() = 'super_admin'
+      or (
+        projectcontrols.current_user_role() = 'admin'
+        and projectcontrols.is_project_member(project_members.project_id, auth.uid())
+        and project_role not in ('admin', 'super_admin')
+      )
+    )
+    and exists (
+      select 1
+      from projectcontrols.projects p
+      where p.id = project_members.project_id
+        and p.tenant_id = project_members.tenant_id
+    )
+    and exists (
+      select 1
+      from projectcontrols.app_users u
+      where u.id = project_members.user_id
+        and u.tenant_id = project_members.tenant_id
+    )
+  );
+
+create policy "pm_admin_update" on projectcontrols.project_members
+  for update to authenticated
   using (
     tenant_id = projectcontrols.current_tenant_id()
     and (
@@ -80,6 +105,7 @@ create policy "pm_admin_write" on projectcontrols.project_members
       or (
         projectcontrols.current_user_role() = 'admin'
         and projectcontrols.is_project_member(project_members.project_id, auth.uid())
+        and project_role not in ('admin', 'super_admin')
       )
     )
   )
@@ -104,6 +130,21 @@ create policy "pm_admin_write" on projectcontrols.project_members
       from projectcontrols.app_users u
       where u.id = project_members.user_id
         and u.tenant_id = project_members.tenant_id
+    )
+  );
+
+create policy "pm_admin_delete" on projectcontrols.project_members
+  for delete to authenticated
+  using (
+    tenant_id = projectcontrols.current_tenant_id()
+    and (
+      projectcontrols.current_user_role() = 'super_admin'
+      or (
+        projectcontrols.current_user_role() = 'admin'
+        and projectcontrols.is_project_member(project_members.project_id, auth.uid())
+        and project_role not in ('admin', 'super_admin')
+        and user_id <> auth.uid()
+      )
     )
   );
 
