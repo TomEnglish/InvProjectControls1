@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from './supabase';
 import { useAuth } from './auth';
 
-export type UserRole = 'admin' | 'pm' | 'pc_reviewer' | 'editor' | 'viewer';
+export type UserRole = 'super_admin' | 'admin' | 'pm' | 'pc_reviewer' | 'editor' | 'viewer';
 
 export type AppUser = {
   id: string;
@@ -40,6 +40,7 @@ const roleRank: Record<UserRole, number> = {
   pc_reviewer: 3,
   pm: 4,
   admin: 5,
+  super_admin: 6,
 };
 
 export function hasRole(current: UserRole | undefined | null, min: UserRole): boolean {
