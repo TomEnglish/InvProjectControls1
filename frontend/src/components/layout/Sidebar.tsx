@@ -8,6 +8,9 @@ import {
   Play,
   ArrowLeftRight,
   FileBarChart,
+  Camera,
+  TrendingUp,
+  PieChart,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -31,13 +34,18 @@ const sections: NavSection[] = [
     label: 'Execution',
     items: [
       { to: '/budget', label: 'Budget & Baseline', icon: Lock },
-      { to: '/progress', label: 'Progress & EV', icon: Play },
+      { to: '/progress', label: 'Progress', icon: Play },
+      { to: '/snapshots', label: 'Snapshots', icon: Camera },
       { to: '/changes', label: 'Change Mgmt', icon: ArrowLeftRight },
     ],
   },
   {
     label: 'Analytics',
-    items: [{ to: '/reports', label: 'Reports', icon: FileBarChart }],
+    items: [
+      { to: '/progress/earned-value', label: 'Earned Value', icon: TrendingUp },
+      { to: '/progress/disciplines', label: 'Disciplines', icon: PieChart },
+      { to: '/reports', label: 'Reports', icon: FileBarChart },
+    ],
   },
 ];
 

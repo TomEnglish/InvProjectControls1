@@ -14,6 +14,9 @@ import { CoaPage } from './pages/Coa';
 import { RocPage } from './pages/Roc';
 import { BudgetPage } from './pages/Budget';
 import { ReportsPage } from './pages/Reports';
+import { SnapshotsPage } from './pages/Snapshots';
+import { EarnedValuePage } from './pages/EarnedValue';
+import { DisciplineProgressPage } from './pages/DisciplineProgress';
 
 export const router = createBrowserRouter([
   { path: '/login', element: <LoginPage /> },
@@ -68,6 +71,33 @@ export const router = createBrowserRouter([
           </ProjectScopeGuard>
         ),
         handle: { title: 'Reports & Analytics' },
+      },
+      {
+        path: '/snapshots',
+        element: (
+          <ProjectScopeGuard>
+            <SnapshotsPage />
+          </ProjectScopeGuard>
+        ),
+        handle: { title: 'Period Snapshots' },
+      },
+      {
+        path: '/progress/earned-value',
+        element: (
+          <ProjectScopeGuard>
+            <EarnedValuePage />
+          </ProjectScopeGuard>
+        ),
+        handle: { title: 'Earned Value' },
+      },
+      {
+        path: '/progress/disciplines',
+        element: (
+          <ProjectScopeGuard>
+            <DisciplineProgressPage />
+          </ProjectScopeGuard>
+        ),
+        handle: { title: 'Discipline Progress' },
       },
     ],
   },
