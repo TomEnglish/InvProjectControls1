@@ -1,7 +1,7 @@
 import '@/lib/charts';
 import { FileBarChart, Download } from 'lucide-react';
 import { useProjectStore } from '@/stores/project';
-import { useProjectSummary, useProgressPeriods } from '@/lib/queries';
+import { useDashboardSummary, useProgressPeriods } from '@/lib/queries';
 import { ChartCard, ChartCardSkeleton } from '@/components/dashboard/ChartCard';
 import { EarnedValueByDisciplineChart } from '@/components/dashboard/EarnedValueByDisciplineChart';
 import { CpiSpiTrendChart } from '@/components/reports/CpiSpiTrendChart';
@@ -26,7 +26,7 @@ function NoProject() {
 
 export function ReportsPage() {
   const projectId = useProjectStore((s) => s.currentProjectId);
-  const summary = useProjectSummary(projectId);
+  const summary = useDashboardSummary(projectId);
   const periods = useProgressPeriods(projectId);
 
   if (!projectId) return <NoProject />;
@@ -53,7 +53,7 @@ export function ReportsPage() {
   if (summary.error) {
     return (
       <div className="is-toast is-toast-danger">
-        Failed to load report data: {(summary.error as Error).message}
+        Failed to load report data: {summary.error.message}
       </div>
     );
   }

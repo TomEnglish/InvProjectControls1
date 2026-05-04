@@ -6,7 +6,7 @@ import { supabase } from '@/lib/supabase';
 import { useProjectStore } from '@/stores/project';
 import {
   useBudgetRollup,
-  useProjectSummary,
+  useDashboardSummary,
   useCurrentUser,
   hasRole,
 } from '@/lib/queries';
@@ -79,7 +79,7 @@ export function BudgetPage() {
   });
 
   const rollup = useBudgetRollup(projectId);
-  const summary = useProjectSummary(projectId);
+  const summary = useDashboardSummary(projectId);
 
   if (!projectId || !project) {
     return (
@@ -111,7 +111,7 @@ export function BudgetPage() {
   if (rollup.error || summary.error) {
     return (
       <div className="is-toast is-toast-danger">
-        Failed to load budget: {((rollup.error || summary.error) as Error).message}
+        Failed to load budget: {(rollup.error ?? summary.error)!.message}
       </div>
     );
   }

@@ -590,13 +590,16 @@ export function useProjectMetrics(projectId: string | null) {
       if (error) throw error;
       const row = Array.isArray(data) ? data[0] : data;
       if (!row) return null;
+      // RPC returns percent_complete in 0..100; normalize to 0..1 (the
+      // convention used by fmt.pct and every existing consumer of the
+      // legacy useProjectSummary).
       return {
         project_id: row.project_id,
         total_records: Number(row.total_records),
         total_budget_hrs: Number(row.total_budget_hrs),
         total_earned_hrs: Number(row.total_earned_hrs),
         total_actual_hrs: Number(row.total_actual_hrs),
-        percent_complete: Number(row.percent_complete),
+        percent_complete: Number(row.percent_complete) / 100,
         cpi: row.cpi != null ? Number(row.cpi) : null,
         spi: row.spi != null ? Number(row.spi) : null,
         sv: Number(row.sv),
@@ -632,7 +635,9 @@ export function useDisciplineMetrics(projectId: string | null) {
         budget_hrs: Number(r.budget_hrs),
         earned_hrs: Number(r.earned_hrs),
         actual_hrs: Number(r.actual_hrs),
-        earned_pct: Number(r.earned_pct),
+        // RPC returns earned_pct 0..100; normalize to 0..1 so the existing
+        // charts and DisciplineRollup-shaped consumers stay correct.
+        earned_pct: Number(r.earned_pct) / 100,
         cpi: r.cpi != null ? Number(r.cpi) : null,
       }));
     },
@@ -653,8 +658,9 @@ export function useProjectQtyRollup(projectId: string | null) {
       if (error) throw error;
       const row = Array.isArray(data) ? data[0] : data;
       if (!row) return null;
+      // composite_pct comes back 0..100; normalize to 0..1.
       return {
-        composite_pct: Number(row.composite_pct),
+        composite_pct: Number(row.composite_pct) / 100,
         mode: row.mode as ProjectQtyRollup['mode'],
       };
     },
@@ -760,6 +766,45 @@ export function useIwps(projectId: string | null) {
       return (data ?? []) as Iwp[];
     },
   });
+}
+
+/**
+ * Composer hook that returns a `ProjectSummary`-shaped value built from the
+ * new project_metrics + discipline_metrics RPCs. Lets Dashboard / Reports /
+ * Budget swap their import without touching the chart/table components below
+ * them. Phase 5 cleanup deletes the legacy useProjectSummary and DisciplineRollup
+ * once every consumer is on this composer or the raw new hooks.
+ */
+export function useDashboardSummary(projectId: string | null) {
+  const metrics = useProjectMetrics(projectId);
+  const disciplines = useDisciplineMetrics(projectId);
+  return {
+    isLoading: metrics.isLoading || disciplines.isLoading,
+    error: (metrics.error ?? disciplines.error) as Error | null,
+    data:
+      metrics.data && disciplines.data
+        ? ({
+            project_id: metrics.data.project_id,
+            total_budget_hrs: metrics.data.total_budget_hrs,
+            total_earned_hrs: metrics.data.total_earned_hrs,
+            total_actual_hrs: metrics.data.total_actual_hrs,
+            overall_pct: metrics.data.percent_complete,
+            cpi: metrics.data.cpi,
+            spi: metrics.data.spi,
+            disciplines: disciplines.data.map((d) => ({
+              discipline_id: d.discipline_id,
+              discipline_code: d.discipline_code,
+              display_name: d.display_name,
+              records: d.records,
+              budget_hrs: d.budget_hrs,
+              earned_hrs: d.earned_hrs,
+              actual_hrs: d.actual_hrs,
+              earned_pct: d.earned_pct,
+              cpi: d.cpi,
+            })),
+          } satisfies ProjectSummary)
+        : null,
+  };
 }
 
 export type ForemanAlias = {

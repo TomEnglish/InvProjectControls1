@@ -1,6 +1,6 @@
 import '@/lib/charts';
 import { useProjectStore } from '@/stores/project';
-import { useProjectSummary, useProgressPeriods } from '@/lib/queries';
+import { useDashboardSummary, useProgressPeriods, useProjectQtyRollup } from '@/lib/queries';
 import { fmt } from '@/lib/format';
 import { KpiCard, KpiCardSkeleton } from '@/components/dashboard/KpiCard';
 import { ChartCard, ChartCardSkeleton } from '@/components/dashboard/ChartCard';
@@ -27,7 +27,7 @@ function LoadingSkeleton() {
   return (
     <>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
-        {Array.from({ length: 4 }).map((_, i) => (
+        {Array.from({ length: 5 }).map((_, i) => (
           <KpiCardSkeleton key={i} />
         ))}
       </div>
@@ -41,8 +41,9 @@ function LoadingSkeleton() {
 
 export function DashboardPage() {
   const projectId = useProjectStore((s) => s.currentProjectId);
-  const summary = useProjectSummary(projectId);
+  const summary = useDashboardSummary(projectId);
   const periods = useProgressPeriods(projectId);
+  const qtyRollup = useProjectQtyRollup(projectId);
 
   if (!projectId) return <NoProjectSelected />;
 
@@ -54,7 +55,7 @@ export function DashboardPage() {
       <div className="is-toast is-toast-danger">
         <div>
           <div className="font-semibold">Failed to load dashboard</div>
-          <div className="opacity-90 mt-0.5">{(summary.error as Error).message}</div>
+          <div className="opacity-90 mt-0.5">{summary.error.message}</div>
         </div>
       </div>
     );
@@ -65,10 +66,15 @@ export function DashboardPage() {
 
   const cpiTone = s.cpi == null ? 'neutral' : s.cpi >= 1 ? 'favourable' : 'unfavourable';
   const spiTone = s.spi == null ? 'neutral' : s.spi >= 1 ? 'favourable' : 'unfavourable';
+  const rollupModeLabel: Record<'hours_weighted' | 'equal' | 'custom', string> = {
+    hours_weighted: 'Hours-weighted',
+    equal: 'Equal-weighted',
+    custom: 'Custom weights',
+  };
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         <KpiCard
           label="Overall Earned"
           value={fmt.pct(s.overall_pct)}
@@ -91,6 +97,15 @@ export function DashboardPage() {
           subtext={s.spi == null ? 'No baseline yet' : s.spi >= 1 ? 'Ahead of schedule' : 'Behind schedule'}
           tone={spiTone}
         />
+        {qtyRollup.data ? (
+          <KpiCard
+            label="Composite % (qty)"
+            value={fmt.pct(qtyRollup.data.composite_pct)}
+            subtext={rollupModeLabel[qtyRollup.data.mode]}
+          />
+        ) : (
+          <KpiCardSkeleton />
+        )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
