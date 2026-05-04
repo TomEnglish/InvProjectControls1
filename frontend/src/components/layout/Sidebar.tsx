@@ -11,6 +11,7 @@ import {
   Camera,
   TrendingUp,
   PieChart,
+  Upload as UploadIcon,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -35,6 +36,7 @@ const sections: NavSection[] = [
     items: [
       { to: '/budget', label: 'Budget & Baseline', icon: Lock },
       { to: '/progress', label: 'Progress', icon: Play },
+      { to: '/progress/upload', label: 'Upload', icon: UploadIcon },
       { to: '/snapshots', label: 'Snapshots', icon: Camera },
       { to: '/changes', label: 'Change Mgmt', icon: ArrowLeftRight },
     ],

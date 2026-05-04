@@ -17,6 +17,7 @@ import { ReportsPage } from './pages/Reports';
 import { SnapshotsPage } from './pages/Snapshots';
 import { EarnedValuePage } from './pages/EarnedValue';
 import { DisciplineProgressPage } from './pages/DisciplineProgress';
+import { UploadPage } from './pages/Upload';
 
 export const router = createBrowserRouter([
   { path: '/login', element: <LoginPage /> },
@@ -98,6 +99,15 @@ export const router = createBrowserRouter([
           </ProjectScopeGuard>
         ),
         handle: { title: 'Discipline Progress' },
+      },
+      {
+        path: '/progress/upload',
+        element: (
+          <ProjectScopeGuard>
+            <UploadPage />
+          </ProjectScopeGuard>
+        ),
+        handle: { title: 'Upload Progress Data' },
       },
     ],
   },
