@@ -10,7 +10,6 @@ import { StatusChip } from '@/components/ui/StatusChip';
 import { fmt } from '@/lib/format';
 import { AddDisciplineModal } from '@/components/projects/AddDisciplineModal';
 import { UsersCard } from '@/components/projects/UsersCard';
-import { ImportRecordsCard } from '@/components/projects/ImportRecordsCard';
 import { ForemanAliasesCard } from '@/components/projects/ForemanAliasesCard';
 import { RollupModeCard } from '@/components/projects/RollupModeCard';
 
@@ -243,8 +242,6 @@ export function ProjectSetupPage() {
           </table>
         </div>
       </Card>
-
-      <ImportRecordsCard projectId={projectId} disabled={!canEdit || locked} />
 
       <RollupModeCard projectId={projectId} />
 
