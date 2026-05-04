@@ -12,6 +12,7 @@ import { AddDisciplineModal } from '@/components/projects/AddDisciplineModal';
 import { UsersCard } from '@/components/projects/UsersCard';
 import { ImportRecordsCard } from '@/components/projects/ImportRecordsCard';
 import { ForemanAliasesCard } from '@/components/projects/ForemanAliasesCard';
+import { RollupModeCard } from '@/components/projects/RollupModeCard';
 
 type Project = {
   id: string;
@@ -244,6 +245,8 @@ export function ProjectSetupPage() {
       </Card>
 
       <ImportRecordsCard projectId={projectId} disabled={!canEdit || locked} />
+
+      <RollupModeCard projectId={projectId} />
 
       <UsersCard />
 
