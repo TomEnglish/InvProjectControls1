@@ -1,6 +1,6 @@
 begin;
 
-select plan(30);
+select plan(36);
 
 select has_table('projectcontrols', 'iwps', 'iwps table exists');
 select has_table('projectcontrols', 'progress_records', 'progress_records table exists');
@@ -34,6 +34,20 @@ select has_column('projectcontrols', 'progress_snapshot_items', 'snapshot_id', '
 select has_column('projectcontrols', 'progress_snapshot_items', 'progress_record_id', 'progress_snapshot_items has progress_record_id');
 select has_column('projectcontrols', 'project_discipline_weights', 'weight', 'project_discipline_weights has weight');
 select has_column('projectcontrols', 'foreman_aliases', 'tenant_id', 'foreman_aliases has tenant_id');
+
+-- Phase 4 Task 1 — RPCs + view that drive the merged progress workflows.
+select has_function('projectcontrols', 'project_metrics', array['uuid'],
+  'project_metrics RPC exists');
+select has_function('projectcontrols', 'discipline_metrics', array['uuid'],
+  'discipline_metrics RPC exists');
+select has_function('projectcontrols', 'project_qty_rollup', array['uuid'],
+  'project_qty_rollup RPC exists');
+select has_function('projectcontrols', 'period_comparison', array['uuid', 'uuid', 'uuid'],
+  'period_comparison RPC exists');
+select has_function('projectcontrols', 'list_snapshots', array['uuid'],
+  'list_snapshots RPC exists');
+select has_view('projectcontrols', 'v_progress_record_ev',
+  'v_progress_record_ev view exists');
 
 select * from finish();
 
