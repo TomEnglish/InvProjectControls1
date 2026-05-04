@@ -11,6 +11,7 @@ import { fmt } from '@/lib/format';
 import { AddDisciplineModal } from '@/components/projects/AddDisciplineModal';
 import { UsersCard } from '@/components/projects/UsersCard';
 import { ImportRecordsCard } from '@/components/projects/ImportRecordsCard';
+import { ForemanAliasesCard } from '@/components/projects/ForemanAliasesCard';
 
 type Project = {
   id: string;
@@ -245,6 +246,8 @@ export function ProjectSetupPage() {
       <ImportRecordsCard projectId={projectId} disabled={!canEdit || locked} />
 
       <UsersCard />
+
+      <ForemanAliasesCard />
 
       <AddDisciplineModal
         open={addDisciplineOpen}
