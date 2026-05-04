@@ -82,109 +82,14 @@ export type ProgressPeriod = {
   acwp_hrs: number | null;
 };
 
-export function useProjectSummary(projectId: string | null) {
-  return useQuery({
-    queryKey: ['project-summary', projectId] as const,
-    enabled: !!projectId,
-    queryFn: async (): Promise<ProjectSummary> => {
-      const { data, error } = await supabase.rpc('project_summary', { p_project_id: projectId });
-      if (error) throw error;
-      return data as ProjectSummary;
-    },
-  });
-}
+// useProjectSummary removed in Phase 4 — use useDashboardSummary (composes
+// project_metrics + discipline_metrics) instead. The ProjectSummary +
+// DisciplineRollup types stay so existing chart/table props compile.
 
-export type ProgressRecord = {
-  id: string;
-  rec_no: number;
-  dwg: string;
-  rev: string;
-  description: string;
-  uom: string;
-  fld_qty: number;
-  fld_whrs: number;
-  status: string;
-  discipline_id: string;
-  discipline_code: string;
-  discipline_name: string;
-  coa_code: string;
-  milestones: { seq: number; value: number }[];
-  earn_pct: number;
-  ern_qty: number;
-  earn_whrs: number;
-};
+// useProgressRecords (audit_records-flavored) removed in Phase 4 — use
+// useProgressRows (canonical progress_records) instead.
 
 export type RocMilestone = { seq: number; label: string; weight: number };
-
-export function useProgressRecords(projectId: string | null) {
-  return useQuery({
-    queryKey: ['progress-records', projectId] as const,
-    enabled: !!projectId,
-    queryFn: async (): Promise<ProgressRecord[]> => {
-      // Pull records + milestones + discipline metadata + earned-value view in parallel.
-      const [recordsRes, msRes, evRes] = await Promise.all([
-        supabase
-          .from('audit_records')
-          .select(
-            'id, rec_no, dwg, rev, description, uom, fld_qty, fld_whrs, status, discipline_id, project_disciplines!audit_records_discipline_id_fkey(discipline_code, display_name), coa_codes!audit_records_coa_code_id_fkey(code)',
-          )
-          .eq('project_id', projectId!)
-          .order('rec_no'),
-        supabase
-          .from('audit_record_milestones')
-          .select('record_id, seq, value'),
-        supabase
-          .from('v_audit_record_ev')
-          .select('record_id, earn_pct, ern_qty, earn_whrs')
-          .eq('project_id', projectId!),
-      ]);
-
-      if (recordsRes.error) throw recordsRes.error;
-      if (msRes.error) throw msRes.error;
-      if (evRes.error) throw evRes.error;
-
-      const msByRecord = new Map<string, { seq: number; value: number }[]>();
-      for (const row of msRes.data ?? []) {
-        const arr = msByRecord.get(row.record_id) ?? [];
-        arr.push({ seq: row.seq, value: Number(row.value) });
-        msByRecord.set(row.record_id, arr);
-      }
-
-      const evByRecord = new Map<string, { earn_pct: number; ern_qty: number; earn_whrs: number }>();
-      for (const row of evRes.data ?? []) {
-        evByRecord.set(row.record_id, {
-          earn_pct: Number(row.earn_pct),
-          ern_qty: Number(row.ern_qty),
-          earn_whrs: Number(row.earn_whrs),
-        });
-      }
-
-      return (recordsRes.data ?? []).map((r) => {
-        const pd = (r as unknown as { project_disciplines: { discipline_code: string; display_name: string } | null }).project_disciplines;
-        const coa = (r as unknown as { coa_codes: { code: string } | null }).coa_codes;
-        const ms = (msByRecord.get(r.id) ?? []).sort((a, b) => a.seq - b.seq);
-        const ev = evByRecord.get(r.id) ?? { earn_pct: 0, ern_qty: 0, earn_whrs: 0 };
-        return {
-          id: r.id,
-          rec_no: r.rec_no,
-          dwg: r.dwg,
-          rev: r.rev,
-          description: r.description,
-          uom: r.uom,
-          fld_qty: Number(r.fld_qty),
-          fld_whrs: Number(r.fld_whrs),
-          status: r.status,
-          discipline_id: r.discipline_id,
-          discipline_code: pd?.discipline_code ?? '',
-          discipline_name: pd?.display_name ?? '',
-          coa_code: coa?.code ?? '',
-          milestones: ms,
-          ...ev,
-        };
-      });
-    },
-  });
-}
 
 export function useRocMilestonesForDiscipline(disciplineId: string | null) {
   return useQuery({
