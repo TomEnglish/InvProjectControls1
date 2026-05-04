@@ -419,3 +419,366 @@ export function useProgressPeriods(projectId: string | null) {
     },
   });
 }
+
+// ─────────────────────────────────────────────────────────────────────
+// Phase 4 — canonical progress_records hooks. Live alongside the
+// audit_records-based hooks above during the per-page migration.
+// Audit hooks (useProgressRecords, useProjectSummary, ProgressRecord,
+// ProjectSummary) are removed in the Phase 4 wrap-up commit once every
+// consumer has switched over.
+// ─────────────────────────────────────────────────────────────────────
+
+export type ProgressRow = {
+  id: string;
+  project_id: string;
+  discipline_id: string | null;
+  discipline_code: string | null;
+  discipline_name: string | null;
+  iwp_id: string | null;
+  iwp_name: string | null;
+  record_no: number | null;
+  source_type: string;
+  dwg: string | null;
+  rev: string | null;
+  description: string;
+  uom: string;
+  budget_qty: number | null;
+  actual_qty: number | null;
+  earned_qty: number | null;
+  budget_hrs: number;
+  actual_hrs: number;
+  earned_hrs: number;
+  percent_complete: number;
+  status: string;
+  foreman_user_id: string | null;
+  foreman_name: string | null;
+  attr_type: string | null;
+  attr_size: string | null;
+  attr_spec: string | null;
+  line_area: string | null;
+  milestones: { seq: number; value: number }[];
+  earn_pct: number;
+};
+
+export function useProgressRows(projectId: string | null) {
+  return useQuery({
+    queryKey: ['progress-rows', projectId] as const,
+    enabled: !!projectId,
+    queryFn: async (): Promise<ProgressRow[]> => {
+      type RawRow = {
+        id: string;
+        project_id: string;
+        discipline_id: string | null;
+        iwp_id: string | null;
+        record_no: number | null;
+        source_type: string;
+        dwg: string | null;
+        rev: string | null;
+        description: string;
+        uom: string;
+        budget_qty: number | string | null;
+        actual_qty: number | string | null;
+        earned_qty: number | string | null;
+        budget_hrs: number | string;
+        actual_hrs: number | string;
+        earned_hrs: number | string;
+        percent_complete: number | string;
+        status: string;
+        foreman_user_id: string | null;
+        foreman_name: string | null;
+        attr_type: string | null;
+        attr_size: string | null;
+        attr_spec: string | null;
+        line_area: string | null;
+        project_disciplines: { discipline_code: string; display_name: string } | null;
+        iwps: { name: string } | null;
+      };
+
+      const [recordsRes, msRes, evRes] = await Promise.all([
+        supabase
+          .from('progress_records')
+          .select(
+            'id, project_id, discipline_id, iwp_id, record_no, source_type, dwg, rev, description, uom, ' +
+              'budget_qty, actual_qty, earned_qty, budget_hrs, actual_hrs, earned_hrs, percent_complete, status, ' +
+              'foreman_user_id, foreman_name, attr_type, attr_size, attr_spec, line_area, ' +
+              'project_disciplines(discipline_code, display_name), iwps(name)',
+          )
+          .eq('project_id', projectId!)
+          .order('dwg', { nullsFirst: false }),
+        supabase
+          .from('progress_record_milestones')
+          .select('progress_record_id, seq, value'),
+        supabase
+          .from('v_progress_record_ev')
+          .select('record_id, earn_pct')
+          .eq('project_id', projectId!),
+      ]);
+
+      if (recordsRes.error) throw recordsRes.error;
+      if (msRes.error) throw msRes.error;
+      if (evRes.error) throw evRes.error;
+
+      const msByRecord = new Map<string, { seq: number; value: number }[]>();
+      for (const row of (msRes.data ?? []) as { progress_record_id: string; seq: number; value: number | string }[]) {
+        const arr = msByRecord.get(row.progress_record_id) ?? [];
+        arr.push({ seq: row.seq, value: Number(row.value) });
+        msByRecord.set(row.progress_record_id, arr);
+      }
+
+      const evByRecord = new Map<string, number>();
+      for (const row of (evRes.data ?? []) as { record_id: string; earn_pct: number | string }[]) {
+        evByRecord.set(row.record_id, Number(row.earn_pct));
+      }
+
+      const rawRows = (recordsRes.data ?? []) as unknown as RawRow[];
+      return rawRows.map((r) => {
+        const ms = (msByRecord.get(r.id) ?? []).sort((a, b) => a.seq - b.seq);
+        return {
+          id: r.id,
+          project_id: r.project_id,
+          discipline_id: r.discipline_id,
+          discipline_code: r.project_disciplines?.discipline_code ?? null,
+          discipline_name: r.project_disciplines?.display_name ?? null,
+          iwp_id: r.iwp_id,
+          iwp_name: r.iwps?.name ?? null,
+          record_no: r.record_no,
+          source_type: r.source_type,
+          dwg: r.dwg,
+          rev: r.rev,
+          description: r.description,
+          uom: r.uom,
+          budget_qty: r.budget_qty != null ? Number(r.budget_qty) : null,
+          actual_qty: r.actual_qty != null ? Number(r.actual_qty) : null,
+          earned_qty: r.earned_qty != null ? Number(r.earned_qty) : null,
+          budget_hrs: Number(r.budget_hrs),
+          actual_hrs: Number(r.actual_hrs),
+          earned_hrs: Number(r.earned_hrs),
+          percent_complete: Number(r.percent_complete),
+          status: r.status,
+          foreman_user_id: r.foreman_user_id,
+          foreman_name: r.foreman_name,
+          attr_type: r.attr_type,
+          attr_size: r.attr_size,
+          attr_spec: r.attr_spec,
+          line_area: r.line_area,
+          milestones: ms,
+          earn_pct: evByRecord.get(r.id) ?? Number(r.percent_complete) / 100,
+        };
+      });
+    },
+  });
+}
+
+export type ProjectMetrics = {
+  project_id: string;
+  total_records: number;
+  total_budget_hrs: number;
+  total_earned_hrs: number;
+  total_actual_hrs: number;
+  percent_complete: number;
+  cpi: number | null;
+  spi: number | null;
+  sv: number;
+};
+
+export function useProjectMetrics(projectId: string | null) {
+  return useQuery({
+    queryKey: ['project-metrics', projectId] as const,
+    enabled: !!projectId,
+    queryFn: async (): Promise<ProjectMetrics | null> => {
+      const { data, error } = await supabase.rpc('project_metrics', { p_project_id: projectId });
+      if (error) throw error;
+      const row = Array.isArray(data) ? data[0] : data;
+      if (!row) return null;
+      return {
+        project_id: row.project_id,
+        total_records: Number(row.total_records),
+        total_budget_hrs: Number(row.total_budget_hrs),
+        total_earned_hrs: Number(row.total_earned_hrs),
+        total_actual_hrs: Number(row.total_actual_hrs),
+        percent_complete: Number(row.percent_complete),
+        cpi: row.cpi != null ? Number(row.cpi) : null,
+        spi: row.spi != null ? Number(row.spi) : null,
+        sv: Number(row.sv),
+      };
+    },
+  });
+}
+
+export type DisciplineMetric = {
+  discipline_id: string;
+  discipline_code: string;
+  display_name: string;
+  records: number;
+  budget_hrs: number;
+  earned_hrs: number;
+  actual_hrs: number;
+  earned_pct: number;
+  cpi: number | null;
+};
+
+export function useDisciplineMetrics(projectId: string | null) {
+  return useQuery({
+    queryKey: ['discipline-metrics', projectId] as const,
+    enabled: !!projectId,
+    queryFn: async (): Promise<DisciplineMetric[]> => {
+      const { data, error } = await supabase.rpc('discipline_metrics', { p_project_id: projectId });
+      if (error) throw error;
+      return (data ?? []).map((r: Record<string, unknown>) => ({
+        discipline_id: r.discipline_id as string,
+        discipline_code: r.discipline_code as string,
+        display_name: r.display_name as string,
+        records: Number(r.records),
+        budget_hrs: Number(r.budget_hrs),
+        earned_hrs: Number(r.earned_hrs),
+        actual_hrs: Number(r.actual_hrs),
+        earned_pct: Number(r.earned_pct),
+        cpi: r.cpi != null ? Number(r.cpi) : null,
+      }));
+    },
+  });
+}
+
+export type ProjectQtyRollup = {
+  composite_pct: number;
+  mode: 'hours_weighted' | 'equal' | 'custom';
+};
+
+export function useProjectQtyRollup(projectId: string | null) {
+  return useQuery({
+    queryKey: ['project-qty-rollup', projectId] as const,
+    enabled: !!projectId,
+    queryFn: async (): Promise<ProjectQtyRollup | null> => {
+      const { data, error } = await supabase.rpc('project_qty_rollup', { p_project_id: projectId });
+      if (error) throw error;
+      const row = Array.isArray(data) ? data[0] : data;
+      if (!row) return null;
+      return {
+        composite_pct: Number(row.composite_pct),
+        mode: row.mode as ProjectQtyRollup['mode'],
+      };
+    },
+  });
+}
+
+export type Snapshot = {
+  id: string;
+  kind: 'weekly' | 'baseline_first_audit';
+  snapshot_date: string;
+  week_ending: string | null;
+  label: string;
+  total_budget_hrs: number | null;
+  total_earned_hrs: number | null;
+  total_actual_hrs: number | null;
+  cpi: number | null;
+  spi: number | null;
+};
+
+export function useSnapshots(projectId: string | null) {
+  return useQuery({
+    queryKey: ['snapshots', projectId] as const,
+    enabled: !!projectId,
+    queryFn: async (): Promise<Snapshot[]> => {
+      const { data, error } = await supabase.rpc('list_snapshots', { p_project_id: projectId });
+      if (error) throw error;
+      return (data ?? []).map((r: Record<string, unknown>) => ({
+        id: r.id as string,
+        kind: r.kind as Snapshot['kind'],
+        snapshot_date: r.snapshot_date as string,
+        week_ending: (r.week_ending as string | null) ?? null,
+        label: r.label as string,
+        total_budget_hrs: r.total_budget_hrs != null ? Number(r.total_budget_hrs) : null,
+        total_earned_hrs: r.total_earned_hrs != null ? Number(r.total_earned_hrs) : null,
+        total_actual_hrs: r.total_actual_hrs != null ? Number(r.total_actual_hrs) : null,
+        cpi: r.cpi != null ? Number(r.cpi) : null,
+        spi: r.spi != null ? Number(r.spi) : null,
+      }));
+    },
+  });
+}
+
+export type SnapshotComparisonRow = {
+  progress_record_id: string;
+  dwg: string | null;
+  description: string;
+  pct_a: number;
+  pct_b: number;
+  delta_pct: number;
+  earned_hrs_a: number;
+  earned_hrs_b: number;
+  delta_earned_hrs: number;
+};
+
+export function useSnapshotComparison(
+  projectId: string | null,
+  snapshotA: string | null,
+  snapshotB: string | null,
+) {
+  return useQuery({
+    queryKey: ['snapshot-comparison', projectId, snapshotA, snapshotB] as const,
+    enabled: !!projectId && !!snapshotA && !!snapshotB,
+    queryFn: async (): Promise<SnapshotComparisonRow[]> => {
+      const { data, error } = await supabase.rpc('period_comparison', {
+        p_project_id: projectId,
+        p_snapshot_a: snapshotA,
+        p_snapshot_b: snapshotB,
+      });
+      if (error) throw error;
+      return (data ?? []).map((r: Record<string, unknown>) => ({
+        progress_record_id: r.progress_record_id as string,
+        dwg: (r.dwg as string | null) ?? null,
+        description: r.description as string,
+        pct_a: Number(r.pct_a),
+        pct_b: Number(r.pct_b),
+        delta_pct: Number(r.delta_pct),
+        earned_hrs_a: Number(r.earned_hrs_a),
+        earned_hrs_b: Number(r.earned_hrs_b),
+        delta_earned_hrs: Number(r.delta_earned_hrs),
+      }));
+    },
+  });
+}
+
+export type Iwp = {
+  id: string;
+  project_id: string;
+  discipline_id: string | null;
+  name: string;
+};
+
+export function useIwps(projectId: string | null) {
+  return useQuery({
+    queryKey: ['iwps', projectId] as const,
+    enabled: !!projectId,
+    queryFn: async (): Promise<Iwp[]> => {
+      const { data, error } = await supabase
+        .from('iwps')
+        .select('id, project_id, discipline_id, name')
+        .eq('project_id', projectId!)
+        .order('name');
+      if (error) throw error;
+      return (data ?? []) as Iwp[];
+    },
+  });
+}
+
+export type ForemanAlias = {
+  tenant_id: string;
+  name: string;
+  user_id: string;
+  created_at: string;
+};
+
+export function useForemanAliases() {
+  return useQuery({
+    queryKey: ['foreman-aliases'] as const,
+    queryFn: async (): Promise<ForemanAlias[]> => {
+      const { data, error } = await supabase
+        .from('foreman_aliases')
+        .select('tenant_id, name, user_id, created_at')
+        .order('name');
+      if (error) throw error;
+      return (data ?? []) as ForemanAlias[];
+    },
+  });
+}
