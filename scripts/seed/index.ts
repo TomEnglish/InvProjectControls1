@@ -228,6 +228,7 @@ async function main() {
       status: 'draft',
       start_date: '2026-01-15',
       end_date: '2026-12-31',
+      qty_rollup_mode: 'custom',
     },
     {
       project_code: 'KIS-2026-002',
@@ -303,6 +304,27 @@ async function main() {
     disciplineIds[d.code] = data.id;
   }
   console.log(`  project_disciplines: ${discSpec.length}`);
+
+  // --- 6b. Project discipline weights (custom rollup mode)
+  const weightRows = [
+    { code: 'CIVIL', weight: 0.15 },
+    { code: 'PIPE', weight: 0.35 },
+    { code: 'STEEL', weight: 0.10 },
+    { code: 'ELEC', weight: 0.20 },
+    { code: 'MECH', weight: 0.10 },
+    { code: 'INST', weight: 0.08 },
+    { code: 'SITE', weight: 0.02 },
+  ].map((w) => ({
+    tenant_id: tenantId,
+    project_id: projectIds['KIS-2026-001']!,
+    discipline_id: disciplineIds[w.code]!,
+    weight: w.weight,
+  }));
+  const { error: wErr } = await sb
+    .from('project_discipline_weights')
+    .upsert(weightRows, { onConflict: 'project_id,discipline_id' });
+  if (wErr) throw wErr;
+  console.log(`  project_discipline_weights: ${weightRows.length}`);
 
   // --- 7. Sample audit records (10)
   const { data: coaRows } = await sb.from('coa_codes').select('id, code').eq('tenant_id', tenantId);
@@ -453,6 +475,274 @@ async function main() {
     { onConflict: 'project_id,period_number' },
   );
   console.log('  progress_periods: 2 (one locked, one open)');
+
+  // --- 11. IWPs (canonical work-package grouping)
+  const iwpSpec: { name: string; discipline: keyof typeof disciplineIds }[] = [
+    { name: 'IWP-CIVIL-001', discipline: 'CIVIL' },
+    { name: 'IWP-PIPE-001', discipline: 'PIPE' },
+    { name: 'IWP-PIPE-002', discipline: 'PIPE' },
+    { name: 'IWP-STEEL-001', discipline: 'STEEL' },
+    { name: 'IWP-ELEC-001', discipline: 'ELEC' },
+    { name: 'IWP-MECH-001', discipline: 'MECH' },
+  ];
+  const iwpIds: Record<string, string> = {};
+  for (const i of iwpSpec) {
+    const { data, error } = await sb
+      .from('iwps')
+      .upsert(
+        {
+          tenant_id: tenantId,
+          project_id: projectIds['KIS-2026-001']!,
+          discipline_id: disciplineIds[i.discipline]!,
+          name: i.name,
+        },
+        { onConflict: 'project_id,name' },
+      )
+      .select('id')
+      .single();
+    if (error) throw error;
+    iwpIds[i.name] = data.id;
+  }
+  console.log(`  iwps: ${iwpSpec.length}`);
+
+  // --- 12. Foreman aliases — link two of the three names; leave Carlos Diaz
+  // unmatched so the Foreman Aliases card on Project Setup has a row to
+  // demonstrate the linking flow.
+  const foremanLinkSpec: { name: string; userId: string }[] = [];
+  foremanLinkSpec.push({ name: 'Alice Chen', userId: superAdminId });
+  if (uatAdminId) foremanLinkSpec.push({ name: 'Bob Carter', userId: uatAdminId });
+  for (const f of foremanLinkSpec) {
+    await sb
+      .from('foreman_aliases')
+      .upsert(
+        { tenant_id: tenantId, name: f.name, user_id: f.userId, created_by: superAdminId },
+        { onConflict: 'tenant_id,name' },
+      );
+  }
+  console.log(`  foreman_aliases: ${foremanLinkSpec.length} linked (Carlos Diaz left unmatched)`);
+
+  // --- 13. Progress records (canonical) — 28 records spanning all 7
+  // disciplines, mixed completion levels, three foremen, four line areas.
+  type RecSpec = {
+    rec: number;
+    dwg: string;
+    desc: string;
+    disc: 'CIVIL' | 'PIPE' | 'STEEL' | 'ELEC' | 'MECH' | 'INST' | 'SITE';
+    iwp?: string;
+    uom: 'LF' | 'CY' | 'EA' | 'TONS' | 'SF' | 'HR' | 'LS';
+    bq: number;
+    bh: number;
+    ah: number;
+    pct: number;
+    foreman: string;
+    area: string;
+    type?: string;
+    size?: string;
+    spec?: string;
+  };
+  const progressSpec: RecSpec[] = [
+    // CIVIL
+    { rec: 1, dwg: 'C-1001', desc: 'Foundation pad A-101', disc: 'CIVIL', iwp: 'IWP-CIVIL-001', uom: 'CY', bq: 45, bh: 380, ah: 360, pct: 95, foreman: 'Alice Chen', area: 'Unit 1', type: 'Pad' },
+    { rec: 2, dwg: 'C-1002', desc: 'Pile cap B-201', disc: 'CIVIL', iwp: 'IWP-CIVIL-001', uom: 'CY', bq: 28, bh: 240, ah: 195, pct: 75, foreman: 'Alice Chen', area: 'Unit 1' },
+    { rec: 3, dwg: 'C-1003', desc: 'Backfill area Y', disc: 'CIVIL', uom: 'CY', bq: 120, bh: 504, ah: 220, pct: 40, foreman: 'Bob Carter', area: 'Tank Farm' },
+    { rec: 4, dwg: 'C-1004', desc: 'Equipment pad C-301', disc: 'CIVIL', iwp: 'IWP-CIVIL-001', uom: 'CY', bq: 62, bh: 525, ah: 510, pct: 100, foreman: 'Alice Chen', area: 'Equipment Yard' },
+    // PIPE
+    { rec: 5, dwg: 'P-2001', desc: '2" CS Line 2001-A', disc: 'PIPE', iwp: 'IWP-PIPE-001', uom: 'LF', bq: 320, bh: 770, ah: 600, pct: 80, foreman: 'Alice Chen', area: 'Unit 1', type: 'Pipe', size: '2"', spec: 'CS150' },
+    { rec: 6, dwg: 'P-2002', desc: '6" CS Line 2002-B', disc: 'PIPE', iwp: 'IWP-PIPE-001', uom: 'LF', bq: 180, bh: 432, ah: 280, pct: 60, foreman: 'Bob Carter', area: 'Unit 2', type: 'Pipe', size: '6"', spec: 'CS150' },
+    { rec: 7, dwg: 'P-2003', desc: '8" CS Line 2003-C', disc: 'PIPE', iwp: 'IWP-PIPE-002', uom: 'LF', bq: 95, bh: 342, ah: 100, pct: 25, foreman: 'Carlos Diaz', area: 'Pipe Rack', type: 'Pipe', size: '8"', spec: 'CS150' },
+    { rec: 8, dwg: 'P-2004', desc: 'Alloy Line 4-X', disc: 'PIPE', iwp: 'IWP-PIPE-002', uom: 'LF', bq: 60, bh: 312, ah: 305, pct: 100, foreman: 'Bob Carter', area: 'Pipe Rack', type: 'Pipe', size: '4"', spec: 'A312' },
+    { rec: 9, dwg: 'P-2005', desc: '4" CS Tie-in', disc: 'PIPE', iwp: 'IWP-PIPE-002', uom: 'LF', bq: 50, bh: 120, ah: 0, pct: 0, foreman: 'Carlos Diaz', area: 'Unit 1', type: 'Pipe', size: '4"', spec: 'CS150' },
+    { rec: 10, dwg: 'P-2006', desc: '2" CS Drain', disc: 'PIPE', iwp: 'IWP-PIPE-001', uom: 'LF', bq: 40, bh: 96, ah: 50, pct: 50, foreman: 'Alice Chen', area: 'Unit 2', type: 'Pipe', size: '2"', spec: 'CS150' },
+    // STEEL
+    { rec: 11, dwg: 'S-3001', desc: 'Platform L3 Steel', disc: 'STEEL', iwp: 'IWP-STEEL-001', uom: 'TONS', bq: 12.5, bh: 350, ah: 250, pct: 70, foreman: 'Alice Chen', area: 'Pipe Rack' },
+    { rec: 12, dwg: 'S-3002', desc: 'Beam W14x30', disc: 'STEEL', iwp: 'IWP-STEEL-001', uom: 'TONS', bq: 8, bh: 224, ah: 220, pct: 100, foreman: 'Bob Carter', area: 'Tank Farm' },
+    { rec: 13, dwg: 'S-3003', desc: 'Handrails Unit 1', disc: 'STEEL', uom: 'LF', bq: 250, bh: 175, ah: 60, pct: 30, foreman: 'Carlos Diaz', area: 'Unit 1' },
+    // ELEC
+    { rec: 14, dwg: 'E-4001', desc: 'Cable Tray Run CT-101', disc: 'ELEC', iwp: 'IWP-ELEC-001', uom: 'LF', bq: 450, bh: 630, ah: 410, pct: 60, foreman: 'Bob Carter', area: 'Unit 1' },
+    { rec: 15, dwg: 'E-4002', desc: 'Conduit run 4002', disc: 'ELEC', iwp: 'IWP-ELEC-001', uom: 'LF', bq: 200, bh: 170, ah: 165, pct: 90, foreman: 'Alice Chen', area: 'Unit 2' },
+    { rec: 16, dwg: 'E-4003', desc: 'Cable Pull MCC-1', disc: 'ELEC', uom: 'LF', bq: 800, bh: 1120, ah: 420, pct: 35, foreman: 'Carlos Diaz', area: 'Equipment Yard' },
+    { rec: 17, dwg: 'E-4004', desc: 'Lighting circuit', disc: 'ELEC', uom: 'EA', bq: 24, bh: 96, ah: 0, pct: 0, foreman: 'Bob Carter', area: 'Unit 1' },
+    // MECH
+    { rec: 18, dwg: 'M-5001', desc: 'Pump P-101', disc: 'MECH', iwp: 'IWP-MECH-001', uom: 'EA', bq: 1, bh: 50, ah: 42, pct: 80, foreman: 'Alice Chen', area: 'Unit 1', type: 'Pump', spec: 'API610' },
+    { rec: 19, dwg: 'M-5002', desc: 'Heat Exchanger E-101', disc: 'MECH', iwp: 'IWP-MECH-001', uom: 'EA', bq: 1, bh: 65, ah: 18, pct: 25, foreman: 'Bob Carter', area: 'Tank Farm', type: 'Heat Exchanger' },
+    { rec: 20, dwg: 'M-5003', desc: 'Compressor C-201', disc: 'MECH', uom: 'EA', bq: 1, bh: 140, ah: 0, pct: 0, foreman: 'Carlos Diaz', area: 'Equipment Yard', type: 'Compressor', spec: 'API618' },
+    // INST
+    { rec: 21, dwg: 'I-6001', desc: 'FT-101 Flow Trans.', disc: 'INST', uom: 'EA', bq: 1, bh: 7.5, ah: 7.0, pct: 100, foreman: 'Alice Chen', area: 'Unit 1', type: 'Transmitter' },
+    { rec: 22, dwg: 'I-6002', desc: 'PT-102 Pressure Trans.', disc: 'INST', uom: 'EA', bq: 1, bh: 6.5, ah: 6.2, pct: 100, foreman: 'Bob Carter', area: 'Unit 1', type: 'Transmitter' },
+    { rec: 23, dwg: 'I-6003', desc: 'LT-103 Level Trans.', disc: 'INST', uom: 'EA', bq: 1, bh: 8, ah: 4.0, pct: 50, foreman: 'Carlos Diaz', area: 'Tank Farm', type: 'Transmitter' },
+    { rec: 24, dwg: 'I-6004', desc: 'TT-104 Temp Trans.', disc: 'INST', uom: 'EA', bq: 1, bh: 6, ah: 0, pct: 0, foreman: 'Alice Chen', area: 'Unit 2', type: 'Transmitter' },
+    // SITE
+    { rec: 25, dwg: 'ST-001', desc: 'Survey Area 1', disc: 'SITE', uom: 'LS', bq: 1, bh: 80, ah: 78, pct: 100, foreman: 'Bob Carter', area: 'Unit 1' },
+    { rec: 26, dwg: 'ST-002', desc: 'Pavement Section A', disc: 'SITE', uom: 'SF', bq: 5000, bh: 425, ah: 280, pct: 65, foreman: 'Alice Chen', area: 'Equipment Yard' },
+    { rec: 27, dwg: 'ST-003', desc: 'Drainage culvert', disc: 'SITE', uom: 'LF', bq: 120, bh: 120, ah: 30, pct: 20, foreman: 'Carlos Diaz', area: 'Tank Farm' },
+    { rec: 28, dwg: 'ST-004', desc: 'Final landscaping', disc: 'SITE', uom: 'LS', bq: 1, bh: 200, ah: 0, pct: 0, foreman: 'Bob Carter', area: 'Unit 1' },
+  ];
+
+  // Wipe prior seed-generated rows so re-running is idempotent. Order
+  // matters: snapshots cascade to snapshot_items first; then records cascade
+  // to milestones (snapshot_items would otherwise restrict the record drop).
+  await sb
+    .from('progress_snapshots')
+    .delete()
+    .eq('project_id', projectIds['KIS-2026-001']!)
+    .eq('source_filename', 'seed.ts');
+  await sb
+    .from('progress_records')
+    .delete()
+    .eq('project_id', projectIds['KIS-2026-001']!)
+    .eq('source_type', 'seed');
+
+  // Foreman name → user_id lookup for auto-link during insert.
+  const foremanByName = new Map<string, string>();
+  for (const f of foremanLinkSpec) foremanByName.set(f.name.toLowerCase(), f.userId);
+
+  // ROC weights + labels per discipline (pulled from rocSpec defined earlier).
+  const rocByDiscipline = new Map<string, { weights: number[]; labels: string[] }>();
+  for (const r of rocSpec) rocByDiscipline.set(r.discipline_code, { weights: r.weights, labels: r.milestones });
+
+  // Distribute a percent_complete across 8 milestones in declared order:
+  // earlier milestones complete first, the next milestone is partial,
+  // remaining are 0. Σ(value × weight) = percent_complete (fraction).
+  function distributeProgress(percentComplete: number, weights: number[]): number[] {
+    const target = Math.max(0, Math.min(100, percentComplete)) / 100;
+    const out: number[] = [];
+    let cumulative = 0;
+    for (const w of weights) {
+      if (w <= 0) {
+        out.push(0);
+        continue;
+      }
+      const remaining = Math.max(0, target - cumulative);
+      const earnedFraction = Math.min(1, remaining / w);
+      out.push(Math.round(earnedFraction * 100));
+      cumulative += w * earnedFraction;
+    }
+    return out;
+  }
+
+  const recordRows = progressSpec.map((s) => ({
+    tenant_id: tenantId,
+    project_id: projectIds['KIS-2026-001']!,
+    discipline_id: disciplineIds[s.disc]!,
+    iwp_id: s.iwp ? iwpIds[s.iwp]! : null,
+    record_no: s.rec,
+    source_type: 'seed',
+    source_filename: 'seed.ts',
+    dwg: s.dwg,
+    rev: '1',
+    description: s.desc,
+    uom: s.uom,
+    budget_qty: s.bq,
+    actual_qty: null,
+    budget_hrs: s.bh,
+    actual_hrs: s.ah,
+    percent_complete: s.pct,
+    status: s.pct >= 100 ? 'complete' : 'active',
+    foreman_name: s.foreman,
+    foreman_user_id: foremanByName.get(s.foreman.toLowerCase()) ?? null,
+    attr_type: s.type ?? null,
+    attr_size: s.size ?? null,
+    attr_spec: s.spec ?? null,
+    line_area: s.area,
+  }));
+
+  const { data: insertedRecords, error: recErr } = await sb
+    .from('progress_records')
+    .insert(recordRows)
+    .select('id');
+  if (recErr) throw recErr;
+  console.log(`  progress_records: ${recordRows.length}`);
+
+  // Milestone rows — 8 per record, distributed by ROC template weights.
+  const fallbackWeights = [0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125];
+  const milestoneRows: Record<string, unknown>[] = [];
+  progressSpec.forEach((s, i) => {
+    const recId = insertedRecords![i]!.id;
+    const roc = rocByDiscipline.get(s.disc) ?? { weights: fallbackWeights, labels: [] };
+    const values = distributeProgress(s.pct, roc.weights);
+    for (let seq = 1; seq <= 8; seq++) {
+      milestoneRows.push({
+        tenant_id: tenantId,
+        progress_record_id: recId,
+        seq,
+        label: roc.labels[seq - 1] ?? null,
+        value: values[seq - 1] ?? 0,
+      });
+    }
+  });
+  const { error: msErr } = await sb
+    .from('progress_record_milestones')
+    .upsert(milestoneRows, { onConflict: 'progress_record_id,seq' });
+  if (msErr) throw msErr;
+  console.log(`  progress_record_milestones: ${milestoneRows.length}`);
+
+  // --- 14. Progress snapshots — first-audit baseline + 3 weekly captures
+  // with diminishing percent offsets so the comparison view has meaningful
+  // drift to render.
+  type SnapshotSpec = {
+    kind: 'weekly' | 'baseline_first_audit';
+    weekEnding: string | null;
+    label: string;
+    pctOffset: number;
+  };
+  const snapshotSpec: SnapshotSpec[] = [
+    { kind: 'baseline_first_audit', weekEnding: '2026-01-15', label: 'First-audit baseline', pctOffset: 100 },
+    { kind: 'weekly', weekEnding: '2026-04-12', label: 'Week ending 12 Apr', pctOffset: 30 },
+    { kind: 'weekly', weekEnding: '2026-04-19', label: 'Week ending 19 Apr', pctOffset: 15 },
+    { kind: 'weekly', weekEnding: '2026-04-26', label: 'Week ending 26 Apr', pctOffset: 5 },
+  ];
+
+  for (const sn of snapshotSpec) {
+    const itemPcts = progressSpec.map((s) => Math.max(0, s.pct - sn.pctOffset));
+    const totalBudgetHrs = progressSpec.reduce((acc, s) => acc + s.bh, 0);
+    const totalEarnedHrs = progressSpec.reduce(
+      (acc, s, i) => acc + s.bh * (itemPcts[i]! / 100),
+      0,
+    );
+    const actualScale = Math.max(0, 1 - sn.pctOffset / 100);
+    const totalActualHrs = progressSpec.reduce((acc, s) => acc + s.ah * actualScale, 0);
+
+    const { data: snap, error: snErr } = await sb
+      .from('progress_snapshots')
+      .insert({
+        tenant_id: tenantId,
+        project_id: projectIds['KIS-2026-001']!,
+        kind: sn.kind,
+        week_ending: sn.weekEnding,
+        label: sn.label,
+        total_budget_hrs: totalBudgetHrs,
+        total_earned_hrs: totalEarnedHrs,
+        total_actual_hrs: totalActualHrs,
+        cpi: totalActualHrs > 0 ? totalEarnedHrs / totalActualHrs : null,
+        spi: totalBudgetHrs > 0 ? totalEarnedHrs / totalBudgetHrs : null,
+        source_filename: 'seed.ts',
+        uploaded_by: superAdminId,
+      })
+      .select('id')
+      .single();
+    if (snErr) throw snErr;
+
+    const itemRows = progressSpec.map((s, i) => {
+      const pct = itemPcts[i]!;
+      const earnedFrac = pct / 100;
+      return {
+        snapshot_id: snap.id,
+        progress_record_id: insertedRecords![i]!.id,
+        tenant_id: tenantId,
+        project_id: projectIds['KIS-2026-001']!,
+        percent_complete: pct,
+        earned_hrs: s.bh * earnedFrac,
+        earned_qty: s.bq * earnedFrac,
+        actual_hrs: s.ah * actualScale,
+        actual_qty: null,
+      };
+    });
+    const { error: itemErr } = await sb.from('progress_snapshot_items').insert(itemRows);
+    if (itemErr) throw itemErr;
+  }
+  console.log(
+    `  progress_snapshots: ${snapshotSpec.length} (with ${progressSpec.length * snapshotSpec.length} items)`,
+  );
 
   if (mode === 'stress') {
     console.log('→ Stress mode — synthesizing extra audit records…');
