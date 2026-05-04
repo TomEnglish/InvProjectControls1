@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Search } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useProjectStore } from '@/stores/project';
-import { useProgressRecords, useCurrentUser, hasRole } from '@/lib/queries';
+import { useProgressRows, useIwps, useCurrentUser, hasRole } from '@/lib/queries';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { inputClass } from '@/components/ui/FormField';
@@ -27,11 +27,14 @@ export function ProgressPage() {
   const { data: me } = useCurrentUser();
   const canAddRecord = hasRole(me?.role, 'editor');
   const [discFilter, setDiscFilter] = useState<string>('All');
+  const [iwpFilter, setIwpFilter] = useState<string>('All');
+  const [foremanFilter, setForemanFilter] = useState<string>('All');
   const [search, setSearch] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [newRecordOpen, setNewRecordOpen] = useState(false);
 
-  const { data: records, isLoading, error } = useProgressRecords(projectId);
+  const { data: records, isLoading, error } = useProgressRows(projectId);
+  const { data: iwps } = useIwps(projectId);
 
   const { data: disciplines } = useQuery({
     queryKey: ['project-disciplines-simple', projectId] as const,
@@ -47,15 +50,28 @@ export function ProgressPage() {
     },
   });
 
+  // Distinct foreman names present in current records.
+  const foremen = useMemo(() => {
+    const set = new Set<string>();
+    for (const r of records ?? []) if (r.foreman_name) set.add(r.foreman_name);
+    return Array.from(set).sort();
+  }, [records]);
+
   const filtered = useMemo(() => {
     const all = records ?? [];
     const q = search.trim().toLowerCase();
     return all.filter((r) => {
       if (discFilter !== 'All' && r.discipline_code !== discFilter) return false;
+      if (iwpFilter !== 'All' && r.iwp_id !== iwpFilter) return false;
+      if (foremanFilter !== 'All' && r.foreman_name !== foremanFilter) return false;
       if (!q) return true;
-      return r.dwg.toLowerCase().includes(q) || r.description.toLowerCase().includes(q);
+      return (
+        (r.dwg ?? '').toLowerCase().includes(q) ||
+        r.description.toLowerCase().includes(q) ||
+        (r.line_area ?? '').toLowerCase().includes(q)
+      );
     });
-  }, [records, discFilter, search]);
+  }, [records, discFilter, iwpFilter, foremanFilter, search]);
 
   const selected = filtered.find((r) => r.id === selectedId) ?? null;
 
@@ -95,6 +111,32 @@ export function ProgressPage() {
               </option>
             ))}
           </select>
+          <select
+            aria-label="IWP filter"
+            className={inputClass}
+            value={iwpFilter}
+            onChange={(e) => setIwpFilter(e.target.value)}
+          >
+            <option value="All">All IWPs</option>
+            {iwps?.map((i) => (
+              <option key={i.id} value={i.id}>
+                {i.name}
+              </option>
+            ))}
+          </select>
+          <select
+            aria-label="Foreman filter"
+            className={inputClass}
+            value={foremanFilter}
+            onChange={(e) => setForemanFilter(e.target.value)}
+          >
+            <option value="All">All Foremen</option>
+            {foremen.map((f) => (
+              <option key={f} value={f}>
+                {f}
+              </option>
+            ))}
+          </select>
           <div className="relative">
             <Search
               size={14}
@@ -102,7 +144,7 @@ export function ProgressPage() {
             />
             <input
               className={`${inputClass} pl-8 w-64`}
-              placeholder="Search DWG, description…"
+              placeholder="Search DWG, description, line area…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
@@ -116,9 +158,6 @@ export function ProgressPage() {
           >
             + New Record
           </Button>
-          <Button variant="outline" disabled>
-            Import IFC Qty
-          </Button>
           <Button
             variant="outline"
             disabled={filtered.length === 0}
@@ -130,10 +169,12 @@ export function ProgressPage() {
                   'DWG',
                   'Rev',
                   'Discipline',
+                  'IWP',
+                  'Foreman',
                   'Description',
                   'UOM',
-                  'FLD QTY',
-                  'FLD WHRS',
+                  'Budget Qty',
+                  'Budget Hrs',
                   'M1',
                   'M2',
                   'M3',
@@ -143,25 +184,25 @@ export function ProgressPage() {
                   'M7',
                   'M8',
                   'Earn %',
-                  'ERN QTY',
-                  'EARN WHRS',
-                  'COA Code',
+                  'Earned Qty',
+                  'Earned Hrs',
                   'Status',
                 ],
                 filtered.map((r) => [
-                  r.rec_no,
-                  r.dwg,
-                  r.rev,
-                  r.discipline_name,
+                  r.record_no ?? '',
+                  r.dwg ?? '',
+                  r.rev ?? '',
+                  r.discipline_name ?? '',
+                  r.iwp_name ?? '',
+                  r.foreman_name ?? '',
                   r.description,
                   r.uom,
-                  r.fld_qty,
-                  r.fld_whrs,
+                  r.budget_qty ?? '',
+                  r.budget_hrs,
                   ...Array.from({ length: 8 }, (_, i) => r.milestones.find((m) => m.seq === i + 1)?.value ?? 0),
                   (r.earn_pct * 100).toFixed(1) + '%',
-                  r.ern_qty.toFixed(2),
-                  r.earn_whrs.toFixed(2),
-                  r.coa_code,
+                  r.earned_qty ?? '',
+                  r.earned_hrs.toFixed(2),
                   r.status,
                 ]),
               )

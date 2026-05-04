@@ -1,16 +1,16 @@
 import { fmt } from '@/lib/format';
-import type { ProgressRecord } from '@/lib/queries';
+import type { ProgressRow } from '@/lib/queries';
 
 type Props = {
-  records: ProgressRecord[];
+  records: ProgressRow[];
   selectedId: string | null;
   onSelect: (id: string) => void;
 };
 
 const headers = [
-  'Rec', 'DWG', 'Rev', 'Discipline', 'Description', 'FLD QTY', 'UOM', 'FLD WHRS',
+  'Rec', 'DWG', 'Rev', 'Discipline', 'IWP', 'Foreman', 'Description', 'Budget Qty', 'UOM', 'Budget Hrs',
   'M1', 'M2', 'M3', 'M4', 'M5', 'M6', 'M7', 'M8',
-  'Earn %', 'ERN QTY', 'EARN WHRS',
+  'Earn %', 'Earned Qty', 'Earned Hrs',
 ];
 
 export function ProgressTable({ records, selectedId, onSelect }: Props) {
@@ -40,24 +40,24 @@ export function ProgressTable({ records, selectedId, onSelect }: Props) {
                 key={r.id}
                 onClick={() => onSelect(r.id)}
                 className="cursor-pointer"
-                style={
-                  isSelected
-                    ? { background: 'var(--color-primary-soft)' }
-                    : undefined
-                }
+                style={isSelected ? { background: 'var(--color-primary-soft)' } : undefined}
               >
-                <td style={{ padding: '8px 10px' }} className="font-mono">{r.rec_no}</td>
-                <td style={{ padding: '8px 10px' }} className="font-mono font-semibold">{r.dwg}</td>
-                <td style={{ padding: '8px 10px' }}>{r.rev}</td>
-                <td style={{ padding: '8px 10px' }}>{r.discipline_name}</td>
+                <td style={{ padding: '8px 10px' }} className="font-mono">{r.record_no ?? '—'}</td>
+                <td style={{ padding: '8px 10px' }} className="font-mono font-semibold">{r.dwg ?? '—'}</td>
+                <td style={{ padding: '8px 10px' }}>{r.rev ?? '—'}</td>
+                <td style={{ padding: '8px 10px' }}>{r.discipline_name ?? '—'}</td>
+                <td style={{ padding: '8px 10px' }}>{r.iwp_name ?? '—'}</td>
+                <td style={{ padding: '8px 10px' }}>{r.foreman_name ?? '—'}</td>
                 <td style={{ padding: '8px 10px' }}>{r.description}</td>
-                <td style={{ padding: '8px 10px' }} className="text-right font-mono">{r.fld_qty.toFixed(1)}</td>
+                <td style={{ padding: '8px 10px' }} className="text-right font-mono">
+                  {r.budget_qty != null ? r.budget_qty.toFixed(1) : '—'}
+                </td>
                 <td style={{ padding: '8px 10px' }}>{r.uom}</td>
-                <td style={{ padding: '8px 10px' }} className="text-right font-mono">{r.fld_whrs.toFixed(1)}</td>
+                <td style={{ padding: '8px 10px' }} className="text-right font-mono">{r.budget_hrs.toFixed(1)}</td>
                 {Array.from({ length: 8 }, (_, i) => i + 1).map((seq) => {
                   const val = r.milestones.find((m) => m.seq === seq)?.value ?? 0;
                   const color =
-                    val >= 1
+                    val >= 100
                       ? 'var(--color-variance-favourable)'
                       : val > 0
                         ? 'var(--color-warn)'
@@ -68,22 +68,29 @@ export function ProgressTable({ records, selectedId, onSelect }: Props) {
                       style={{ padding: '8px 10px', color, fontSize: 12, textAlign: 'center' }}
                       className="font-mono"
                     >
-                      {val >= 1 ? '1.0' : val > 0 ? val.toFixed(1) : '—'}
+                      {val >= 100 ? '100' : val > 0 ? val.toFixed(0) : '—'}
                     </td>
                   );
                 })}
-                <td style={{ padding: '8px 10px', color: pctColor }} className="text-right font-mono font-semibold">
+                <td
+                  style={{ padding: '8px 10px', color: pctColor }}
+                  className="text-right font-mono font-semibold"
+                >
                   {fmt.pct(r.earn_pct)}
                 </td>
-                <td style={{ padding: '8px 10px' }} className="text-right font-mono">{r.ern_qty.toFixed(1)}</td>
-                <td style={{ padding: '8px 10px' }} className="text-right font-mono">{r.earn_whrs.toFixed(1)}</td>
+                <td style={{ padding: '8px 10px' }} className="text-right font-mono">
+                  {r.earned_qty != null ? r.earned_qty.toFixed(1) : '—'}
+                </td>
+                <td style={{ padding: '8px 10px' }} className="text-right font-mono">
+                  {r.earned_hrs.toFixed(1)}
+                </td>
               </tr>
             );
           })}
           {records.length === 0 && (
             <tr>
               <td
-                colSpan={19}
+                colSpan={headers.length}
                 className="text-center text-[color:var(--color-text-muted)]"
                 style={{ padding: '32px 16px' }}
               >

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { Modal } from '@/components/ui/Modal';
@@ -12,19 +12,6 @@ type Props = {
 };
 
 const UOMS = ['LF', 'CY', 'EA', 'TONS', 'SF', 'HR', 'LS'];
-
-type CoaCode = { id: string; prime: string; code: string; description: string; uom: string; pf_rate: number };
-
-/** Recommended prime per discipline — matches the seeded COA hierarchy. */
-const DISCIPLINE_TO_PRIME: Record<string, string> = {
-  CIVIL: '100',
-  PIPE: '200',
-  STEEL: '300',
-  ELEC: '400',
-  MECH: '500',
-  INST: '600',
-  SITE: '100',
-};
 
 export function NewRecordModal({ open, onClose, projectId }: Props) {
   const qc = useQueryClient();
@@ -44,67 +31,31 @@ export function NewRecordModal({ open, onClose, projectId }: Props) {
     },
   });
 
-  const { data: coaCodes } = useQuery({
-    queryKey: ['coa-codes'] as const,
+  const { data: iwps } = useQuery({
+    queryKey: ['iwps', projectId] as const,
     enabled: open,
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('coa_codes')
-        .select('id, prime, code, description, uom, pf_rate')
-        .order('code');
+        .from('iwps')
+        .select('id, name')
+        .eq('project_id', projectId)
+        .order('name');
       if (error) throw error;
-      return (data ?? []).map((c) => ({
-        id: c.id,
-        prime: c.prime,
-        code: c.code,
-        description: c.description,
-        uom: c.uom,
-        pf_rate: Number(c.pf_rate),
-      })) as CoaCode[];
+      return (data ?? []) as { id: string; name: string }[];
     },
   });
 
   const [form, setForm] = useState({
     discipline_id: '',
-    coa_code_id: '',
+    iwp_id: '',
     dwg: '',
     rev: '1',
     description: '',
     uom: 'EA' as string,
-    fld_qty: 0,
-    fld_whrs: 0,
-    fld_whrs_override: false,
+    budget_qty: 0,
+    budget_hrs: 0,
+    foreman_name: '',
   });
-
-  const selectedDiscipline = disciplines?.find((d) => d.id === form.discipline_id);
-  const recommendedPrime = selectedDiscipline
-    ? DISCIPLINE_TO_PRIME[selectedDiscipline.discipline_code] ?? null
-    : null;
-
-  const filteredCoa = useMemo(() => {
-    if (!coaCodes) return [];
-    if (!recommendedPrime) return coaCodes;
-    return coaCodes.filter((c) => c.prime === recommendedPrime);
-  }, [coaCodes, recommendedPrime]);
-
-  const selectedCoa = coaCodes?.find((c) => c.id === form.coa_code_id);
-
-  // Auto-fill UOM + computed whrs when COA or qty changes (unless user overrode).
-  useEffect(() => {
-    if (!selectedCoa) return;
-    setForm((f) => ({
-      ...f,
-      uom: selectedCoa.uom,
-      fld_whrs: f.fld_whrs_override ? f.fld_whrs : f.fld_qty * selectedCoa.pf_rate,
-    }));
-  }, [selectedCoa]);
-
-  useEffect(() => {
-    if (!selectedCoa) return;
-    setForm((f) =>
-      f.fld_whrs_override ? f : { ...f, fld_whrs: f.fld_qty * selectedCoa.pf_rate },
-    );
-  }, [form.fld_qty, selectedCoa]);
 
   const submit = useMutation({
     mutationFn: async () => {
@@ -115,58 +66,63 @@ export function NewRecordModal({ open, onClose, projectId }: Props) {
         .single();
       if (meErr) throw meErr;
 
-      // Next rec_no — race-prone under concurrent inserts; acceptable for Phase 2.
+      // Next record_no for the project. Concurrent inserts can collide; the
+      // unique (project_id, record_no) constraint will then surface 23505 to
+      // the user, who can retry. Acceptable for Phase 4.
       const { data: maxRow } = await supabase
-        .from('audit_records')
-        .select('rec_no')
+        .from('progress_records')
+        .select('record_no')
         .eq('project_id', projectId)
-        .order('rec_no', { ascending: false })
+        .order('record_no', { ascending: false })
         .limit(1)
         .maybeSingle();
-      const nextRecNo = (maxRow?.rec_no ?? 0) + 1;
+      const nextRecordNo = ((maxRow?.record_no as number | null) ?? 0) + 1;
 
-      const { error } = await supabase.from('audit_records').insert({
+      const { error } = await supabase.from('progress_records').insert({
         tenant_id: me.tenant_id,
         project_id: projectId,
-        discipline_id: form.discipline_id,
-        coa_code_id: form.coa_code_id,
-        rec_no: nextRecNo,
-        dwg: form.dwg,
-        rev: form.rev,
+        discipline_id: form.discipline_id || null,
+        iwp_id: form.iwp_id || null,
+        record_no: nextRecordNo,
+        source_type: 'manual',
+        dwg: form.dwg || null,
+        rev: form.rev || null,
         description: form.description,
         uom: form.uom,
-        fld_qty: form.fld_qty,
-        fld_whrs: form.fld_whrs,
+        budget_qty: form.budget_qty || null,
+        budget_hrs: form.budget_hrs,
+        percent_complete: 0,
         status: 'active',
+        foreman_name: form.foreman_name || null,
       });
       if (error) throw error;
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['progress-records', projectId] });
-      qc.invalidateQueries({ queryKey: ['project-summary', projectId] });
+      qc.invalidateQueries({ queryKey: ['progress-rows', projectId] });
+      qc.invalidateQueries({ queryKey: ['project-metrics', projectId] });
       setForm({
         discipline_id: '',
-        coa_code_id: '',
+        iwp_id: '',
         dwg: '',
         rev: '1',
         description: '',
         uom: 'EA',
-        fld_qty: 0,
-        fld_whrs: 0,
-        fld_whrs_override: false,
+        budget_qty: 0,
+        budget_hrs: 0,
+        foreman_name: '',
       });
       onClose();
     },
   });
 
   return (
-    <Modal open={open} onClose={onClose} title="New Audit Record" width={760}>
+    <Modal open={open} onClose={onClose} title="New Progress Record" width={760}>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <Field label="Discipline">
           <select
             className={inputClass}
             value={form.discipline_id}
-            onChange={(e) => setForm({ ...form, discipline_id: e.target.value, coa_code_id: '' })}
+            onChange={(e) => setForm({ ...form, discipline_id: e.target.value })}
           >
             <option value="">— select —</option>
             {disciplines?.map((d) => (
@@ -176,20 +132,16 @@ export function NewRecordModal({ open, onClose, projectId }: Props) {
             ))}
           </select>
         </Field>
-        <Field
-          label="COA Code"
-          hint={recommendedPrime ? `Filtered to prime ${recommendedPrime}.` : undefined}
-        >
+        <Field label="IWP" hint="Optional work-package grouping.">
           <select
             className={inputClass}
-            value={form.coa_code_id}
-            onChange={(e) => setForm({ ...form, coa_code_id: e.target.value })}
-            disabled={!form.discipline_id}
+            value={form.iwp_id}
+            onChange={(e) => setForm({ ...form, iwp_id: e.target.value })}
           >
-            <option value="">— select —</option>
-            {filteredCoa.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.code} — {c.description}
+            <option value="">—</option>
+            {iwps?.map((i) => (
+              <option key={i.id} value={i.id}>
+                {i.name}
               </option>
             ))}
           </select>
@@ -230,34 +182,31 @@ export function NewRecordModal({ open, onClose, projectId }: Props) {
             ))}
           </select>
         </Field>
-        <Field label="Field Quantity">
+        <Field label="Foreman" hint="Free-text; aliasing links it to a user.">
           <input
-            type="number"
-            step={0.1}
-            min={0}
             className={inputClass}
-            value={form.fld_qty}
-            onChange={(e) => setForm({ ...form, fld_qty: Number(e.target.value) })}
+            value={form.foreman_name}
+            onChange={(e) => setForm({ ...form, foreman_name: e.target.value })}
           />
         </Field>
-        <Field
-          label="Field Work Hours"
-          hint={
-            selectedCoa && !form.fld_whrs_override
-              ? `Auto-calc from PF rate ${selectedCoa.pf_rate.toFixed(2)} — edit to override.`
-              : 'Manual override.'
-          }
-          className="md:col-span-2"
-        >
+        <Field label="Budget Quantity">
           <input
             type="number"
             step={0.1}
             min={0}
             className={inputClass}
-            value={form.fld_whrs}
-            onChange={(e) =>
-              setForm({ ...form, fld_whrs: Number(e.target.value), fld_whrs_override: true })
-            }
+            value={form.budget_qty}
+            onChange={(e) => setForm({ ...form, budget_qty: Number(e.target.value) })}
+          />
+        </Field>
+        <Field label="Budget Hours">
+          <input
+            type="number"
+            step={0.1}
+            min={0}
+            className={inputClass}
+            value={form.budget_hrs}
+            onChange={(e) => setForm({ ...form, budget_hrs: Number(e.target.value) })}
           />
         </Field>
       </div>
@@ -274,14 +223,7 @@ export function NewRecordModal({ open, onClose, projectId }: Props) {
         </Button>
         <Button
           variant="primary"
-          disabled={
-            submit.isPending ||
-            !form.discipline_id ||
-            !form.coa_code_id ||
-            !form.dwg ||
-            !form.description ||
-            form.fld_qty <= 0
-          }
+          disabled={submit.isPending || !form.description || form.budget_hrs <= 0}
           onClick={() => submit.mutate()}
         >
           {submit.isPending ? 'Saving…' : 'Add Record'}
