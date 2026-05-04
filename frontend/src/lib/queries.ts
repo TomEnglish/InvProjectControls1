@@ -82,13 +82,6 @@ export type ProgressPeriod = {
   acwp_hrs: number | null;
 };
 
-// useProjectSummary removed in Phase 4 — use useDashboardSummary (composes
-// project_metrics + discipline_metrics) instead. The ProjectSummary +
-// DisciplineRollup types stay so existing chart/table props compile.
-
-// useProgressRecords (audit_records-flavored) removed in Phase 4 — use
-// useProgressRows (canonical progress_records) instead.
-
 export type RocMilestone = { seq: number; label: string; weight: number };
 
 export function useRocMilestonesForDiscipline(disciplineId: string | null) {
@@ -325,14 +318,6 @@ export function useProgressPeriods(projectId: string | null) {
   });
 }
 
-// ─────────────────────────────────────────────────────────────────────
-// Phase 4 — canonical progress_records hooks. Live alongside the
-// audit_records-based hooks above during the per-page migration.
-// Audit hooks (useProgressRecords, useProjectSummary, ProgressRecord,
-// ProjectSummary) are removed in the Phase 4 wrap-up commit once every
-// consumer has switched over.
-// ─────────────────────────────────────────────────────────────────────
-
 export type ProgressRow = {
   id: string;
   project_id: string;
@@ -495,9 +480,8 @@ export function useProjectMetrics(projectId: string | null) {
       if (error) throw error;
       const row = Array.isArray(data) ? data[0] : data;
       if (!row) return null;
-      // RPC returns percent_complete in 0..100; normalize to 0..1 (the
-      // convention used by fmt.pct and every existing consumer of the
-      // legacy useProjectSummary).
+      // RPC returns percent_complete in 0..100; normalize to 0..1 to match
+      // fmt.pct and the chart/table consumers below.
       return {
         project_id: row.project_id,
         total_records: Number(row.total_records),
@@ -540,8 +524,7 @@ export function useDisciplineMetrics(projectId: string | null) {
         budget_hrs: Number(r.budget_hrs),
         earned_hrs: Number(r.earned_hrs),
         actual_hrs: Number(r.actual_hrs),
-        // RPC returns earned_pct 0..100; normalize to 0..1 so the existing
-        // charts and DisciplineRollup-shaped consumers stay correct.
+        // RPC returns earned_pct 0..100; normalize to 0..1 to match chart consumers.
         earned_pct: Number(r.earned_pct) / 100,
         cpi: r.cpi != null ? Number(r.cpi) : null,
       }));
@@ -674,11 +657,9 @@ export function useIwps(projectId: string | null) {
 }
 
 /**
- * Composer hook that returns a `ProjectSummary`-shaped value built from the
- * new project_metrics + discipline_metrics RPCs. Lets Dashboard / Reports /
- * Budget swap their import without touching the chart/table components below
- * them. Phase 5 cleanup deletes the legacy useProjectSummary and DisciplineRollup
- * once every consumer is on this composer or the raw new hooks.
+ * Composer hook returning a `ProjectSummary`-shaped value built from the
+ * project_metrics + discipline_metrics RPCs. Lets Dashboard / Reports /
+ * Budget share one chart/table prop shape.
  */
 export function useDashboardSummary(projectId: string | null) {
   const metrics = useProjectMetrics(projectId);
