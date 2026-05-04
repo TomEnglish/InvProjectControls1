@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Search } from 'lucide-react';
+import { Search, X } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useProjectStore } from '@/stores/project';
 import { useProgressRows, useIwps, useCurrentUser, hasRole } from '@/lib/queries';
@@ -10,6 +10,7 @@ import { inputClass } from '@/components/ui/FormField';
 import { ProgressTable } from '@/components/progress/ProgressTable';
 import { RecordDetail } from '@/components/progress/RecordDetail';
 import { NewRecordModal } from '@/components/progress/NewRecordModal';
+import { FilterDropdown } from '@/components/progress/FilterDropdown';
 import { downloadCsv } from '@/lib/export';
 
 function NoProject() {
@@ -22,14 +23,22 @@ function NoProject() {
   );
 }
 
+const emptySet = (): Set<string> => new Set();
+
 export function ProgressPage() {
   const projectId = useProjectStore((s) => s.currentProjectId);
   const { data: me } = useCurrentUser();
   const canAddRecord = hasRole(me?.role, 'editor');
-  const [discFilter, setDiscFilter] = useState<string>('All');
-  const [iwpFilter, setIwpFilter] = useState<string>('All');
-  const [foremanFilter, setForemanFilter] = useState<string>('All');
+
+  const [discFilter, setDiscFilter] = useState<Set<string>>(emptySet);
+  const [iwpFilter, setIwpFilter] = useState<Set<string>>(emptySet);
+  const [foremanFilter, setForemanFilter] = useState<Set<string>>(emptySet);
+  const [typeFilter, setTypeFilter] = useState<Set<string>>(emptySet);
+  const [sizeFilter, setSizeFilter] = useState<Set<string>>(emptySet);
+  const [specFilter, setSpecFilter] = useState<Set<string>>(emptySet);
+  const [lineArea, setLineArea] = useState('');
   const [search, setSearch] = useState('');
+
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [newRecordOpen, setNewRecordOpen] = useState(false);
 
@@ -50,20 +59,38 @@ export function ProgressPage() {
     },
   });
 
-  // Distinct foreman names present in current records.
-  const foremen = useMemo(() => {
-    const set = new Set<string>();
-    for (const r of records ?? []) if (r.foreman_name) set.add(r.foreman_name);
-    return Array.from(set).sort();
+  const distinct = useMemo(() => {
+    const foremen = new Set<string>();
+    const types = new Set<string>();
+    const sizes = new Set<string>();
+    const specs = new Set<string>();
+    for (const r of records ?? []) {
+      if (r.foreman_name) foremen.add(r.foreman_name);
+      if (r.attr_type) types.add(r.attr_type);
+      if (r.attr_size) sizes.add(r.attr_size);
+      if (r.attr_spec) specs.add(r.attr_spec);
+    }
+    const sort = (s: Set<string>) => Array.from(s).sort();
+    return {
+      foremen: sort(foremen),
+      types: sort(types),
+      sizes: sort(sizes),
+      specs: sort(specs),
+    };
   }, [records]);
 
   const filtered = useMemo(() => {
     const all = records ?? [];
     const q = search.trim().toLowerCase();
+    const la = lineArea.trim().toLowerCase();
     return all.filter((r) => {
-      if (discFilter !== 'All' && r.discipline_code !== discFilter) return false;
-      if (iwpFilter !== 'All' && r.iwp_id !== iwpFilter) return false;
-      if (foremanFilter !== 'All' && r.foreman_name !== foremanFilter) return false;
+      if (discFilter.size > 0 && (!r.discipline_code || !discFilter.has(r.discipline_code))) return false;
+      if (iwpFilter.size > 0 && (!r.iwp_id || !iwpFilter.has(r.iwp_id))) return false;
+      if (foremanFilter.size > 0 && (!r.foreman_name || !foremanFilter.has(r.foreman_name))) return false;
+      if (typeFilter.size > 0 && (!r.attr_type || !typeFilter.has(r.attr_type))) return false;
+      if (sizeFilter.size > 0 && (!r.attr_size || !sizeFilter.has(r.attr_size))) return false;
+      if (specFilter.size > 0 && (!r.attr_spec || !specFilter.has(r.attr_spec))) return false;
+      if (la && !(r.line_area ?? '').toLowerCase().includes(la)) return false;
       if (!q) return true;
       return (
         (r.dwg ?? '').toLowerCase().includes(q) ||
@@ -71,9 +98,28 @@ export function ProgressPage() {
         (r.line_area ?? '').toLowerCase().includes(q)
       );
     });
-  }, [records, discFilter, iwpFilter, foremanFilter, search]);
+  }, [records, discFilter, iwpFilter, foremanFilter, typeFilter, sizeFilter, specFilter, lineArea, search]);
 
   const selected = filtered.find((r) => r.id === selectedId) ?? null;
+
+  const activeFilterCount =
+    discFilter.size +
+    iwpFilter.size +
+    foremanFilter.size +
+    typeFilter.size +
+    sizeFilter.size +
+    specFilter.size +
+    (lineArea ? 1 : 0);
+
+  const clearAll = () => {
+    setDiscFilter(emptySet());
+    setIwpFilter(emptySet());
+    setForemanFilter(emptySet());
+    setTypeFilter(emptySet());
+    setSizeFilter(emptySet());
+    setSpecFilter(emptySet());
+    setLineArea('');
+  };
 
   if (!projectId) return <NoProject />;
 
@@ -96,47 +142,54 @@ export function ProgressPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap justify-between items-center gap-2">
+      <div className="flex flex-wrap justify-between items-start gap-2">
         <div className="flex items-center gap-2 flex-wrap">
-          <select
-            aria-label="Discipline filter"
+          <FilterDropdown
+            label="Discipline"
+            selected={discFilter}
+            onChange={setDiscFilter}
+            options={(disciplines ?? []).map((d) => ({
+              value: d.discipline_code,
+              label: d.display_name,
+            }))}
+          />
+          <FilterDropdown
+            label="IWP"
+            selected={iwpFilter}
+            onChange={setIwpFilter}
+            options={(iwps ?? []).map((i) => ({ value: i.id, label: i.name }))}
+          />
+          <FilterDropdown
+            label="Foreman"
+            selected={foremanFilter}
+            onChange={setForemanFilter}
+            options={distinct.foremen.map((f) => ({ value: f, label: f }))}
+          />
+          <FilterDropdown
+            label="Type"
+            selected={typeFilter}
+            onChange={setTypeFilter}
+            options={distinct.types.map((t) => ({ value: t, label: t }))}
+          />
+          <FilterDropdown
+            label="Size"
+            selected={sizeFilter}
+            onChange={setSizeFilter}
+            options={distinct.sizes.map((s) => ({ value: s, label: s }))}
+          />
+          <FilterDropdown
+            label="Spec"
+            selected={specFilter}
+            onChange={setSpecFilter}
+            options={distinct.specs.map((s) => ({ value: s, label: s }))}
+          />
+          <input
             className={inputClass}
-            value={discFilter}
-            onChange={(e) => setDiscFilter(e.target.value)}
-          >
-            <option value="All">All Disciplines</option>
-            {disciplines?.map((d) => (
-              <option key={d.discipline_code} value={d.discipline_code}>
-                {d.display_name}
-              </option>
-            ))}
-          </select>
-          <select
-            aria-label="IWP filter"
-            className={inputClass}
-            value={iwpFilter}
-            onChange={(e) => setIwpFilter(e.target.value)}
-          >
-            <option value="All">All IWPs</option>
-            {iwps?.map((i) => (
-              <option key={i.id} value={i.id}>
-                {i.name}
-              </option>
-            ))}
-          </select>
-          <select
-            aria-label="Foreman filter"
-            className={inputClass}
-            value={foremanFilter}
-            onChange={(e) => setForemanFilter(e.target.value)}
-          >
-            <option value="All">All Foremen</option>
-            {foremen.map((f) => (
-              <option key={f} value={f}>
-                {f}
-              </option>
-            ))}
-          </select>
+            placeholder="Line area contains…"
+            value={lineArea}
+            onChange={(e) => setLineArea(e.target.value)}
+            style={{ width: 180 }}
+          />
           <div className="relative">
             <Search
               size={14}
@@ -144,11 +197,16 @@ export function ProgressPage() {
             />
             <input
               className={`${inputClass} pl-8 w-64`}
-              placeholder="Search DWG, description, line area…"
+              placeholder="Search DWG, description…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
           </div>
+          {activeFilterCount > 0 && (
+            <Button variant="ghost" size="sm" onClick={clearAll}>
+              <X size={14} /> Clear filters
+            </Button>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <Button
@@ -211,6 +269,11 @@ export function ProgressPage() {
             Export CSV
           </Button>
         </div>
+      </div>
+
+      <div className="text-xs text-[color:var(--color-text-muted)]">
+        Showing {filtered.length} of {records?.length ?? 0} records
+        {activeFilterCount > 0 && ` · ${activeFilterCount} filter${activeFilterCount === 1 ? '' : 's'} active`}
       </div>
 
       <ProgressTable records={filtered} selectedId={selectedId} onSelect={setSelectedId} />

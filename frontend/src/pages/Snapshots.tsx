@@ -1,9 +1,37 @@
 import { useMemo, useState } from 'react';
-import { Camera } from 'lucide-react';
+import { Camera, Info } from 'lucide-react';
 import { useProjectStore } from '@/stores/project';
 import { useSnapshotComparison, useSnapshots, type Snapshot } from '@/lib/queries';
 import { Card, CardHeader } from '@/components/ui/Card';
 import { fmt } from '@/lib/format';
+
+function HowToCard() {
+  return (
+    <Card>
+      <div className="flex items-start gap-3">
+        <div
+          className="shrink-0 w-9 h-9 rounded-md flex items-center justify-center"
+          style={{ background: 'var(--color-primary-soft)', color: 'var(--color-primary)' }}
+        >
+          <Info size={16} />
+        </div>
+        <div className="text-sm">
+          <h3 className="font-semibold mb-1">How comparison works</h3>
+          <p className="text-[color:var(--color-text-muted)] leading-relaxed">
+            Each row in the history below has two radio buttons — column{' '}
+            <span className="is-chip is-chip-primary" style={{ padding: '1px 6px', fontSize: 11 }}>A</span>{' '}
+            and column{' '}
+            <span className="is-chip is-chip-primary" style={{ padding: '1px 6px', fontSize: 11 }}>B</span>.
+            Pick the earlier snapshot as A and the later one as B. They're mutually exclusive — one
+            snapshot can't be both. Once both are set, a comparison card appears showing per-record
+            drift in earned percent and earned hours between the two captures. Green deltas mean
+            forward progress; red means regression.
+          </p>
+        </div>
+      </div>
+    </Card>
+  );
+}
 
 function NoProject() {
   return (
@@ -57,6 +85,7 @@ export function SnapshotsPage() {
 
   return (
     <div className="space-y-4">
+      <HowToCard />
       <Card padded={false}>
         <div className="px-6 pt-5 pb-3">
           <CardHeader
