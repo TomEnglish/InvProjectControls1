@@ -1,0 +1,7 @@
+dwg,description,unit,budget_qty,budget_hrs,actual_hrs,percent_complete,foreman_name,iwp_name,attr_type,attr_size,line_area,item_1,pct_1,item_2,pct_2,item_3,pct_3
+P-2001,2" CS Line 2001-A,LF,320,768,540,75,Alice Chen,IWP-PIPE-001,Carbon Steel,2",Unit 1,Material received,100,Fit-up,100,Welded,50
+P-2002,6" CS Line 2002-B,LF,180,648,260,40,Bob Carter,IWP-PIPE-001,Carbon Steel,6",Unit 1,Material received,100,Fit-up,60,Welded,0
+S-3001,Platform Level 3 Steel,TONS,12.5,367.5,310,80,Alice Chen,IWP-STEEL-001,Beam,W12,Tank Farm,Detail approved,100,Fab complete,100,Erected,80
+E-4001,Cable Tray Run CT-101,LF,450,630,410,60,Bob Carter,IWP-ELEC-001,Tray,24" wide,Unit 1,Routed,100,Hung,80,Cabled,30
+M-5001,Pump P-101 Setting,EA,1,48.6,42,80,Carlos Diaz,IWP-MECH-001,Pump,API610,Unit 1,Set,100,Aligned,80,Tested,0
+I-6001,FT-101 Flow Transmitter,EA,1,7.5,7,100,Alice Chen,IWP-INST-001,Transmitter,2",Unit 1,Mounted,100,Wired,100,Calibrated,100

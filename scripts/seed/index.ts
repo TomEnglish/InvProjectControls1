@@ -409,7 +409,7 @@ async function main() {
         period_number: 2,
         start_date: '2026-03-01',
         end_date: '2026-03-31',
-        bcws_hrs: null,
+        bcws_hrs: 4500,
         bcwp_hrs: null,
         acwp_hrs: null,
       },

@@ -1,6 +1,6 @@
 import { useState, type FormEvent, type ChangeEvent } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Upload as UploadIcon } from 'lucide-react';
+import { Upload as UploadIcon, Download } from 'lucide-react';
 import { useProjectStore } from '@/stores/project';
 import { supabase } from '@/lib/supabase';
 import { Card, CardHeader } from '@/components/ui/Card';
@@ -83,6 +83,15 @@ export function UploadPage() {
           eyebrow="Universal upload"
           title="Import progress data"
           caption="CSV or Excel. Column names are matched against a wide alias table — drawing, description, hours, percent, foreman, IWP, milestone columns, etc."
+          actions={
+            <a
+              href="/progress-template.csv"
+              download="progress-template.csv"
+              className="is-btn is-btn-outline is-btn-sm"
+            >
+              <Download size={14} /> Download example
+            </a>
+          }
         />
 
         <form onSubmit={onSubmit} className="grid gap-4">
