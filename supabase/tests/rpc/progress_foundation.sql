@@ -1,6 +1,6 @@
 begin;
 
-select plan(36);
+select plan(45);
 
 select has_table('projectcontrols', 'iwps', 'iwps table exists');
 select has_table('projectcontrols', 'progress_records', 'progress_records table exists');
@@ -48,6 +48,24 @@ select has_function('projectcontrols', 'list_snapshots', array['uuid'],
   'list_snapshots RPC exists');
 select has_view('projectcontrols', 'v_progress_record_ev',
   'v_progress_record_ev view exists');
+
+-- Phase 5 — audit_records family is dropped; period_close + project_lock_baseline
+-- still exist but live on canonical tables now.
+select hasnt_table('projectcontrols', 'audit_records', 'audit_records table is dropped');
+select hasnt_table('projectcontrols', 'audit_record_milestones', 'audit_record_milestones table is dropped');
+select hasnt_view('projectcontrols', 'v_audit_record_ev', 'v_audit_record_ev view is dropped');
+select hasnt_function('projectcontrols', 'project_summary', array['uuid'],
+  'project_summary RPC is dropped');
+select hasnt_function('projectcontrols', 'record_update_milestones', array['uuid', 'jsonb'],
+  'record_update_milestones RPC is dropped');
+select hasnt_function('projectcontrols', 'record_bulk_upsert', array['uuid', 'jsonb'],
+  'record_bulk_upsert RPC is dropped');
+select hasnt_function('projectcontrols', 'seed_audit_record_milestones', array[]::text[],
+  'seed_audit_record_milestones trigger function is dropped');
+select has_function('projectcontrols', 'period_close', array['uuid', 'uuid'],
+  'period_close RPC still exists post-rewrite');
+select has_function('projectcontrols', 'project_lock_baseline', array['uuid', 'timestamptz'],
+  'project_lock_baseline RPC still exists post-rewrite');
 
 select * from finish();
 

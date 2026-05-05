@@ -10,22 +10,21 @@
 
 begin;
 
--- 12 mutating RPCs to verify, plus 4 read RPCs and 1 audit helper:
---   mutating: coa_code_upsert, roc_template_set, record_bulk_upsert,
---             record_update_milestones, co_submit, co_pc_review, co_approve,
---             project_lock_baseline, admin_set_user_role,
+-- 9 mutating RPCs to verify, plus 1 read RPC and 1 audit helper:
+--   mutating: coa_code_upsert, roc_template_set, co_submit, co_pc_review,
+--             co_approve, project_lock_baseline, admin_set_user_role,
 --             actuals_bulk_upsert, period_close, write_audit_log
---   read:     project_summary, budget_rollup, current_tenant_id,
---             current_user_role
-select plan(41);
+--   read:     budget_rollup, current_tenant_id, current_user_role
+-- (record_bulk_upsert, record_update_milestones, project_summary dropped
+-- in 20260504000002_retire_audit_records.sql; superseded by canonical
+-- progress_records surface.)
+select plan(35);
 
 -- ─────────────────────────────────────────────────────────────────────
 -- 1. Existence checks for every RPC the frontend depends on.
 -- ─────────────────────────────────────────────────────────────────────
 select has_function('projectcontrols', 'coa_code_upsert',     array['jsonb'],         'coa_code_upsert exists');
 select has_function('projectcontrols', 'roc_template_set',    array['uuid', 'jsonb'], 'roc_template_set exists');
-select has_function('projectcontrols', 'record_bulk_upsert',  array['uuid', 'jsonb'], 'record_bulk_upsert exists');
-select has_function('projectcontrols', 'record_update_milestones', array['uuid', 'jsonb'], 'record_update_milestones exists');
 select has_function('projectcontrols', 'co_submit',           array['jsonb'],         'co_submit exists');
 select has_function('projectcontrols', 'co_pc_review',        array['uuid', 'text', 'text'], 'co_pc_review exists');
 select has_function('projectcontrols', 'co_approve',          array['uuid', 'text', 'text'], 'co_approve exists');
@@ -33,7 +32,6 @@ select has_function('projectcontrols', 'project_lock_baseline', array['uuid', 't
 select has_function('projectcontrols', 'admin_set_user_role', array['uuid', 'projectcontrols.user_role', 'text'], 'admin_set_user_role exists');
 select has_function('projectcontrols', 'actuals_bulk_upsert', array['uuid', 'uuid', 'jsonb'], 'actuals_bulk_upsert exists');
 select has_function('projectcontrols', 'period_close',        array['uuid', 'uuid'], 'period_close exists');
-select has_function('projectcontrols', 'project_summary',     array['uuid'], 'project_summary exists');
 select has_function('projectcontrols', 'budget_rollup',       array['uuid'], 'budget_rollup exists');
 
 -- ─────────────────────────────────────────────────────────────────────
@@ -50,16 +48,6 @@ select is(
   (select prosecdef from pg_proc where oid = 'projectcontrols.roc_template_set(uuid, jsonb)'::regprocedure),
   true,
   'roc_template_set is SECURITY DEFINER'
-);
-select is(
-  (select prosecdef from pg_proc where oid = 'projectcontrols.record_bulk_upsert(uuid, jsonb)'::regprocedure),
-  true,
-  'record_bulk_upsert is SECURITY DEFINER'
-);
-select is(
-  (select prosecdef from pg_proc where oid = 'projectcontrols.record_update_milestones(uuid, jsonb)'::regprocedure),
-  true,
-  'record_update_milestones is SECURITY DEFINER'
 );
 select is(
   (select prosecdef from pg_proc where oid = 'projectcontrols.co_submit(jsonb)'::regprocedure),
@@ -108,10 +96,6 @@ select ok(
 select ok(
   not has_function_privilege('public', 'projectcontrols.coa_code_upsert(jsonb)', 'execute'),
   'public CANNOT execute coa_code_upsert'
-);
-select ok(
-  has_function_privilege('authenticated', 'projectcontrols.record_bulk_upsert(uuid, jsonb)', 'execute'),
-  'authenticated can execute record_bulk_upsert'
 );
 select ok(
   has_function_privilege('authenticated', 'projectcontrols.co_approve(uuid, text, text)', 'execute'),

@@ -326,67 +326,9 @@ async function main() {
   if (wErr) throw wErr;
   console.log(`  project_discipline_weights: ${weightRows.length}`);
 
-  // --- 7. Sample audit records (10)
-  const { data: coaRows } = await sb.from('coa_codes').select('id, code').eq('tenant_id', tenantId);
-  const coaByCode = Object.fromEntries((coaRows ?? []).map((r) => [r.code, r.id]));
-
-  const recordSpec = [
-    { rec: 1, dwg: 'C-1001', rev: '2', disc: 'CIVIL', desc: 'Foundation Pad A-101', qty: 45.0, uom: 'CY', whrs: 382.5, ms: [1, 1, 1, 0.5, 0, 0, 0, 0], code: '101' },
-    { rec: 2, dwg: 'C-1002', rev: '1', disc: 'CIVIL', desc: 'Pile Cap B-201', qty: 28.0, uom: 'CY', whrs: 238.0, ms: [1, 1, 0.8, 0, 0, 0, 0, 0], code: '101' },
-    { rec: 3, dwg: 'P-2001', rev: '3', disc: 'PIPE', desc: '2" CS — Line 2001-A', qty: 320.0, uom: 'LF', whrs: 768.0, ms: [1, 1, 1, 1, 0.5, 0, 0, 0], code: '202' },
-    { rec: 4, dwg: 'P-2002', rev: '2', disc: 'PIPE', desc: '6" CS — Line 2002-B', qty: 180.0, uom: 'LF', whrs: 648.0, ms: [1, 1, 0.6, 0, 0, 0, 0, 0], code: '202' },
-    { rec: 5, dwg: 'S-3001', rev: '1', disc: 'STEEL', desc: 'Platform Level 3 Steel', qty: 12.5, uom: 'TONS', whrs: 367.5, ms: [1, 1, 1, 0.8, 0, 0, 0, 0], code: '301' },
-    { rec: 6, dwg: 'E-4001', rev: '2', disc: 'ELEC', desc: 'Cable Tray Run CT-101', qty: 450.0, uom: 'LF', whrs: 630.0, ms: [1, 0.7, 0, 0, 0, 0, 0, 0], code: '401' },
-    { rec: 7, dwg: 'M-5001', rev: '1', disc: 'MECH', desc: 'Pump P-101 Setting', qty: 1.0, uom: 'EA', whrs: 48.6, ms: [1, 1, 0.5, 0, 0, 0, 0, 0], code: '501' },
-    { rec: 8, dwg: 'I-6001', rev: '1', disc: 'INST', desc: 'FT-101 Flow Transmitter', qty: 1.0, uom: 'EA', whrs: 7.15, ms: [1, 1, 1, 1, 0, 0, 0, 0], code: '601' },
-    { rec: 9, dwg: 'P-2003', rev: '1', disc: 'PIPE', desc: '8" CS — Line 2003-C', qty: 95.0, uom: 'LF', whrs: 376.2, ms: [1, 0.5, 0, 0, 0, 0, 0, 0], code: '203' },
-    { rec: 10, dwg: 'C-1003', rev: '1', disc: 'CIVIL', desc: 'Equipment Pad C-301', qty: 62.0, uom: 'CY', whrs: 527.0, ms: [1, 1, 1, 1, 0.8, 0.5, 0, 0], code: '101' },
-  ];
-
-  for (const r of recordSpec) {
-    const { data: existing } = await sb
-      .from('audit_records')
-      .select('id')
-      .eq('project_id', projectIds['KIS-2026-001']!)
-      .eq('rec_no', r.rec)
-      .maybeSingle();
-
-    let recordId: string;
-    if (existing) {
-      recordId = existing.id;
-    } else {
-      const { data, error } = await sb
-        .from('audit_records')
-        .insert({
-          tenant_id: tenantId,
-          project_id: projectIds['KIS-2026-001']!,
-          discipline_id: disciplineIds[r.disc]!,
-          coa_code_id: coaByCode[r.code]!,
-          rec_no: r.rec,
-          dwg: r.dwg,
-          rev: r.rev,
-          description: r.desc,
-          uom: r.uom,
-          fld_qty: r.qty,
-          fld_whrs: r.whrs,
-          status: 'active',
-        })
-        .select('id')
-        .single();
-      if (error) throw error;
-      recordId = data.id;
-    }
-
-    // Update milestones (trigger seeded them at 0)
-    for (let i = 0; i < 8; i++) {
-      await sb
-        .from('audit_record_milestones')
-        .update({ value: r.ms[i] ?? 0 })
-        .eq('record_id', recordId)
-        .eq('seq', i + 1);
-    }
-  }
-  console.log(`  audit_records: ${recordSpec.length} (with milestones)`);
+  // --- 7. Sample progress records seeded later in the canonical block (step 13).
+  // The legacy audit_records seed was retired by Phase 5
+  // (20260504000002_retire_audit_records.sql).
 
   // --- 8. Actual hours — rough per-discipline totals
   const actualSpec = [

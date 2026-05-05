@@ -22,7 +22,6 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 const COA_TEST_CODE = 'SMOKE-1';
-const REC_NO_BASE = 99001;
 const PROJECT_CODE = 'KIS-2026-001';
 
 const ANSI = {
@@ -144,7 +143,6 @@ async function main() {
   let projectId = '';
   let disciplineId = '';
   let coaSpec = { id: '', code: '', pf_rate: 0 };
-  let createdRecords: { id: string; rec_no: number }[] = [];
   let testCoId = '';
 
   await step(
@@ -195,8 +193,13 @@ async function main() {
   // ─────────────────────────────────────────────────────────────────
   console.log(`\n${ANSI.bold}2. Read paths${ANSI.reset}`);
 
-  await step('project_summary', async () => {
-    const { error } = await sb.rpc('project_summary', { p_project_id: projectId });
+  await step('project_metrics', async () => {
+    const { error } = await sb.rpc('project_metrics', { p_project_id: projectId });
+    if (error) throw new Error(error.message);
+  });
+
+  await step('discipline_metrics', async () => {
+    const { error } = await sb.rpc('discipline_metrics', { p_project_id: projectId });
     if (error) throw new Error(error.message);
   });
 
@@ -251,72 +254,31 @@ async function main() {
   });
 
   // ─────────────────────────────────────────────────────────────────
-  // 4. Audit record lifecycle
+  // 4. Progress records read paths (canonical surface)
   // ─────────────────────────────────────────────────────────────────
-  console.log(`\n${ANSI.bold}4. Audit records${ANSI.reset}`);
+  console.log(`\n${ANSI.bold}4. Progress records${ANSI.reset}`);
 
-  await step('record_bulk_upsert (insert 2 rows)', async () => {
-    const { error } = await sb.rpc('record_bulk_upsert', {
-      p_project_id: projectId,
-      p_rows: [
-        {
-          rec_no: REC_NO_BASE,
-          dwg: 'SMOKE-1',
-          rev: '1',
-          description: 'Smoke test record A',
-          discipline_code: 'PIPE',
-          coa_code: '202',
-          uom: 'LF',
-          fld_qty: 100,
-        },
-        {
-          rec_no: REC_NO_BASE + 1,
-          dwg: 'SMOKE-2',
-          rev: '1',
-          description: 'Smoke test record B',
-          discipline_code: 'PIPE',
-          coa_code: '202',
-          uom: 'LF',
-          fld_qty: 50,
-        },
-      ],
-    });
-    if (error) throw new Error(error.message);
-  });
-
-  await step('audit_records list — verify SMOKE rows present', async () => {
-    const { data, error } = await sb
-      .from('audit_records')
-      .select('id, rec_no')
+  await step('progress_records list', async () => {
+    const { error } = await sb
+      .from('progress_records')
+      .select('id, record_no, dwg, percent_complete')
       .eq('project_id', projectId)
-      .gte('rec_no', REC_NO_BASE)
-      .lte('rec_no', REC_NO_BASE + 1);
-    if (error) throw new Error(error.message);
-    if (!data || data.length !== 2) throw new Error(`expected 2 rows, got ${data?.length ?? 0}`);
-    createdRecords = data.map((r) => ({ id: r.id as string, rec_no: r.rec_no as number }));
-  });
-
-  await step('record_update_milestones (set M1=0.5, M2=0.25)', async () => {
-    const { error } = await sb.rpc('record_update_milestones', {
-      p_record_id: createdRecords[0]?.id,
-      p_milestones: [
-        { seq: 1, value: 0.5 },
-        { seq: 2, value: 0.25 },
-      ],
-    });
+      .limit(5);
     if (error) throw new Error(error.message);
   });
 
-  await step('v_audit_record_ev reflects the milestone update', async () => {
-    const { data, error } = await sb
-      .from('v_audit_record_ev')
-      .select('earn_pct, earn_whrs')
-      .eq('record_id', createdRecords[0]?.id)
-      .single();
+  await step('v_progress_record_ev read', async () => {
+    const { error } = await sb
+      .from('v_progress_record_ev')
+      .select('record_id, earn_pct, earn_whrs')
+      .eq('project_id', projectId)
+      .limit(5);
     if (error) throw new Error(error.message);
-    if (!data || Number(data.earn_pct) <= 0) {
-      throw new Error(`earn_pct should be > 0, got ${data?.earn_pct}`);
-    }
+  });
+
+  await step('list_snapshots', async () => {
+    const { error } = await sb.rpc('list_snapshots', { p_project_id: projectId });
+    if (error) throw new Error(error.message);
   });
 
   // ─────────────────────────────────────────────────────────────────
@@ -412,15 +374,6 @@ async function main() {
   await cleanup('delete test CO and events', async () => {
     if (testCoId) await sb.from('change_order_events').delete().eq('co_id', testCoId);
     if (testCoId) await sb.from('change_orders').delete().eq('id', testCoId);
-  });
-
-  await cleanup('delete test audit records', async () => {
-    if (createdRecords.length > 0) {
-      await sb
-        .from('audit_records')
-        .delete()
-        .in('id', createdRecords.map((r) => r.id));
-    }
   });
 
   await cleanup('delete test COA code', async () => {

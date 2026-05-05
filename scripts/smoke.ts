@@ -55,21 +55,22 @@ async function main() {
     process.exit(1);
   }
 
-  const { data: summary, error: rpcErr } = await sb.rpc('project_summary', {
+  const { data: metricsRows, error: rpcErr } = await sb.rpc('project_metrics', {
     p_project_id: firstProject.id,
   });
   if (rpcErr) {
-    console.error(`✗ project_summary RPC failed: ${rpcErr.message}`);
+    console.error(`✗ project_metrics RPC failed: ${rpcErr.message}`);
     process.exit(1);
   }
-  console.log('✓ project_summary RPC:');
-  console.log(`    total_budget_hrs: ${summary.total_budget_hrs}`);
-  console.log(`    total_earned_hrs: ${summary.total_earned_hrs?.toFixed?.(1) ?? summary.total_earned_hrs}`);
-  console.log(`    total_actual_hrs: ${summary.total_actual_hrs}`);
-  console.log(`    overall_pct:      ${(summary.overall_pct * 100).toFixed(1)}%`);
-  console.log(`    cpi:              ${summary.cpi?.toFixed?.(3) ?? summary.cpi}`);
-  console.log(`    spi:              ${summary.spi?.toFixed?.(3) ?? summary.spi}`);
-  console.log(`    disciplines:      ${summary.disciplines.length}`);
+  const metrics = Array.isArray(metricsRows) ? metricsRows[0] : metricsRows;
+  console.log('✓ project_metrics RPC:');
+  console.log(`    total_records:    ${metrics?.total_records}`);
+  console.log(`    total_budget_hrs: ${metrics?.total_budget_hrs}`);
+  console.log(`    total_earned_hrs: ${metrics?.total_earned_hrs}`);
+  console.log(`    total_actual_hrs: ${metrics?.total_actual_hrs}`);
+  console.log(`    percent_complete: ${metrics?.percent_complete}%`);
+  console.log(`    cpi:              ${metrics?.cpi}`);
+  console.log(`    spi:              ${metrics?.spi}`);
 
   const { data: budget, error: budgetErr } = await sb.rpc('budget_rollup', {
     p_project_id: firstProject.id,

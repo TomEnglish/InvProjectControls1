@@ -14,7 +14,7 @@ type Props = {
  *   actual  = cumulative ACWP (from locked periods) + current ACWP for the open period
  *
  * The open (unlocked) period's earned/actual are taken from the current
- * project_summary totals so the line extends all the way to "today".
+ * dashboard summary totals so the line extends all the way to "today".
  * Locked periods have their frozen values.
  */
 export function SCurveChart({ periods, summary }: Props) {
@@ -46,7 +46,7 @@ export function SCurveChart({ periods, summary }: Props) {
       earnedSeries.push(cumEarned);
       actualSeries.push(cumActual);
     } else {
-      // Open period — pull live project_summary totals so the curve reaches "now".
+      // Open period — pull live dashboard totals so the curve reaches "now".
       earnedSeries.push(summary.total_earned_hrs);
       actualSeries.push(summary.total_actual_hrs);
     }
