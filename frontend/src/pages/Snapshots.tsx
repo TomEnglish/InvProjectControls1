@@ -1,9 +1,11 @@
 import { useMemo, useState } from 'react';
-import { Camera, Info } from 'lucide-react';
+import { Camera, Info, Download } from 'lucide-react';
 import { useProjectStore } from '@/stores/project';
 import { useSnapshotComparison, useSnapshots, type Snapshot } from '@/lib/queries';
 import { Card, CardHeader } from '@/components/ui/Card';
+import { Button } from '@/components/ui/Button';
 import { fmt } from '@/lib/format';
+import { downloadCsv } from '@/lib/export';
 
 function HowToCard() {
   return (
@@ -178,6 +180,43 @@ export function SnapshotsPage() {
               eyebrow="Comparison"
               title={`${sortedById.get(a)?.label ?? '—'} → ${sortedById.get(b)?.label ?? '—'}`}
               caption="Per-record drift between the two selected snapshots."
+              actions={
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={!comparison.data || comparison.data.length === 0}
+                  onClick={() => {
+                    const labelA = sortedById.get(a)?.label ?? 'A';
+                    const labelB = sortedById.get(b)?.label ?? 'B';
+                    const safe = (s: string) => s.replace(/[^a-z0-9]+/gi, '-').toLowerCase();
+                    downloadCsv(
+                      `snapshot-comparison-${safe(labelA)}-vs-${safe(labelB)}.csv`,
+                      [
+                        'DWG',
+                        'Description',
+                        'Pct A',
+                        'Pct B',
+                        'Δ Pct',
+                        'Earned hrs A',
+                        'Earned hrs B',
+                        'Δ Earned hrs',
+                      ],
+                      (comparison.data ?? []).map((r) => [
+                        r.dwg ?? '',
+                        r.description,
+                        r.pct_a.toFixed(1),
+                        r.pct_b.toFixed(1),
+                        r.delta_pct.toFixed(1),
+                        r.earned_hrs_a.toFixed(0),
+                        r.earned_hrs_b.toFixed(0),
+                        r.delta_earned_hrs.toFixed(0),
+                      ]),
+                    );
+                  }}
+                >
+                  <Download size={14} /> Export CSV
+                </Button>
+              }
             />
           </div>
           {comparison.isLoading && (

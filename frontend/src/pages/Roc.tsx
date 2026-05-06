@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { Pencil, SlidersHorizontal } from 'lucide-react';
+import { Pencil, Printer, SlidersHorizontal } from 'lucide-react';
 import { useRocTemplates, useCurrentUser, hasRole, type RocTemplateRow } from '@/lib/queries';
 import { RocTemplateModal } from '@/components/roc/RocTemplateModal';
+import { printRocTemplate } from '@/components/roc/printRocTemplate';
 
 const seqs = [1, 2, 3, 4, 5, 6, 7, 8] as const;
 
@@ -96,6 +97,15 @@ function RocCard({
         </div>
         <div className="flex items-center gap-2 shrink-0">
           <span className={`is-chip ${totalChip} font-mono`}>{totalPct.toFixed(2)}%</span>
+          <button
+            type="button"
+            onClick={() => printRocTemplate(template)}
+            aria-label="Print template"
+            title="Print or save as PDF"
+            className="inline-flex items-center justify-center w-8 h-8 rounded-md text-[color:var(--color-text-muted)] hover:text-[color:var(--color-primary)] hover:bg-[color:var(--color-primary-soft)] transition-colors"
+          >
+            <Printer size={14} />
+          </button>
           {canEdit && (
             <button
               type="button"

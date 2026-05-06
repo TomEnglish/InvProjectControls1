@@ -9,6 +9,7 @@ import { VarianceAnalysisTable } from '@/components/reports/VarianceAnalysisTabl
 import { PeriodCloseCard } from '@/components/reports/PeriodCloseCard';
 import { Button } from '@/components/ui/Button';
 import { fmt } from '@/lib/format';
+import { downloadCsv } from '@/lib/export';
 
 function NoProject() {
   return (
@@ -123,7 +124,60 @@ export function ReportsPage() {
               Per discipline. EAC uses the live CPI; flatlines if there are no actuals yet.
             </p>
           </div>
-          <Button variant="outline" size="sm" disabled title="Export — Phase 3">
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={s.disciplines.length === 0}
+            onClick={() => {
+              const date = new Date().toISOString().slice(0, 10);
+              const headers = [
+                'Discipline',
+                'Budget hrs',
+                'BCWP (Earned hrs)',
+                'ACWP (Actual hrs)',
+                'CV',
+                'CPI',
+                'EAC',
+              ];
+              const rows = s.disciplines.map((d) => {
+                const cv = d.earned_hrs - d.actual_hrs;
+                const cpi = d.actual_hrs > 0 ? d.earned_hrs / d.actual_hrs : null;
+                const eac = cpi && cpi > 0 ? d.budget_hrs / cpi : null;
+                return [
+                  d.display_name,
+                  d.budget_hrs.toFixed(0),
+                  d.earned_hrs.toFixed(0),
+                  d.actual_hrs.toFixed(0),
+                  cv.toFixed(0),
+                  cpi != null ? cpi.toFixed(3) : '',
+                  eac != null ? eac.toFixed(0) : '',
+                ];
+              });
+              const totalCv = s.total_earned_hrs - s.total_actual_hrs;
+              const totalEac = s.cpi && s.cpi > 0 ? s.total_budget_hrs / s.cpi : null;
+              rows.push([
+                'PROJECT TOTAL',
+                s.total_budget_hrs.toFixed(0),
+                s.total_earned_hrs.toFixed(0),
+                s.total_actual_hrs.toFixed(0),
+                totalCv.toFixed(0),
+                s.cpi != null ? s.cpi.toFixed(3) : '',
+                totalEac != null ? totalEac.toFixed(0) : '',
+              ]);
+              if (projectBcws > 0) {
+                rows.push([
+                  `Schedule variance (BCWS = ${projectBcws.toFixed(0)})`,
+                  '',
+                  '',
+                  '',
+                  (s.total_earned_hrs - projectBcws).toFixed(0),
+                  s.spi != null ? s.spi.toFixed(3) : '',
+                  '',
+                ]);
+              }
+              downloadCsv(`variance-analysis-${date}.csv`, headers, rows);
+            }}
+          >
             <Download size={14} /> Export
           </Button>
         </div>
