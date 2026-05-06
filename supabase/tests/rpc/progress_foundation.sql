@@ -1,6 +1,6 @@
 begin;
 
-select plan(45);
+select plan(51);
 
 select has_table('projectcontrols', 'iwps', 'iwps table exists');
 select has_table('projectcontrols', 'progress_records', 'progress_records table exists');
@@ -66,6 +66,22 @@ select has_function('projectcontrols', 'period_close', array['uuid', 'uuid'],
   'period_close RPC still exists post-rewrite');
 select has_function('projectcontrols', 'project_lock_baseline', array['uuid', 'timestamptz'],
   'project_lock_baseline RPC still exists post-rewrite');
+
+-- T9 — per-project COA scoping table.
+select has_table('projectcontrols', 'project_coa_codes',
+  'project_coa_codes table exists');
+select has_column('projectcontrols', 'project_coa_codes', 'project_id',
+  'project_coa_codes has project_id');
+select has_column('projectcontrols', 'project_coa_codes', 'coa_code_id',
+  'project_coa_codes has coa_code_id');
+select has_column('projectcontrols', 'project_coa_codes', 'enabled',
+  'project_coa_codes has enabled');
+select has_pk('projectcontrols', 'project_coa_codes',
+  'project_coa_codes has primary key');
+
+-- T8 — snapshot-based discipline metrics for "as of date" reporting.
+select has_function('projectcontrols', 'discipline_metrics_at_snapshot', array['uuid'],
+  'discipline_metrics_at_snapshot RPC exists');
 
 select * from finish();
 

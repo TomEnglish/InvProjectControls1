@@ -1,8 +1,15 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Plus, Pencil, Search, ListTree, Upload } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
-import { useCoaCodes, useCurrentUser, hasRole, type CoaCodeRow } from '@/lib/queries';
+import {
+  useCoaCodes,
+  useCurrentUser,
+  useProjectCoaCodes,
+  hasRole,
+  type CoaCodeRow,
+} from '@/lib/queries';
+import { useProjectStore } from '@/stores/project';
 import { Button } from '@/components/ui/Button';
 import { selectClass } from '@/components/ui/FormField';
 import { CoaCodeModal } from '@/components/coa/CoaCodeModal';
@@ -24,10 +31,24 @@ export function CoaPage() {
   const { data: me } = useCurrentUser();
   const canEdit = hasRole(me?.role, 'admin');
 
+  const projectId = useProjectStore((s) => s.currentProjectId);
+  const projectCoa = useProjectCoaCodes(projectId);
+
   const qc = useQueryClient();
   const [primeFilter, setPrimeFilter] = useState<string>('All');
   const [search, setSearch] = useState('');
+  const [scopeFilter, setScopeFilter] = useState<'all' | 'in_scope'>('all');
   const [editing, setEditing] = useState<CoaCodeRow | null>(null);
+
+  // If the project's pick set drops to zero (e.g. user clicked "Clear all"
+  // on the picker card), revert this filter to 'all' — otherwise the table
+  // shows an empty "no codes match" state with no toggle visible to recover.
+  const projectPickCount = projectCoa.data?.size ?? 0;
+  useEffect(() => {
+    if (scopeFilter === 'in_scope' && projectPickCount === 0) {
+      setScopeFilter('all');
+    }
+  }, [scopeFilter, projectPickCount]);
   const [creatingNew, setCreatingNew] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
 
@@ -56,13 +77,14 @@ export function CoaPage() {
     const q = search.trim().toLowerCase();
     return all.filter((c) => {
       if (primeFilter !== 'All' && c.prime !== primeFilter) return false;
+      if (scopeFilter === 'in_scope' && projectId && !projectCoa.data?.has(c.id)) return false;
       if (!q) return true;
       return (
         c.code.toLowerCase().includes(q) ||
         c.description.toLowerCase().includes(q)
       );
     });
-  }, [codes, primeFilter, search]);
+  }, [codes, primeFilter, search, scopeFilter, projectId, projectCoa.data]);
 
   if (isLoading) {
     return (
@@ -156,6 +178,36 @@ export function CoaPage() {
               onChange={(e) => setSearch(e.target.value)}
             />
           </div>
+          {projectId && (projectCoa.data?.size ?? 0) > 0 && (
+            <div
+              role="group"
+              aria-label="Scope toggle"
+              className="inline-flex rounded-md border border-[color:var(--color-line-strong)] overflow-hidden"
+            >
+              <button
+                type="button"
+                onClick={() => setScopeFilter('all')}
+                className="px-3 py-1.5 text-xs font-semibold transition-colors"
+                style={{
+                  background: scopeFilter === 'all' ? 'var(--color-primary)' : 'transparent',
+                  color: scopeFilter === 'all' ? 'var(--color-text-inverse)' : 'var(--color-text-muted)',
+                }}
+              >
+                All
+              </button>
+              <button
+                type="button"
+                onClick={() => setScopeFilter('in_scope')}
+                className="px-3 py-1.5 text-xs font-semibold transition-colors"
+                style={{
+                  background: scopeFilter === 'in_scope' ? 'var(--color-primary)' : 'transparent',
+                  color: scopeFilter === 'in_scope' ? 'var(--color-text-inverse)' : 'var(--color-text-muted)',
+                }}
+              >
+                In scope ({projectCoa.data?.size ?? 0})
+              </button>
+            </div>
+          )}
         </div>
         {canEdit && (
           <div className="flex items-center gap-2">
@@ -220,9 +272,23 @@ export function CoaPage() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((c) => (
-                <tr key={c.id}>
-                  <td className="font-mono">{c.prime}</td>
+              {filtered.map((c) => {
+                const inScope = projectId ? projectCoa.data?.has(c.id) : null;
+                return (
+                <tr
+                  key={c.id}
+                  style={{
+                    opacity: projectId && inScope === false ? 0.55 : 1,
+                  }}
+                >
+                  <td className="font-mono">
+                    {inScope && (
+                      <span className="is-chip is-chip-primary mr-2" style={{ padding: '1px 6px', fontSize: 10 }}>
+                        ✓
+                      </span>
+                    )}
+                    {c.prime}
+                  </td>
                   <td className="font-mono font-semibold">{c.code}</td>
                   <td>{c.description}</td>
                   <td className="font-mono text-[color:var(--color-text-muted)]">
@@ -248,7 +314,8 @@ export function CoaPage() {
                     </td>
                   )}
                 </tr>
-              ))}
+                );
+              })}
               {filtered.length === 0 && (
                 <tr>
                   <td

@@ -12,6 +12,7 @@ import { AddDisciplineModal } from '@/components/projects/AddDisciplineModal';
 import { UsersCard } from '@/components/projects/UsersCard';
 import { ForemanAliasesCard } from '@/components/projects/ForemanAliasesCard';
 import { RollupModeCard } from '@/components/projects/RollupModeCard';
+import { ProjectCoaPickerCard } from '@/components/projects/ProjectCoaPickerCard';
 
 type Project = {
   id: string;
@@ -244,6 +245,8 @@ export function ProjectSetupPage() {
       </Card>
 
       <RollupModeCard projectId={projectId} />
+
+      <ProjectCoaPickerCard projectId={projectId} />
 
       <UsersCard />
 

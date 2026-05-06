@@ -532,6 +532,35 @@ export function useDisciplineMetrics(projectId: string | null) {
   });
 }
 
+/**
+ * Per-discipline metrics computed against a frozen snapshot. Same shape as
+ * useDisciplineMetrics, but source rows come from progress_snapshot_items
+ * for the named snapshot.
+ */
+export function useDisciplineMetricsAtSnapshot(snapshotId: string | null) {
+  return useQuery({
+    queryKey: ['discipline-metrics-at-snapshot', snapshotId] as const,
+    enabled: !!snapshotId,
+    queryFn: async (): Promise<DisciplineMetric[]> => {
+      const { data, error } = await supabase.rpc('discipline_metrics_at_snapshot', {
+        p_snapshot_id: snapshotId,
+      });
+      if (error) throw error;
+      return (data ?? []).map((r: Record<string, unknown>) => ({
+        discipline_id: r.discipline_id as string,
+        discipline_code: r.discipline_code as string,
+        display_name: r.display_name as string,
+        records: Number(r.records),
+        budget_hrs: Number(r.budget_hrs),
+        earned_hrs: Number(r.earned_hrs),
+        actual_hrs: Number(r.actual_hrs),
+        earned_pct: Number(r.earned_pct) / 100,
+        cpi: r.cpi != null ? Number(r.cpi) : null,
+      }));
+    },
+  });
+}
+
 export type ProjectQtyRollup = {
   composite_pct: number;
   mode: 'hours_weighted' | 'equal' | 'custom';
@@ -693,6 +722,42 @@ export function useDashboardSummary(projectId: string | null) {
   };
 }
 
+/**
+ * Composer hook returning a `ProjectSummary` for a specific snapshot.
+ * Project-level totals come from the snapshot row directly; per-discipline
+ * rollup comes from discipline_metrics_at_snapshot. Used by the Reports
+ * "as of" date selector.
+ *
+ * Caller passes projectId explicitly because list_snapshots doesn't return
+ * it (and faking with empty string is a footgun for downstream consumers).
+ */
+export function useDashboardSummaryAtSnapshot(
+  snapshot: Snapshot | null,
+  projectId: string | null,
+) {
+  const disciplines = useDisciplineMetricsAtSnapshot(snapshot?.id ?? null);
+  return {
+    isLoading: disciplines.isLoading,
+    error: disciplines.error as Error | null,
+    data:
+      snapshot && disciplines.data && projectId
+        ? ({
+            project_id: projectId,
+            total_budget_hrs: snapshot.total_budget_hrs ?? 0,
+            total_earned_hrs: snapshot.total_earned_hrs ?? 0,
+            total_actual_hrs: snapshot.total_actual_hrs ?? 0,
+            overall_pct:
+              snapshot.total_budget_hrs && snapshot.total_budget_hrs > 0
+                ? (snapshot.total_earned_hrs ?? 0) / snapshot.total_budget_hrs
+                : 0,
+            cpi: snapshot.cpi,
+            spi: snapshot.spi,
+            disciplines: disciplines.data,
+          } satisfies ProjectSummary)
+        : null,
+  };
+}
+
 export type ForemanAlias = {
   tenant_id: string;
   name: string;
@@ -710,6 +775,27 @@ export function useForemanAliases() {
         .order('name');
       if (error) throw error;
       return (data ?? []) as ForemanAlias[];
+    },
+  });
+}
+
+/**
+ * Set of coa_code_ids enabled for a given project. Empty set means
+ * the project hasn't been scoped yet; consumers may treat that as
+ * "all codes available" until scoping happens.
+ */
+export function useProjectCoaCodes(projectId: string | null) {
+  return useQuery({
+    queryKey: ['project-coa-codes', projectId] as const,
+    enabled: !!projectId,
+    queryFn: async (): Promise<Set<string>> => {
+      const { data, error } = await supabase
+        .from('project_coa_codes')
+        .select('coa_code_id')
+        .eq('project_id', projectId!)
+        .eq('enabled', true);
+      if (error) throw error;
+      return new Set((data ?? []).map((r) => r.coa_code_id as string));
     },
   });
 }
