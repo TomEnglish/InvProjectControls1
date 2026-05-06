@@ -23,6 +23,7 @@
     "samples": "tsx scripts/sample/generate-import-workbooks.ts"
   },
   "devDependencies": {
+    "playwright": "^1.59.1",
     "tsx": "^4.19.2",
     "typescript": "^5.6.3",
     "xlsx": "^0.18.5"
