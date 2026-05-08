@@ -50,12 +50,42 @@ export function VarianceAnalysisTable({
         <thead>
           <tr>
             <th>Discipline</th>
-            <th style={{ textAlign: 'right' }}>Budget</th>
-            <th style={{ textAlign: 'right' }}>BCWP</th>
-            <th style={{ textAlign: 'right' }}>ACWP</th>
-            <th style={{ textAlign: 'right' }}>CV</th>
-            <th style={{ textAlign: 'right' }}>CPI</th>
-            <th style={{ textAlign: 'right' }}>EAC</th>
+            <th
+              style={{ textAlign: 'right', cursor: 'help' }}
+              title="Budget hours — total planned work for the discipline."
+            >
+              Budget
+            </th>
+            <th
+              style={{ textAlign: 'right', cursor: 'help' }}
+              title="Budgeted Cost of Work Performed — earned hours, calculated from milestone progress × ROC weights × budget hours."
+            >
+              BCWP
+            </th>
+            <th
+              style={{ textAlign: 'right', cursor: 'help' }}
+              title="Actual Cost of Work Performed — actual hours booked against the discipline."
+            >
+              ACWP
+            </th>
+            <th
+              style={{ textAlign: 'right', cursor: 'help' }}
+              title="Cost Variance = BCWP − ACWP. Positive = under budget on work done."
+            >
+              CV
+            </th>
+            <th
+              style={{ textAlign: 'right', cursor: 'help' }}
+              title="Cost Performance Index = BCWP ÷ ACWP. ≥1 favourable; <1 over budget."
+            >
+              CPI
+            </th>
+            <th
+              style={{ textAlign: 'right', cursor: 'help' }}
+              title="Estimate at Completion = Budget ÷ CPI. Projected total hours at finish if current cost-performance trend continues."
+            >
+              EAC
+            </th>
           </tr>
         </thead>
         <tbody>
