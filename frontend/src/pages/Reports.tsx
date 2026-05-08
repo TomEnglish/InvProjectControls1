@@ -1,6 +1,6 @@
 import '@/lib/charts';
 import { useMemo, useState } from 'react';
-import { FileBarChart, Download, Calendar } from 'lucide-react';
+import { FileBarChart, Download, Calendar, Info } from 'lucide-react';
 import { useProjectStore } from '@/stores/project';
 import {
   useDashboardSummary,
@@ -135,19 +135,22 @@ export function ReportsPage() {
       />
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <SummaryTile
-          label="Cost Variance"
+          label="Cost Variance (CV)"
+          help="Earned hours minus actual hours. Positive = under budget on the work done. CV = BCWP − ACWP."
           value={`${cv >= 0 ? '+' : ''}${fmt.int(cv)}`}
           caption="BCWP − ACWP"
           tone={cv >= 0 ? 'favourable' : 'unfavourable'}
         />
         <SummaryTile
-          label="Schedule Variance"
+          label="Schedule Variance (SV)"
+          help="Earned hours minus planned hours. Positive = ahead of schedule. SV = BCWP − BCWS."
           value={projectBcws > 0 ? `${sv >= 0 ? '+' : ''}${fmt.int(sv)}` : '—'}
           caption={projectBcws > 0 ? 'BCWP − BCWS' : 'No locked period yet'}
           tone={projectBcws === 0 ? 'neutral' : sv >= 0 ? 'favourable' : 'unfavourable'}
         />
         <SummaryTile
-          label="Forecast at Completion"
+          label="Forecast at Completion (FAC)"
+          help="Projected total hours at finish, given the current cost-performance trend. FAC = Budget ÷ CPI."
           value={
             s.cpi != null && s.cpi > 0
               ? fmt.int(s.total_budget_hrs / s.cpi)
@@ -175,7 +178,10 @@ export function ReportsPage() {
               <EarnedValueByDisciplineChart disciplines={s.disciplines} />
             )}
           </ChartCard>
-          <ChartCard title="CPI / SPI trend" caption="Per locked period.">
+          <ChartCard
+            title="CPI / SPI trend"
+            caption="Per locked period. CPI = earned÷actual hours (cost performance, ≥1 favourable). SPI = earned÷planned hours (schedule performance, ≥1 favourable)."
+          >
             <CpiSpiTrendChart periods={ps} />
           </ChartCard>
         </div>
@@ -339,11 +345,13 @@ function SummaryTile({
   value,
   caption,
   tone,
+  help,
 }: {
   label: string;
   value: string;
   caption: string;
   tone: 'favourable' | 'unfavourable' | 'neutral';
+  help?: string;
 }) {
   const colour =
     tone === 'favourable'
@@ -353,7 +361,14 @@ function SummaryTile({
         : 'var(--color-text)';
   return (
     <div className="is-surface is-stat-card">
-      <div className="is-stat-label">{label}</div>
+      <div className="is-stat-label flex items-center gap-1.5">
+        <span>{label}</span>
+        {help && (
+          <span title={help} className="cursor-help text-[color:var(--color-text-subtle)]">
+            <Info size={12} />
+          </span>
+        )}
+      </div>
       <div className="is-stat-value font-mono" style={{ color: colour }}>
         {value}
       </div>

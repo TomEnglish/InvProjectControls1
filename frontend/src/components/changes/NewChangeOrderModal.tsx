@@ -38,9 +38,12 @@ export function NewChangeOrderModal({ open, onClose, projectId }: Props) {
     },
   });
 
+  const todayISO = new Date().toISOString().slice(0, 10);
   const [form, setForm] = useState({
     discipline_id: '',
     type: 'scope_add',
+    drawing: '',
+    date: todayISO,
     description: '',
     qty_change: 0,
     uom: 'EA',
@@ -72,6 +75,22 @@ export function NewChangeOrderModal({ open, onClose, projectId }: Props) {
   return (
     <Modal open={open} onClose={onClose} title="New Change Order">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <Field label="Drawing #" hint="Drawing affected by the change.">
+          <input
+            className={inputClass}
+            placeholder="e.g. P-2050"
+            value={form.drawing}
+            onChange={(e) => setForm({ ...form, drawing: e.target.value })}
+          />
+        </Field>
+        <Field label="Date">
+          <input
+            type="date"
+            className={inputClass}
+            value={form.date}
+            onChange={(e) => setForm({ ...form, date: e.target.value })}
+          />
+        </Field>
         <Field label="Discipline">
           <select
             className={inputClass}

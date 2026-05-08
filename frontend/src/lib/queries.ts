@@ -116,6 +116,7 @@ export type ChangeOrder = {
   id: string;
   co_number: string;
   date: string;
+  drawing: string | null;
   discipline_id: string | null;
   discipline_code: string | null;
   discipline_name: string | null;
@@ -137,7 +138,7 @@ export function useChangeOrders(projectId: string | null) {
       const { data, error } = await supabase
         .from('change_orders')
         .select(
-          'id, co_number, date, discipline_id, type, description, qty_change, uom, hrs_impact, status, requested_by, rejection_reason, project_disciplines!change_orders_discipline_id_fkey(discipline_code, display_name)',
+          'id, co_number, date, drawing, discipline_id, type, description, qty_change, uom, hrs_impact, status, requested_by, rejection_reason, project_disciplines!change_orders_discipline_id_fkey(discipline_code, display_name)',
         )
         .eq('project_id', projectId!)
         .order('co_number');
@@ -148,6 +149,7 @@ export function useChangeOrders(projectId: string | null) {
           id: row.id,
           co_number: row.co_number,
           date: row.date,
+          drawing: row.drawing ?? null,
           discipline_id: row.discipline_id,
           discipline_code: pd?.discipline_code ?? null,
           discipline_name: pd?.display_name ?? null,

@@ -152,6 +152,7 @@ export function ChangeManagementPage() {
               <tr>
                 <th>CO #</th>
                 <th>Date</th>
+                <th>Drawing</th>
                 <th>Discipline</th>
                 <th>Type</th>
                 <th>Description</th>
@@ -184,7 +185,7 @@ export function ChangeManagementPage() {
               ))}
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={11} className="text-center text-[color:var(--color-text-muted)] py-6">
+                  <td colSpan={12} className="text-center text-[color:var(--color-text-muted)] py-6">
                     No change orders match.
                   </td>
                 </tr>
@@ -335,6 +336,7 @@ function CoRow({
     >
       <td className="font-mono font-semibold">{co.co_number}</td>
       <td>{co.date}</td>
+      <td className="font-mono">{co.drawing ?? '—'}</td>
       <td>{co.discipline_name ?? '—'}</td>
       <td className="capitalize">{co.type.replace(/_/g, ' ')}</td>
       <td className="max-w-md">{co.description}</td>
