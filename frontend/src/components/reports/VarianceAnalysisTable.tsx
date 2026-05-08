@@ -45,8 +45,8 @@ export function VarianceAnalysisTable({
   const totalEac = totalCpi && totalCpi > 0 ? totalBudget / totalCpi : null;
 
   return (
-    <div className="overflow-x-auto rounded-md border border-[color:var(--color-line)]">
-      <table className="is-table">
+    <div className="rounded-md border border-[color:var(--color-line)]" style={{ overflow: 'visible' }}>
+      <table className="is-table" style={{ width: '100%' }}>
         <thead>
           <tr>
             <th>Discipline</th>
