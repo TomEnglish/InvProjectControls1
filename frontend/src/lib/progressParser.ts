@@ -7,6 +7,8 @@ export interface MilestoneEntry {
 
 export interface ParsedRow {
   dwg?: string;
+  rev?: string;
+  code?: string;
   name?: string;
   budget_hrs?: number;
   actual_hrs?: number;
@@ -28,21 +30,78 @@ export interface ParseResult {
   unmappedHeaders: string[];
 }
 
+// Aliases cover the union of the seven per-discipline audit templates
+// in ProgressDocs/InputExamples/ (civil/electrical/instrumentation/mechanical/
+// pipe/site work/steel) plus the original snake_case progress-template.csv.
+// Per Sandra's UAT, the upload form needs to accept any of these out of the
+// box so users don't have to rename columns before importing.
 const HEADER_MAP: Record<string, keyof ParsedRow> = {
-  dwg: 'dwg', drawing: 'dwg', iso: 'dwg', drawing_no: 'dwg', drawing_number: 'dwg',
-  name: 'name', description: 'name', desc: 'name', item_description: 'name',
-  budget_hrs: 'budget_hrs', budget_hours: 'budget_hrs', budget: 'budget_hrs', budgeted_hrs: 'budget_hrs', plan_hrs: 'budget_hrs', hours: 'budget_hrs',
-  actual_hrs: 'actual_hrs', actual_hours: 'actual_hrs', actual: 'actual_hrs', spent_hrs: 'actual_hrs',
-  percent_complete: 'percent_complete', percent: 'percent_complete', pct: 'percent_complete', pct_complete: 'percent_complete', complete: 'percent_complete', completion: 'percent_complete', percent_hrs: 'percent_complete', percenthrs: 'percent_complete',
+  // Drawing number
+  dwg: 'dwg', drawing: 'dwg', drawing_no: 'dwg', drawing_number: 'dwg', iso: 'dwg',
+
+  // Drawing revision (audit files use REV_NO)
+  rev: 'rev', rev_no: 'rev', revision: 'rev', revision_no: 'rev',
+
+  // COA cost code (audit files use CODE)
+  code: 'code', coa_code: 'code', cost_code: 'code',
+
+  // Description / item name (audit files use DESC_, SPOOL_FR, or TAG_NO depending
+  // on discipline; instrumentation also uses TAG_NO ).
+  name: 'name', description: 'name', desc: 'name', desc_: 'name',
+  item_description: 'name', tag_no: 'name', tag: 'name', spool_fr: 'name',
+
+  // Budget hours (audit files use FLD_WHRS = field work hours; mechanical also
+  // exposes IFC_WHRS which is the issued-for-construction hour estimate).
+  budget_hrs: 'budget_hrs', budget_hours: 'budget_hrs', budget: 'budget_hrs',
+  budgeted_hrs: 'budget_hrs', plan_hrs: 'budget_hrs', hours: 'budget_hrs',
+  fld_whrs: 'budget_hrs', field_whrs: 'budget_hrs', field_hrs: 'budget_hrs',
+  ifc_whrs: 'budget_hrs',
+
+  // Actual hours (timesheet hours booked — audit files don't carry this; the
+  // EARN_WHRS column is computed from milestones and intentionally not mapped
+  // here so we don't conflate earned with actual).
+  actual_hrs: 'actual_hrs', actual_hours: 'actual_hrs', actual: 'actual_hrs',
+  spent_hrs: 'actual_hrs',
+
+  // Percent complete
+  percent_complete: 'percent_complete', percent: 'percent_complete', pct: 'percent_complete',
+  pct_complete: 'percent_complete', complete: 'percent_complete',
+  completion: 'percent_complete', percent_hrs: 'percent_complete',
+  percenthrs: 'percent_complete',
+
+  // Unit of measure
   unit: 'unit', uom: 'unit', units: 'unit', unit_of_measure: 'unit',
-  budget_qty: 'budget_qty', budget_quantity: 'budget_qty', qty_budget: 'budget_qty', plan_qty: 'budget_qty', qty: 'budget_qty', quantity: 'budget_qty',
-  actual_qty: 'actual_qty', actual_quantity: 'actual_qty', qty_actual: 'actual_qty', earned_qty: 'actual_qty',
-  foreman: 'foreman_name', foreman_name: 'foreman_name', supervisor: 'foreman_name', lead: 'foreman_name', iwp_foreman: 'foreman_name',
-  iwp: 'iwp_name', iwp_name: 'iwp_name', work_package: 'iwp_name', wp: 'iwp_name',
+
+  // Budget / planned quantity (audit files use FLD_QTY = field quantity)
+  budget_qty: 'budget_qty', budget_quantity: 'budget_qty', qty_budget: 'budget_qty',
+  plan_qty: 'budget_qty', planned_qty: 'budget_qty', qty: 'budget_qty', quantity: 'budget_qty',
+  fld_qty: 'budget_qty', field_qty: 'budget_qty',
+
+  // Actual / earned quantity (audit files use ERN_QTY)
+  actual_qty: 'actual_qty', actual_quantity: 'actual_qty', qty_actual: 'actual_qty',
+  earned_qty: 'actual_qty', ern_qty: 'actual_qty', earn_qty: 'actual_qty',
+
+  // Foreman (audit files use IWP_FOREMAN; some sheets also expose IWP_GEN_FOREMAN
+  // for the general foreman — collapsed onto the same target since the schema
+  // tracks one foreman per record).
+  foreman: 'foreman_name', foreman_name: 'foreman_name', supervisor: 'foreman_name',
+  lead: 'foreman_name', iwp_foreman: 'foreman_name', iwp_gen_foreman: 'foreman_name',
+
+  // IWP / work package (audit files use IWP_PLAN_NO)
+  iwp: 'iwp_name', iwp_name: 'iwp_name', iwp_plan_no: 'iwp_name',
+  iwp_plan: 'iwp_name', work_package: 'iwp_name', wp: 'iwp_name',
+
+  // Type / size / spec (audit files use SZE for size and PIPE_SPEC/SPEC for spec)
   type: 'attr_type', attr_type: 'attr_type',
-  size: 'attr_size', attr_size: 'attr_size',
+  size: 'attr_size', sze: 'attr_size', attr_size: 'attr_size',
   spec: 'attr_spec', attr_spec: 'attr_spec', specification: 'attr_spec',
-  line_area: 'line_area', area: 'line_area', line: 'line_area', module: 'line_area', system: 'line_area', zone: 'line_area',
+  pipe_spec: 'attr_spec',
+
+  // Line / area / system / circuit (all collapse to the records' line_area
+  // column — discipline-specific naming, same downstream filter target)
+  line_area: 'line_area', area: 'line_area', line: 'line_area', module: 'line_area',
+  system: 'line_area', zone: 'line_area', carea: 'line_area', circuit: 'line_area',
+  var_area: 'line_area',
 };
 
 function normalizeHeader(h: string): string {
@@ -72,15 +131,34 @@ interface MilestonePair {
   pctHeader: string;
 }
 
+// Milestone column conventions across the seven audit templates plus the
+// in-house progress template:
+//   Description side: item_N        (in-house template)
+//                     mN_desc       (civil/inst/mech/pipe/steel audits)
+//                     milestone_N   (defensive fallback)
+//   Percent side:     pct_N / percent_N   (in-house)
+//                     mN_pct              (civil/inst/mech/pipe/steel)
+//                     mi_q_N              (electrical audit's variant)
+// We deliberately do NOT match a bare `m_N` header — the audit files' M1..M8
+// columns near the end of the sheet contain ROC weights, not milestone values.
 function findMilestonePairs(headers: string[]): MilestonePair[] {
   const pairs: MilestonePair[] = [];
   for (let n = 1; n <= 12; n++) {
-    const itemHeader = headers.find((h) => normalizeHeader(h) === `item_${n}`);
-    const pctHeader = headers.find(
-      (h) => normalizeHeader(h) === `pct_${n}` || normalizeHeader(h) === `percent_${n}`,
-    );
-    if (itemHeader && pctHeader) {
-      pairs.push({ itemHeader, pctHeader });
+    const descHeader = headers.find((h) => {
+      const norm = normalizeHeader(h);
+      return norm === `item_${n}` || norm === `m${n}_desc` || norm === `milestone_${n}`;
+    });
+    const pctHeader = headers.find((h) => {
+      const norm = normalizeHeader(h);
+      return (
+        norm === `pct_${n}` ||
+        norm === `percent_${n}` ||
+        norm === `m${n}_pct` ||
+        norm === `mi_q_${n}`
+      );
+    });
+    if (descHeader && pctHeader) {
+      pairs.push({ itemHeader: descHeader, pctHeader });
     }
   }
   return pairs;

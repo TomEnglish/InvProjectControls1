@@ -332,6 +332,7 @@ export type ProgressRow = {
   source_type: string;
   dwg: string | null;
   rev: string | null;
+  code: string | null;
   description: string;
   uom: string;
   budget_qty: number | null;
@@ -366,6 +367,7 @@ export function useProgressRows(projectId: string | null) {
         source_type: string;
         dwg: string | null;
         rev: string | null;
+        code: string | null;
         description: string;
         uom: string;
         budget_qty: number | string | null;
@@ -390,7 +392,7 @@ export function useProgressRows(projectId: string | null) {
         supabase
           .from('progress_records')
           .select(
-            'id, project_id, discipline_id, iwp_id, record_no, source_type, dwg, rev, description, uom, ' +
+            'id, project_id, discipline_id, iwp_id, record_no, source_type, dwg, rev, code, description, uom, ' +
               'budget_qty, actual_qty, earned_qty, budget_hrs, actual_hrs, earned_hrs, percent_complete, status, ' +
               'foreman_user_id, foreman_name, attr_type, attr_size, attr_spec, line_area, ' +
               'project_disciplines(discipline_code, display_name), iwps(name)',
@@ -437,6 +439,7 @@ export function useProgressRows(projectId: string | null) {
           source_type: r.source_type,
           dwg: r.dwg,
           rev: r.rev,
+          code: r.code,
           description: r.description,
           uom: r.uom,
           budget_qty: r.budget_qty != null ? Number(r.budget_qty) : null,

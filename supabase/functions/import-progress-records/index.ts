@@ -17,6 +17,8 @@ import { createClient } from 'jsr:@supabase/supabase-js@2';
 type Milestone = { name: string; pct: number };
 type Item = {
   dwg?: string;
+  rev?: string;
+  code?: string;
   name?: string;
   budget_hrs?: number;
   actual_hrs?: number;
@@ -145,6 +147,8 @@ Deno.serve(async (req) => {
     source_type: 'import',
     source_filename: body.sourceFilename ?? null,
     dwg: item.dwg ?? null,
+    rev: item.rev ?? null,
+    code: item.code ?? null,
     description: item.name ?? '(unnamed)',
     uom: (item.unit ?? 'EA').toUpperCase(),
     budget_qty: item.budget_qty ?? null,

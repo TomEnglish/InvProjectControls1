@@ -156,19 +156,96 @@ async function main() {
   }
 
   // --- 3. COA codes
+  // Industry-standard CSI-style codes from Sandra Lee's Craft Unit Rates.xlsx.
+  // Mirrors migration 20260508000001_seed_industry_coa_codes.sql so a fresh
+  // dev seed and an existing UAT tenant end up with identical libraries.
   const coa = [
-    { prime: '100', code: '101', description: 'Concrete Foundations', parent: '100', level: 2, uom: 'CY', base_rate: 8.5, pf_adj: 1.12 },
-    { prime: '100', code: '102', description: 'Concrete Piles', parent: '100', level: 2, uom: 'EA', base_rate: 12.0, pf_adj: 1.08 },
-    { prime: '100', code: '103', description: 'Structural Backfill', parent: '100', level: 2, uom: 'CY', base_rate: 4.2, pf_adj: 1.15 },
-    { prime: '200', code: '201', description: 'Carbon Steel Pipe <2"', parent: '200', level: 2, uom: 'LF', base_rate: 1.85, pf_adj: 1.10 },
-    { prime: '200', code: '202', description: 'Carbon Steel Pipe 2"-6"', parent: '200', level: 2, uom: 'LF', base_rate: 2.40, pf_adj: 1.10 },
-    { prime: '200', code: '203', description: 'Carbon Steel Pipe 8"-12"', parent: '200', level: 2, uom: 'LF', base_rate: 3.60, pf_adj: 1.10 },
-    { prime: '200', code: '210', description: 'Alloy Pipe', parent: '200', level: 2, uom: 'LF', base_rate: 5.20, pf_adj: 1.25 },
-    { prime: '300', code: '301', description: 'Structural Steel Erection', parent: '300', level: 2, uom: 'TONS', base_rate: 28.0, pf_adj: 1.05 },
-    { prime: '400', code: '401', description: 'Cable Tray', parent: '400', level: 2, uom: 'LF', base_rate: 1.40, pf_adj: 1.12 },
-    { prime: '400', code: '402', description: 'Conduit', parent: '400', level: 2, uom: 'LF', base_rate: 0.85, pf_adj: 1.12 },
-    { prime: '500', code: '501', description: 'Equipment Setting', parent: '500', level: 2, uom: 'EA', base_rate: 45.0, pf_adj: 1.08 },
-    { prime: '600', code: '601', description: 'Instrument Installation', parent: '600', level: 2, uom: 'EA', base_rate: 6.5, pf_adj: 1.10 },
+    { prime: '01', code: '01',    description: 'Sitework',                                            parent: null, level: 1, uom: 'EA',   base_rate: 0.0,      pf_adj: 1.00 },
+    { prime: '01', code: '01000', description: 'Temporary Facilities',                                parent: '01', level: 2, uom: 'EA',   base_rate: 0.0,      pf_adj: 1.19 },
+    { prime: '01', code: '01410', description: 'Mass Excavation',                                     parent: '01', level: 2, uom: 'CY',   base_rate: 0.0924,   pf_adj: 1.19 },
+    { prime: '01', code: '01420', description: 'Mass Backfill',                                       parent: '01', level: 2, uom: 'CY',   base_rate: 0.0840,   pf_adj: 1.19 },
+    { prime: '01', code: '01440', description: 'Flowable Backfill',                                   parent: '01', level: 2, uom: 'CY',   base_rate: 1.2605,   pf_adj: 1.19 },
+    { prime: '01', code: '01450', description: 'Excavation and Backfill for UG Piping',               parent: '01', level: 2, uom: 'CY',   base_rate: 0.3109,   pf_adj: 1.19 },
+    { prime: '01', code: '01510', description: 'Ditches',                                             parent: '01', level: 2, uom: 'CY',   base_rate: 0.0504,   pf_adj: 1.19 },
+    { prime: '01', code: '01530', description: 'Crushed Rock',                                        parent: '01', level: 2, uom: 'CY',   base_rate: 0.0672,   pf_adj: 1.19 },
+    { prime: '01', code: '01940', description: 'Specialty Pipe (24" and under)',                     parent: '01', level: 2, uom: 'LF',   base_rate: 0.4202,   pf_adj: 1.19 },
+    { prime: '01', code: '01950', description: 'U/G Precast Basins (SMALL)',                          parent: '01', level: 2, uom: 'EA',   base_rate: 41.1765,  pf_adj: 1.19 },
+
+    { prime: '04', code: '04',    description: 'Civil / Concrete',                                    parent: null, level: 1, uom: 'EA',   base_rate: 0.0,      pf_adj: 1.00 },
+    { prime: '04', code: '04110', description: 'FDN 0-10 CY',                                         parent: '04', level: 2, uom: 'CY',   base_rate: 17.8151,  pf_adj: 1.19 },
+    { prime: '04', code: '04120', description: 'FDN 10-20 CY',                                        parent: '04', level: 2, uom: 'CY',   base_rate: 7.3950,   pf_adj: 1.19 },
+    { prime: '04', code: '04130', description: 'FDN 30-200 CY',                                       parent: '04', level: 2, uom: 'CY',   base_rate: 5.7143,   pf_adj: 1.19 },
+    { prime: '04', code: '04150', description: 'FDN Greater than 200 CY',                             parent: '04', level: 2, uom: 'CY',   base_rate: 5.1261,   pf_adj: 1.19 },
+    { prime: '04', code: '04210', description: 'Concrete Area Paving',                                parent: '04', level: 2, uom: 'CY',   base_rate: 5.5966,   pf_adj: 1.19 },
+    { prime: '04', code: '04220', description: 'Concrete Roads',                                      parent: '04', level: 2, uom: 'CY',   base_rate: 4.5378,   pf_adj: 1.19 },
+    { prime: '04', code: '04500', description: 'Cast in Walled Structures',                           parent: '04', level: 2, uom: 'CY',   base_rate: 18.9076,  pf_adj: 1.19 },
+    { prime: '04', code: '04620', description: 'Epoxy',                                               parent: '04', level: 2, uom: 'CF',   base_rate: 6.4706,   pf_adj: 1.19 },
+    { prime: '04', code: '04630', description: 'Non-Shrink Grout',                                    parent: '04', level: 2, uom: 'CF',   base_rate: 4.7899,   pf_adj: 1.19 },
+    { prime: '04', code: '04700', description: 'Seal Slabs',                                          parent: '04', level: 2, uom: 'CY',   base_rate: 1.2605,   pf_adj: 1.19 },
+
+    { prime: '05', code: '05',    description: 'Iron / Structural Steel',                             parent: null, level: 1, uom: 'EA',   base_rate: 0.0,      pf_adj: 1.00 },
+    { prime: '05', code: '05210', description: 'Erection (Major Structural Framing)',                 parent: '05', level: 2, uom: 'TONS', base_rate: 15.1429,  pf_adj: 1.19 },
+    { prime: '05', code: '05220', description: 'Erect Piperacks Conduit and/or Cable Tray',           parent: '05', level: 2, uom: 'TONS', base_rate: 15.9227,  pf_adj: 1.19 },
+    { prime: '05', code: '05230', description: 'Erection (Miscellaneous Steel — Stair/Grate/Ladder)', parent: '05', level: 2, uom: 'TONS', base_rate: 26.4462,  pf_adj: 1.19 },
+    { prime: '05', code: '05240', description: 'Erection (Structural Specialties)',                   parent: '05', level: 2, uom: 'TONS', base_rate: 0.0,      pf_adj: 1.19 },
+
+    { prime: '07', code: '07',    description: 'Mechanical',                                          parent: null, level: 1, uom: 'EA',   base_rate: 0.0,      pf_adj: 1.00 },
+    { prime: '07', code: '07110', description: 'Heat Transfer Equipment',                             parent: '07', level: 2, uom: 'EA',   base_rate: 0.0,      pf_adj: 1.19 },
+    { prime: '07', code: '07120', description: 'Pressure Vessels and Tanks',                          parent: '07', level: 2, uom: 'EA',   base_rate: 10.0,     pf_adj: 1.19 },
+    { prime: '07', code: '07130', description: 'Compressors, Expanders',                              parent: '07', level: 2, uom: 'EA',   base_rate: 80.6723,  pf_adj: 1.19 },
+    { prime: '07', code: '07140', description: 'Pumps and Drive',                                     parent: '07', level: 2, uom: 'EA',   base_rate: 123.5294, pf_adj: 1.19 },
+    { prime: '07', code: '07150', description: 'Misc. Rotating Equipment',                            parent: '07', level: 2, uom: 'EA',   base_rate: 30.0,     pf_adj: 1.19 },
+    { prime: '07', code: '07160', description: 'Filters',                                             parent: '07', level: 2, uom: 'EA',   base_rate: 40.3361,  pf_adj: 1.19 },
+    { prime: '07', code: '07185', description: 'Cooling Towers',                                      parent: '07', level: 2, uom: 'EA',   base_rate: 120.0,    pf_adj: 1.19 },
+    { prime: '07', code: '07410', description: 'Turbine / Generator',                                 parent: '07', level: 2, uom: 'EA',   base_rate: 40.0,     pf_adj: 1.19 },
+
+    { prime: '08', code: '08',    description: 'Pipe',                                                parent: null, level: 1, uom: 'EA',   base_rate: 0.0,      pf_adj: 1.00 },
+    { prime: '08', code: '08111', description: 'Carbon Steel Pipe 2.5" and under (Shop)',             parent: '08', level: 2, uom: 'LF',   base_rate: 0.0,      pf_adj: 1.19 },
+    { prime: '08', code: '08112', description: 'Carbon Steel Pipe 3" to 10" (Shop)',                  parent: '08', level: 2, uom: 'LF',   base_rate: 0.0,      pf_adj: 1.19 },
+    { prime: '08', code: '08113', description: 'Carbon Steel Pipe 12" and over (Shop)',               parent: '08', level: 2, uom: 'LF',   base_rate: 0.0,      pf_adj: 1.19 },
+    { prime: '08', code: '08121', description: 'Alloy Pipe 2.5" and under (Shop)',                    parent: '08', level: 2, uom: 'LF',   base_rate: 0.0,      pf_adj: 1.19 },
+    { prime: '08', code: '08122', description: 'Alloy Pipe 3" to 10" (Shop)',                         parent: '08', level: 2, uom: 'LF',   base_rate: 0.0,      pf_adj: 1.19 },
+    { prime: '08', code: '08123', description: 'Alloy Pipe 12" and over (Shop)',                      parent: '08', level: 2, uom: 'LF',   base_rate: 0.0,      pf_adj: 1.19 },
+    { prime: '08', code: '08211', description: 'Carbon Steel Field Run Pipe 2.5" and under',          parent: '08', level: 2, uom: 'LF',   base_rate: 2.4118,   pf_adj: 1.19 },
+    { prime: '08', code: '08212', description: 'Carbon Steel Field Run Pipe 3" to 10"',               parent: '08', level: 2, uom: 'LF',   base_rate: 2.1092,   pf_adj: 1.19 },
+    { prime: '08', code: '08213', description: 'Carbon Steel Field Run Pipe 12" and over',            parent: '08', level: 2, uom: 'LF',   base_rate: 3.3992,   pf_adj: 1.19 },
+    { prime: '08', code: '08221', description: 'Stainless Steel Alloy Field Run Pipe 2.5" and under', parent: '08', level: 2, uom: 'LF',   base_rate: 2.8655,   pf_adj: 1.19 },
+    { prime: '08', code: '08222', description: 'Stainless Steel Alloy Field Run Pipe 3" to 10"',      parent: '08', level: 2, uom: 'LF',   base_rate: 2.6218,   pf_adj: 1.19 },
+    { prime: '08', code: '08223', description: 'Stainless Steel Alloy Field Run Pipe 12" and over',   parent: '08', level: 2, uom: 'LF',   base_rate: 10.1513,  pf_adj: 1.19 },
+    { prime: '08', code: '08311', description: 'Underground CS Pipe 2.5" and Under',                  parent: '08', level: 2, uom: 'LF',   base_rate: 0.0,      pf_adj: 1.19 },
+    { prime: '08', code: '08312', description: 'Underground CS Pipe 3" to 10"',                       parent: '08', level: 2, uom: 'LF',   base_rate: 0.0,      pf_adj: 1.19 },
+    { prime: '08', code: '08313', description: 'Underground CS Pipe 12" and Over',                    parent: '08', level: 2, uom: 'LF',   base_rate: 0.0,      pf_adj: 1.19 },
+    { prime: '08', code: '08331', description: 'UG Specialty Material Pipe 2.5" and under',           parent: '08', level: 2, uom: 'LF',   base_rate: 3.6134,   pf_adj: 1.19 },
+    { prime: '08', code: '08332', description: 'U/G Specialty Material Pipe 3"-10"',                  parent: '08', level: 2, uom: 'LF',   base_rate: 8.4034,   pf_adj: 1.19 },
+    { prime: '08', code: '08333', description: 'UG Specialty Material Pipe 12" and over (HDPE)',      parent: '08', level: 2, uom: 'LF',   base_rate: 2.8714,   pf_adj: 1.19 },
+
+    { prime: '09', code: '09',    description: 'Electrical',                                          parent: null, level: 1, uom: 'EA',   base_rate: 0.0,      pf_adj: 1.00 },
+    { prime: '09', code: '09100', description: 'Grounding',                                           parent: '09', level: 2, uom: 'LF',   base_rate: 0.2269,   pf_adj: 1.19 },
+    { prime: '09', code: '09210', description: 'Underground Ductbank',                                parent: '09', level: 2, uom: 'LF',   base_rate: 0.0,      pf_adj: 1.19 },
+    { prime: '09', code: '09220', description: 'Underground Conduit',                                 parent: '09', level: 2, uom: 'LF',   base_rate: 0.5294,   pf_adj: 1.19 },
+    { prime: '09', code: '09310', description: 'Aboveground Conduit',                                 parent: '09', level: 2, uom: 'LF',   base_rate: 1.2437,   pf_adj: 1.19 },
+    { prime: '09', code: '09320', description: 'Cable Tray Systems',                                  parent: '09', level: 2, uom: 'LF',   base_rate: 0.5126,   pf_adj: 1.19 },
+    { prime: '09', code: '09340', description: 'Junction Boxes, Pull Boxes, Terminal Boxes',          parent: '09', level: 2, uom: 'EA',   base_rate: 36.9672,  pf_adj: 1.19 },
+    { prime: '09', code: '09420', description: 'Wire and Cable Installation (3/C #2 reference rate)', parent: '09', level: 2, uom: 'LF',   base_rate: 0.0462,   pf_adj: 1.19 },
+    { prime: '09', code: '09450', description: 'Fiber Optic Cable',                                   parent: '09', level: 2, uom: 'LF',   base_rate: 0.0235,   pf_adj: 1.19 },
+    { prime: '09', code: '09520', description: 'Oil Filled Transformers',                             parent: '09', level: 2, uom: 'EA',   base_rate: 0.0,      pf_adj: 1.19 },
+    { prime: '09', code: '09530', description: 'Breaker Panels',                                      parent: '09', level: 2, uom: 'EA',   base_rate: 0.0,      pf_adj: 1.19 },
+    { prime: '09', code: '09550', description: 'Motor Control Centers',                               parent: '09', level: 2, uom: 'EA',   base_rate: 80.0,     pf_adj: 1.19 },
+    { prime: '09', code: '09610', description: 'Lighting Fixtures',                                   parent: '09', level: 2, uom: 'EA',   base_rate: 0.0,      pf_adj: 1.19 },
+    { prime: '09', code: '09620', description: 'Power and Control Devices',                           parent: '09', level: 2, uom: 'EA',   base_rate: 0.0,      pf_adj: 1.19 },
+    { prime: '09', code: '09750', description: 'Poles, Towers',                                       parent: '09', level: 2, uom: 'EA',   base_rate: 0.0,      pf_adj: 1.19 },
+
+    { prime: '10', code: '10',    description: 'Instrumentation',                                     parent: null, level: 1, uom: 'EA',   base_rate: 0.0,      pf_adj: 1.00 },
+    { prime: '10', code: '10110', description: 'Field Mounted Instrument Devices',                    parent: '10', level: 2, uom: 'EA',   base_rate: 12.1597,  pf_adj: 1.19 },
+    { prime: '10', code: '10210', description: 'Control Valves and Power Operators',                  parent: '10', level: 2, uom: 'EA',   base_rate: 13.9496,  pf_adj: 1.19 },
+    { prime: '10', code: '10220', description: 'Level Gauges & Sight Glasses',                        parent: '10', level: 2, uom: 'EA',   base_rate: 12.7731,  pf_adj: 1.19 },
+    { prime: '10', code: '10410', description: 'Analytical Systems',                                  parent: '10', level: 2, uom: 'EA',   base_rate: 64.1765,  pf_adj: 1.19 },
+    { prime: '10', code: '10420', description: 'Gas Detection Systems',                               parent: '10', level: 2, uom: 'EA',   base_rate: 8.7899,   pf_adj: 1.19 },
+    { prime: '10', code: '10520', description: 'Pneumatic Tubing',                                    parent: '10', level: 2, uom: 'LF',   base_rate: 0.0,      pf_adj: 1.19 },
+    { prime: '10', code: '10550', description: 'Inst. Threaded Air Supply Lateral',                   parent: '10', level: 2, uom: 'LF',   base_rate: 0.9748,   pf_adj: 1.19 },
+    { prime: '10', code: '10600', description: 'Control Panels and Panel Mounted Inst.',              parent: '10', level: 2, uom: 'EA',   base_rate: 0.0,      pf_adj: 1.19 },
+    { prime: '10', code: '10820', description: 'Check-Out and Testing',                               parent: '10', level: 2, uom: 'EA',   base_rate: 2.8143,   pf_adj: 1.19 },
+    { prime: '10', code: '10830', description: 'Final Calibration and Loop Check',                    parent: '10', level: 2, uom: 'EA',   base_rate: 2.7059,   pf_adj: 1.19 },
   ].map((c) => ({ ...c, tenant_id: tenantId }));
 
   const { error: coaErr } = await sb.from('coa_codes').upsert(coa, { onConflict: 'tenant_id,code' });
@@ -478,45 +555,52 @@ async function main() {
     pct: number;
     foreman: string;
     area: string;
+    code?: string;
     type?: string;
     size?: string;
     spec?: string;
   };
+  // Each row carries a COA code so the QMR report has data the moment the
+  // demo tenant is seeded. Codes are picked to match Sandra's industry-
+  // standard library (migration 20260508000001) — see the spec below for
+  // why each row got its specific code.
   const progressSpec: RecSpec[] = [
-    // CIVIL
-    { rec: 1, dwg: 'C-1001', desc: 'Foundation pad A-101', disc: 'CIVIL', iwp: 'IWP-CIVIL-001', uom: 'CY', bq: 45, bh: 380, ah: 360, pct: 95, foreman: 'Alice Chen', area: 'Unit 1', type: 'Pad' },
-    { rec: 2, dwg: 'C-1002', desc: 'Pile cap B-201', disc: 'CIVIL', iwp: 'IWP-CIVIL-001', uom: 'CY', bq: 28, bh: 240, ah: 195, pct: 75, foreman: 'Alice Chen', area: 'Unit 1' },
-    { rec: 3, dwg: 'C-1003', desc: 'Backfill area Y', disc: 'CIVIL', uom: 'CY', bq: 120, bh: 504, ah: 220, pct: 40, foreman: 'Bob Carter', area: 'Tank Farm' },
-    { rec: 4, dwg: 'C-1004', desc: 'Equipment pad C-301', disc: 'CIVIL', iwp: 'IWP-CIVIL-001', uom: 'CY', bq: 62, bh: 525, ah: 510, pct: 100, foreman: 'Alice Chen', area: 'Equipment Yard' },
-    // PIPE
-    { rec: 5, dwg: 'P-2001', desc: '2" CS Line 2001-A', disc: 'PIPE', iwp: 'IWP-PIPE-001', uom: 'LF', bq: 320, bh: 770, ah: 600, pct: 80, foreman: 'Alice Chen', area: 'Unit 1', type: 'Pipe', size: '2"', spec: 'CS150' },
-    { rec: 6, dwg: 'P-2002', desc: '6" CS Line 2002-B', disc: 'PIPE', iwp: 'IWP-PIPE-001', uom: 'LF', bq: 180, bh: 432, ah: 280, pct: 60, foreman: 'Bob Carter', area: 'Unit 2', type: 'Pipe', size: '6"', spec: 'CS150' },
-    { rec: 7, dwg: 'P-2003', desc: '8" CS Line 2003-C', disc: 'PIPE', iwp: 'IWP-PIPE-002', uom: 'LF', bq: 95, bh: 342, ah: 100, pct: 25, foreman: 'Carlos Diaz', area: 'Pipe Rack', type: 'Pipe', size: '8"', spec: 'CS150' },
-    { rec: 8, dwg: 'P-2004', desc: 'Alloy Line 4-X', disc: 'PIPE', iwp: 'IWP-PIPE-002', uom: 'LF', bq: 60, bh: 312, ah: 305, pct: 100, foreman: 'Bob Carter', area: 'Pipe Rack', type: 'Pipe', size: '4"', spec: 'A312' },
-    { rec: 9, dwg: 'P-2005', desc: '4" CS Tie-in', disc: 'PIPE', iwp: 'IWP-PIPE-002', uom: 'LF', bq: 50, bh: 120, ah: 0, pct: 0, foreman: 'Carlos Diaz', area: 'Unit 1', type: 'Pipe', size: '4"', spec: 'CS150' },
-    { rec: 10, dwg: 'P-2006', desc: '2" CS Drain', disc: 'PIPE', iwp: 'IWP-PIPE-001', uom: 'LF', bq: 40, bh: 96, ah: 50, pct: 50, foreman: 'Alice Chen', area: 'Unit 2', type: 'Pipe', size: '2"', spec: 'CS150' },
-    // STEEL
-    { rec: 11, dwg: 'S-3001', desc: 'Platform L3 Steel', disc: 'STEEL', iwp: 'IWP-STEEL-001', uom: 'TONS', bq: 12.5, bh: 350, ah: 250, pct: 70, foreman: 'Alice Chen', area: 'Pipe Rack' },
-    { rec: 12, dwg: 'S-3002', desc: 'Beam W14x30', disc: 'STEEL', iwp: 'IWP-STEEL-001', uom: 'TONS', bq: 8, bh: 224, ah: 220, pct: 100, foreman: 'Bob Carter', area: 'Tank Farm' },
-    { rec: 13, dwg: 'S-3003', desc: 'Handrails Unit 1', disc: 'STEEL', uom: 'LF', bq: 250, bh: 175, ah: 60, pct: 30, foreman: 'Carlos Diaz', area: 'Unit 1' },
-    // ELEC
-    { rec: 14, dwg: 'E-4001', desc: 'Cable Tray Run CT-101', disc: 'ELEC', iwp: 'IWP-ELEC-001', uom: 'LF', bq: 450, bh: 630, ah: 410, pct: 60, foreman: 'Bob Carter', area: 'Unit 1' },
-    { rec: 15, dwg: 'E-4002', desc: 'Conduit run 4002', disc: 'ELEC', iwp: 'IWP-ELEC-001', uom: 'LF', bq: 200, bh: 170, ah: 165, pct: 90, foreman: 'Alice Chen', area: 'Unit 2' },
-    { rec: 16, dwg: 'E-4003', desc: 'Cable Pull MCC-1', disc: 'ELEC', uom: 'LF', bq: 800, bh: 1120, ah: 420, pct: 35, foreman: 'Carlos Diaz', area: 'Equipment Yard' },
-    { rec: 17, dwg: 'E-4004', desc: 'Lighting circuit', disc: 'ELEC', uom: 'EA', bq: 24, bh: 96, ah: 0, pct: 0, foreman: 'Bob Carter', area: 'Unit 1' },
-    // MECH
-    { rec: 18, dwg: 'M-5001', desc: 'Pump P-101', disc: 'MECH', iwp: 'IWP-MECH-001', uom: 'EA', bq: 1, bh: 50, ah: 42, pct: 80, foreman: 'Alice Chen', area: 'Unit 1', type: 'Pump', spec: 'API610' },
-    { rec: 19, dwg: 'M-5002', desc: 'Heat Exchanger E-101', disc: 'MECH', iwp: 'IWP-MECH-001', uom: 'EA', bq: 1, bh: 65, ah: 18, pct: 25, foreman: 'Bob Carter', area: 'Tank Farm', type: 'Heat Exchanger' },
-    { rec: 20, dwg: 'M-5003', desc: 'Compressor C-201', disc: 'MECH', uom: 'EA', bq: 1, bh: 140, ah: 0, pct: 0, foreman: 'Carlos Diaz', area: 'Equipment Yard', type: 'Compressor', spec: 'API618' },
-    // INST
-    { rec: 21, dwg: 'I-6001', desc: 'FT-101 Flow Trans.', disc: 'INST', uom: 'EA', bq: 1, bh: 7.5, ah: 7.0, pct: 100, foreman: 'Alice Chen', area: 'Unit 1', type: 'Transmitter' },
-    { rec: 22, dwg: 'I-6002', desc: 'PT-102 Pressure Trans.', disc: 'INST', uom: 'EA', bq: 1, bh: 6.5, ah: 6.2, pct: 100, foreman: 'Bob Carter', area: 'Unit 1', type: 'Transmitter' },
-    { rec: 23, dwg: 'I-6003', desc: 'LT-103 Level Trans.', disc: 'INST', uom: 'EA', bq: 1, bh: 8, ah: 4.0, pct: 50, foreman: 'Carlos Diaz', area: 'Tank Farm', type: 'Transmitter' },
-    { rec: 24, dwg: 'I-6004', desc: 'TT-104 Temp Trans.', disc: 'INST', uom: 'EA', bq: 1, bh: 6, ah: 0, pct: 0, foreman: 'Alice Chen', area: 'Unit 2', type: 'Transmitter' },
-    // SITE
-    { rec: 25, dwg: 'ST-001', desc: 'Survey Area 1', disc: 'SITE', uom: 'LS', bq: 1, bh: 80, ah: 78, pct: 100, foreman: 'Bob Carter', area: 'Unit 1' },
-    { rec: 26, dwg: 'ST-002', desc: 'Pavement Section A', disc: 'SITE', uom: 'SF', bq: 5000, bh: 425, ah: 280, pct: 65, foreman: 'Alice Chen', area: 'Equipment Yard' },
-    { rec: 27, dwg: 'ST-003', desc: 'Drainage culvert', disc: 'SITE', uom: 'LF', bq: 120, bh: 120, ah: 30, pct: 20, foreman: 'Carlos Diaz', area: 'Tank Farm' },
+    // CIVIL — foundations + backfill against the 04xxx + 01420 codes
+    { rec: 1, dwg: 'C-1001', desc: 'Foundation pad A-101', disc: 'CIVIL', iwp: 'IWP-CIVIL-001', uom: 'CY', bq: 45, bh: 380, ah: 360, pct: 95, foreman: 'Alice Chen', area: 'Unit 1', code: '04130', type: 'Pad' },
+    { rec: 2, dwg: 'C-1002', desc: 'Pile cap B-201', disc: 'CIVIL', iwp: 'IWP-CIVIL-001', uom: 'CY', bq: 28, bh: 240, ah: 195, pct: 75, foreman: 'Alice Chen', area: 'Unit 1', code: '04130' },
+    { rec: 3, dwg: 'C-1003', desc: 'Backfill area Y', disc: 'CIVIL', uom: 'CY', bq: 120, bh: 504, ah: 220, pct: 40, foreman: 'Bob Carter', area: 'Tank Farm', code: '01420' },
+    { rec: 4, dwg: 'C-1004', desc: 'Equipment pad C-301', disc: 'CIVIL', iwp: 'IWP-CIVIL-001', uom: 'CY', bq: 62, bh: 525, ah: 510, pct: 100, foreman: 'Alice Chen', area: 'Equipment Yard', code: '04130' },
+    // PIPE — field-run carbon and alloy
+    { rec: 5, dwg: 'P-2001', desc: '2" CS Line 2001-A', disc: 'PIPE', iwp: 'IWP-PIPE-001', uom: 'LF', bq: 320, bh: 770, ah: 600, pct: 80, foreman: 'Alice Chen', area: 'Unit 1', code: '08211', type: 'Pipe', size: '2"', spec: 'CS150' },
+    { rec: 6, dwg: 'P-2002', desc: '6" CS Line 2002-B', disc: 'PIPE', iwp: 'IWP-PIPE-001', uom: 'LF', bq: 180, bh: 432, ah: 280, pct: 60, foreman: 'Bob Carter', area: 'Unit 2', code: '08212', type: 'Pipe', size: '6"', spec: 'CS150' },
+    { rec: 7, dwg: 'P-2003', desc: '8" CS Line 2003-C', disc: 'PIPE', iwp: 'IWP-PIPE-002', uom: 'LF', bq: 95, bh: 342, ah: 100, pct: 25, foreman: 'Carlos Diaz', area: 'Pipe Rack', code: '08212', type: 'Pipe', size: '8"', spec: 'CS150' },
+    { rec: 8, dwg: 'P-2004', desc: 'Alloy Line 4-X', disc: 'PIPE', iwp: 'IWP-PIPE-002', uom: 'LF', bq: 60, bh: 312, ah: 305, pct: 100, foreman: 'Bob Carter', area: 'Pipe Rack', code: '08222', type: 'Pipe', size: '4"', spec: 'A312' },
+    { rec: 9, dwg: 'P-2005', desc: '4" CS Tie-in', disc: 'PIPE', iwp: 'IWP-PIPE-002', uom: 'LF', bq: 50, bh: 120, ah: 0, pct: 0, foreman: 'Carlos Diaz', area: 'Unit 1', code: '08212', type: 'Pipe', size: '4"', spec: 'CS150' },
+    { rec: 10, dwg: 'P-2006', desc: '2" CS Drain', disc: 'PIPE', iwp: 'IWP-PIPE-001', uom: 'LF', bq: 40, bh: 96, ah: 50, pct: 50, foreman: 'Alice Chen', area: 'Unit 2', code: '08211', type: 'Pipe', size: '2"', spec: 'CS150' },
+    // STEEL — major framing for beams, misc-steel for handrails / platforms
+    { rec: 11, dwg: 'S-3001', desc: 'Platform L3 Steel', disc: 'STEEL', iwp: 'IWP-STEEL-001', uom: 'TONS', bq: 12.5, bh: 350, ah: 250, pct: 70, foreman: 'Alice Chen', area: 'Pipe Rack', code: '05230' },
+    { rec: 12, dwg: 'S-3002', desc: 'Beam W14x30', disc: 'STEEL', iwp: 'IWP-STEEL-001', uom: 'TONS', bq: 8, bh: 224, ah: 220, pct: 100, foreman: 'Bob Carter', area: 'Tank Farm', code: '05210' },
+    { rec: 13, dwg: 'S-3003', desc: 'Handrails Unit 1', disc: 'STEEL', uom: 'LF', bq: 250, bh: 175, ah: 60, pct: 30, foreman: 'Carlos Diaz', area: 'Unit 1', code: '05230' },
+    // ELEC — tray, conduit, cable, lighting
+    { rec: 14, dwg: 'E-4001', desc: 'Cable Tray Run CT-101', disc: 'ELEC', iwp: 'IWP-ELEC-001', uom: 'LF', bq: 450, bh: 630, ah: 410, pct: 60, foreman: 'Bob Carter', area: 'Unit 1', code: '09320' },
+    { rec: 15, dwg: 'E-4002', desc: 'Conduit run 4002', disc: 'ELEC', iwp: 'IWP-ELEC-001', uom: 'LF', bq: 200, bh: 170, ah: 165, pct: 90, foreman: 'Alice Chen', area: 'Unit 2', code: '09310' },
+    { rec: 16, dwg: 'E-4003', desc: 'Cable Pull MCC-1', disc: 'ELEC', uom: 'LF', bq: 800, bh: 1120, ah: 420, pct: 35, foreman: 'Carlos Diaz', area: 'Equipment Yard', code: '09420' },
+    { rec: 17, dwg: 'E-4004', desc: 'Lighting circuit', disc: 'ELEC', uom: 'EA', bq: 24, bh: 96, ah: 0, pct: 0, foreman: 'Bob Carter', area: 'Unit 1', code: '09610' },
+    // MECH — pumps, vessels, compressors
+    { rec: 18, dwg: 'M-5001', desc: 'Pump P-101', disc: 'MECH', iwp: 'IWP-MECH-001', uom: 'EA', bq: 1, bh: 50, ah: 42, pct: 80, foreman: 'Alice Chen', area: 'Unit 1', code: '07140', type: 'Pump', spec: 'API610' },
+    { rec: 19, dwg: 'M-5002', desc: 'Heat Exchanger E-101', disc: 'MECH', iwp: 'IWP-MECH-001', uom: 'EA', bq: 1, bh: 65, ah: 18, pct: 25, foreman: 'Bob Carter', area: 'Tank Farm', code: '07110', type: 'Heat Exchanger' },
+    { rec: 20, dwg: 'M-5003', desc: 'Compressor C-201', disc: 'MECH', uom: 'EA', bq: 1, bh: 140, ah: 0, pct: 0, foreman: 'Carlos Diaz', area: 'Equipment Yard', code: '07130', type: 'Compressor', spec: 'API618' },
+    // INST — field instruments
+    { rec: 21, dwg: 'I-6001', desc: 'FT-101 Flow Trans.', disc: 'INST', uom: 'EA', bq: 1, bh: 7.5, ah: 7.0, pct: 100, foreman: 'Alice Chen', area: 'Unit 1', code: '10110', type: 'Transmitter' },
+    { rec: 22, dwg: 'I-6002', desc: 'PT-102 Pressure Trans.', disc: 'INST', uom: 'EA', bq: 1, bh: 6.5, ah: 6.2, pct: 100, foreman: 'Bob Carter', area: 'Unit 1', code: '10110', type: 'Transmitter' },
+    { rec: 23, dwg: 'I-6003', desc: 'LT-103 Level Trans.', disc: 'INST', uom: 'EA', bq: 1, bh: 8, ah: 4.0, pct: 50, foreman: 'Carlos Diaz', area: 'Tank Farm', code: '10220', type: 'Transmitter' },
+    { rec: 24, dwg: 'I-6004', desc: 'TT-104 Temp Trans.', disc: 'INST', uom: 'EA', bq: 1, bh: 6, ah: 0, pct: 0, foreman: 'Alice Chen', area: 'Unit 2', code: '10110', type: 'Transmitter' },
+    // SITE — temp facilities, paving, drainage. Landscaping has no good
+    // industry-standard code so we leave it null and let it surface as an
+    // "unrecognised code" in the QMR until the admin assigns one.
+    { rec: 25, dwg: 'ST-001', desc: 'Survey Area 1', disc: 'SITE', uom: 'LS', bq: 1, bh: 80, ah: 78, pct: 100, foreman: 'Bob Carter', area: 'Unit 1', code: '01000' },
+    { rec: 26, dwg: 'ST-002', desc: 'Pavement Section A', disc: 'SITE', uom: 'SF', bq: 5000, bh: 425, ah: 280, pct: 65, foreman: 'Alice Chen', area: 'Equipment Yard', code: '04210' },
+    { rec: 27, dwg: 'ST-003', desc: 'Drainage culvert', disc: 'SITE', uom: 'LF', bq: 120, bh: 120, ah: 30, pct: 20, foreman: 'Carlos Diaz', area: 'Tank Farm', code: '01510' },
     { rec: 28, dwg: 'ST-004', desc: 'Final landscaping', disc: 'SITE', uom: 'LS', bq: 1, bh: 200, ah: 0, pct: 0, foreman: 'Bob Carter', area: 'Unit 1' },
   ];
 
@@ -572,6 +656,7 @@ async function main() {
     source_filename: 'seed.ts',
     dwg: s.dwg,
     rev: '1',
+    code: s.code ?? null,
     description: s.desc,
     uom: s.uom,
     budget_qty: s.bq,

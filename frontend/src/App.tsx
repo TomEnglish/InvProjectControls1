@@ -18,6 +18,7 @@ import { SnapshotsPage } from './pages/Snapshots';
 import { EarnedValuePage } from './pages/EarnedValue';
 import { DisciplineProgressPage } from './pages/DisciplineProgress';
 import { UploadPage } from './pages/Upload';
+import { QmrPage } from './pages/Qmr';
 
 export const router = createBrowserRouter([
   { path: '/login', element: <LoginPage /> },
@@ -108,6 +109,15 @@ export const router = createBrowserRouter([
           </ProjectScopeGuard>
         ),
         handle: { title: 'Upload Progress Data' },
+      },
+      {
+        path: '/qmr',
+        element: (
+          <ProjectScopeGuard>
+            <QmrPage />
+          </ProjectScopeGuard>
+        ),
+        handle: { title: 'QMR Report' },
       },
     ],
   },

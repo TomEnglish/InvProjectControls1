@@ -90,4 +90,80 @@ describe('parseProgressWorkbook', () => {
     const { rows } = parseProgressWorkbook(wb);
     expect(rows[0]!.milestones).toEqual([{ name: 'Excavation', pct: 50 }]);
   });
+
+  // Sandra's audit templates (ProgressDocs/InputExamples/) use REC_NO / DWG /
+  // REV_NO / CODE / DESC_ / FLD_QTY / FLD_WHRS / IWP_FOREMAN / IWP_PLAN_NO /
+  // PIPE_SPEC / CAREA. Make sure the alias map carries every one through and
+  // that the M1_DESC/M1_PCT milestone pair is picked up.
+  it('maps audit-file column shape (civil/pipe/instrumentation/etc.)', () => {
+    const wb = workbookFromRows([
+      {
+        REC_NO: 1,
+        DWG: 'P02.03-CV-120-DWG-00101',
+        REV_NO: '0',
+        CODE: '04130',
+        DESC_: 'GTG-1 Foundation',
+        SZE: 'large',
+        FLD_QTY: 187,
+        UOM: 'CY',
+        FLD_WHRS: 1904,
+        ERN_QTY: 0,
+        PIPE_SPEC: 'CONC-04',
+        CAREA: '401',
+        IWP_FOREMAN: 'Alice Chen',
+        IWP_PLAN_NO: 'CV-401-001',
+        M1_DESC: 'Excavation',
+        M1_PCT: 100,
+        M2_DESC: 'Formwork',
+        M2_PCT: 50,
+      },
+    ]);
+    const { rows, unmappedHeaders } = parseProgressWorkbook(wb);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!).toMatchObject({
+      dwg: 'P02.03-CV-120-DWG-00101',
+      rev: '0',
+      code: '04130',
+      name: 'GTG-1 Foundation',
+      attr_size: 'large',
+      budget_qty: 187,
+      unit: 'CY',
+      budget_hrs: 1904,
+      attr_spec: 'CONC-04',
+      line_area: '401',
+      foreman_name: 'Alice Chen',
+      iwp_name: 'CV-401-001',
+    });
+    expect(rows[0]!.milestones).toEqual([
+      { name: 'Excavation', pct: 100 },
+      { name: 'Formwork', pct: 50 },
+    ]);
+    // REC_NO is generated server-side and isn't in the alias map, so it
+    // shows up in unmappedHeaders. Every other audit-file column we care
+    // about should resolve to a ParsedRow field.
+    expect(unmappedHeaders).toEqual(['REC_NO']);
+  });
+
+  // Electrical audit uses MI_Q_N for the milestone percent (M1_DESC stays).
+  it('handles the electrical-audit milestone variant (MI_Q_N + M_DESC)', () => {
+    const wb = workbookFromRows([
+      {
+        DWG: 'P02.03-EL-120-PLN-00022',
+        CODE: '09220',
+        DESC_: 'DBC-H Duct Bank',
+        UOM: 'LF',
+        FLD_QTY: 6408,
+        FLD_WHRS: 1153.44,
+        M1_DESC: 'Receive Materials',
+        MI_Q_1: 100,
+        M2_DESC: 'Run Conduit',
+        MI_Q_2: 60,
+      },
+    ]);
+    const { rows } = parseProgressWorkbook(wb);
+    expect(rows[0]!.milestones).toEqual([
+      { name: 'Receive Materials', pct: 100 },
+      { name: 'Run Conduit', pct: 60 },
+    ]);
+  });
 });

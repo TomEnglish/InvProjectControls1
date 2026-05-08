@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabase';
 import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import { Field, inputClass } from '@/components/ui/FormField';
+import { useCoaCodes } from '@/lib/queries';
 
 type Props = {
   open: boolean;
@@ -11,7 +12,7 @@ type Props = {
   projectId: string;
 };
 
-const UOMS = ['LF', 'CY', 'EA', 'TONS', 'SF', 'HR', 'LS'];
+const UOMS = ['LF', 'CY', 'EA', 'TONS', 'SF', 'HR', 'LS', 'CF'];
 
 export function NewRecordModal({ open, onClose, projectId }: Props) {
   const qc = useQueryClient();
@@ -30,6 +31,8 @@ export function NewRecordModal({ open, onClose, projectId }: Props) {
       return data as { id: string; discipline_code: string; display_name: string }[];
     },
   });
+
+  const { data: coaCodes } = useCoaCodes();
 
   const { data: iwps } = useQuery({
     queryKey: ['iwps', projectId] as const,
@@ -50,6 +53,7 @@ export function NewRecordModal({ open, onClose, projectId }: Props) {
     iwp_id: '',
     dwg: '',
     rev: '1',
+    code: '',
     description: '',
     uom: 'EA' as string,
     budget_qty: 0,
@@ -87,6 +91,7 @@ export function NewRecordModal({ open, onClose, projectId }: Props) {
         source_type: 'manual',
         dwg: form.dwg || null,
         rev: form.rev || null,
+        code: form.code || null,
         description: form.description,
         uom: form.uom,
         budget_qty: form.budget_qty || null,
@@ -105,6 +110,7 @@ export function NewRecordModal({ open, onClose, projectId }: Props) {
         iwp_id: '',
         dwg: '',
         rev: '1',
+        code: '',
         description: '',
         uom: 'EA',
         budget_qty: 0,
@@ -160,6 +166,26 @@ export function NewRecordModal({ open, onClose, projectId }: Props) {
             value={form.rev}
             onChange={(e) => setForm({ ...form, rev: e.target.value })}
           />
+        </Field>
+        <Field
+          label="COA Code"
+          hint="The cost code this record rolls up to in the QMR report."
+          className="md:col-span-2"
+        >
+          <select
+            className={inputClass}
+            value={form.code}
+            onChange={(e) => setForm({ ...form, code: e.target.value })}
+          >
+            <option value="">— none —</option>
+            {(coaCodes ?? [])
+              .filter((c) => c.level === 2)
+              .map((c) => (
+                <option key={c.id} value={c.code}>
+                  {c.code} — {c.description} ({c.uom})
+                </option>
+              ))}
+          </select>
         </Field>
         <Field label="Description" className="md:col-span-2">
           <input

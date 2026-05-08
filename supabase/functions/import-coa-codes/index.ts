@@ -26,7 +26,7 @@ function json(body: unknown, status = 200) {
   });
 }
 
-const UOMS = new Set(['LF', 'CY', 'EA', 'TONS', 'SF', 'HR', 'LS']);
+const UOMS = new Set(['LF', 'CY', 'EA', 'TONS', 'SF', 'HR', 'LS', 'CF']);
 
 type ParsedCoa = {
   prime: string;

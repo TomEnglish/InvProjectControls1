@@ -1,7 +1,8 @@
-dwg,description,unit,budget_qty,budget_hrs,actual_hrs,percent_complete,foreman_name,iwp_name,attr_type,attr_size,line_area,item_1,pct_1,item_2,pct_2,item_3,pct_3
-P-2001,2" CS Line 2001-A,LF,320,768,540,75,Alice Chen,IWP-PIPE-001,Carbon Steel,2",Unit 1,Material received,100,Fit-up,100,Welded,50
-P-2002,6" CS Line 2002-B,LF,180,648,260,40,Bob Carter,IWP-PIPE-001,Carbon Steel,6",Unit 1,Material received,100,Fit-up,60,Welded,0
-S-3001,Platform Level 3 Steel,TONS,12.5,367.5,310,80,Alice Chen,IWP-STEEL-001,Beam,W12,Tank Farm,Detail approved,100,Fab complete,100,Erected,80
-E-4001,Cable Tray Run CT-101,LF,450,630,410,60,Bob Carter,IWP-ELEC-001,Tray,24" wide,Unit 1,Routed,100,Hung,80,Cabled,30
-M-5001,Pump P-101 Setting,EA,1,48.6,42,80,Carlos Diaz,IWP-MECH-001,Pump,API610,Unit 1,Set,100,Aligned,80,Tested,0
-I-6001,FT-101 Flow Transmitter,EA,1,7.5,7,100,Alice Chen,IWP-INST-001,Transmitter,2",Unit 1,Mounted,100,Wired,100,Calibrated,100
+DWG,REV_NO,CODE,DESC_,SZE,UOM,FLD_QTY,FLD_WHRS,ERN_QTY,PERCENT_COMPLETE,ACTUAL_HRS,IWP_FOREMAN,IWP_PLAN_NO,PIPE_SPEC,CAREA,M1_DESC,M1_PCT,M2_DESC,M2_PCT,M3_DESC,M3_PCT,M4_DESC,M4_PCT,M5_DESC,M5_PCT,M6_DESC,M6_PCT,M7_DESC,M7_PCT,M8_DESC,M8_PCT
+P02.03-CV-120-DWG-00101,0,04130,GTG-1 FOUNDATION,,CY,187,1904,,80,1500,Bob Carter,CV-401-001,,401,Excavation,100,Formwork,100,Rebar,100,Concrete Placement,80,Strip Forms,0,Rub/Patch,0,Backfill/Compact,0,,
+P02.03-CV-120-DWG-01106,0,04110,EAST STEP DOWN TRANSFORMER FDN,,CY,5.5,6.8,,55,4.0,Alice Chen,CV-401-001,,401,Excavation,100,Formwork,50,Rebar,75,Concrete Placement,0,Strip Forms,0,Rub/Patch,0,Backfill/Compact,0,,
+12224A25-120-PP-3019,0,07140,Glycol Water Pumps,,EA,2,384,,35,150,Carlos Diaz,ME-406-001,ASME B73.1,406,Prep FDN,100,Receive,100,Set,80,Pre Align,40,Pipe Align,0,Final Align,0,Run-In,0,Sell Off,0
+120-DR-590-SHT01,0,08331,SITE DRAIN SYS SLOP TANK UN# 2,2",LF,136,584.8,,30,180,Jose Martinez,PI-402-002,01HDPE,UG,Receive,100,Stage,40,Erect,0,Connect,90,Jeep/Trace,0,Punch,0,Test,0,Post,0
+1224A25-120-ST-1015,0,05220,EAST-WEST PIPERACK SEC 1,W10X49,TONS,1,8.85,,90,8,Bob Carter,ST-100-001,,100,Receive,100,Shake Out,100,PreAssemble,100,Erect,100,Bolt Up,100,Impact,100,Punch,80,Sell Off,0
+P02.03-EL-120-PLN-00022,0,09220,DBC-H DUCT BANK,2,LF,6408,1153.44,,60,720,Bob Carter,EL-401-001,,401 UG DUCT BANK,Receive Materials,100,Run Conduit,60,,,,,,,,,,,,
+12224A25-120-IN-4003,0,10110,TIT-100 TEMPERATURE TRANSMITTER,,EA,1,14.47,,75,12,Alice Chen,IN-601-001,,,Receive,100,Calibrate/Spec Check,100,Stand,100,Install Device,75,Tray and Tube,40,Process Connection,0,,,,

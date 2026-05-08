@@ -11,6 +11,7 @@ import {
   Camera,
   TrendingUp,
   PieChart,
+  ClipboardList,
   Upload as UploadIcon,
   type LucideIcon,
 } from 'lucide-react';
@@ -47,6 +48,7 @@ const sections: NavSection[] = [
       { to: '/progress/earned-value', label: 'Earned Value', icon: TrendingUp },
       { to: '/progress/disciplines', label: 'Disciplines', icon: PieChart },
       { to: '/reports', label: 'Reports', icon: FileBarChart },
+      { to: '/qmr', label: 'QMR Report', icon: ClipboardList },
     ],
   },
 ];
