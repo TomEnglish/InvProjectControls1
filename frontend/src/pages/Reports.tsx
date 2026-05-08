@@ -360,9 +360,10 @@ function SummaryTile({
         ? 'var(--color-variance-unfavourable)'
         : 'var(--color-text)';
   return (
-    <div className="is-surface is-stat-card" title={help}>
+    <div className="is-surface is-stat-card">
       <div
-        className={`is-stat-label flex items-center gap-1.5 ${help ? 'cursor-help' : ''}`}
+        className={`is-stat-label flex items-center gap-1.5 ${help ? 'cursor-help is-tip' : ''}`}
+        data-tip={help}
       >
         <span>{label}</span>
         {help && <Info size={12} className="text-[color:var(--color-text-subtle)]" />}

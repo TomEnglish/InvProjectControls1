@@ -51,38 +51,44 @@ export function VarianceAnalysisTable({
           <tr>
             <th>Discipline</th>
             <th
+              className="is-tip"
               style={{ textAlign: 'right', cursor: 'help' }}
-              title="Budget hours — total planned work for the discipline."
+              data-tip="Budget hours — total planned work for the discipline."
             >
               Budget
             </th>
             <th
+              className="is-tip"
               style={{ textAlign: 'right', cursor: 'help' }}
-              title="Budgeted Cost of Work Performed — earned hours, calculated from milestone progress × ROC weights × budget hours."
+              data-tip="Budgeted Cost of Work Performed — earned hours, computed from milestone progress × ROC weights × budget hours."
             >
               BCWP
             </th>
             <th
+              className="is-tip"
               style={{ textAlign: 'right', cursor: 'help' }}
-              title="Actual Cost of Work Performed — actual hours booked against the discipline."
+              data-tip="Actual Cost of Work Performed — actual hours booked against the discipline."
             >
               ACWP
             </th>
             <th
+              className="is-tip"
               style={{ textAlign: 'right', cursor: 'help' }}
-              title="Cost Variance = BCWP − ACWP. Positive = under budget on work done."
+              data-tip="Cost Variance = BCWP − ACWP. Positive = under budget on work done."
             >
               CV
             </th>
             <th
+              className="is-tip"
               style={{ textAlign: 'right', cursor: 'help' }}
-              title="Cost Performance Index = BCWP ÷ ACWP. ≥1 favourable; <1 over budget."
+              data-tip="Cost Performance Index = BCWP ÷ ACWP. ≥1 favourable; <1 over budget."
             >
               CPI
             </th>
             <th
+              className="is-tip"
               style={{ textAlign: 'right', cursor: 'help' }}
-              title="Estimate at Completion = Budget ÷ CPI. Projected total hours at finish if current cost-performance trend continues."
+              data-tip="Estimate at Completion = Budget ÷ CPI. Projected total hours at finish if the current cost trend continues."
             >
               EAC
             </th>

@@ -266,6 +266,55 @@ a:hover { color: var(--color-primary-hover); }
 .is-chip-primary { background: var(--color-primary-soft); color: var(--color-primary); }
 .is-chip-neutral { background: var(--color-raised);       color: var(--color-text-muted); }
 
+/* Tooltip — pure CSS, instant on hover. Use data-tip="..." on the element.
+   Add the .is-tip class to enable the popover; the cursor stays clickable
+   for buttons or auto-help via cursor: help on the host element. */
+.is-tip {
+  position: relative;
+}
+.is-tip::after,
+.is-tip::before {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.1s ease 0.05s;
+  z-index: 200;
+}
+.is-tip::after {
+  content: attr(data-tip);
+  background: #1e293b;
+  color: #f8fafc;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.45;
+  letter-spacing: 0.01em;
+  text-align: left;
+  white-space: normal;
+  width: max-content;
+  max-width: 280px;
+  box-shadow: 0 6px 20px rgba(15, 23, 42, 0.25);
+}
+.is-tip::before {
+  content: '';
+  bottom: calc(100% + 2px);
+  width: 0;
+  height: 0;
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-top: 6px solid #1e293b;
+}
+.is-tip:hover::after,
+.is-tip:hover::before,
+.is-tip:focus-within::after,
+.is-tip:focus-within::before {
+  opacity: 1;
+}
+
 /* Stat tile */
 .is-stat-card {
   padding: 24px;
