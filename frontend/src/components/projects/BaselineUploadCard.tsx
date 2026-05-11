@@ -1,10 +1,11 @@
-import { useMemo, useState, type ChangeEvent } from 'react';
+import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Upload as UploadIcon, Download } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { Card, CardHeader } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
-import { Field, inputClass } from '@/components/ui/FormField';
+import { Field } from '@/components/ui/FormField';
+import { FileDropzone } from '@/components/ui/FileDropzone';
 import { parseProgressFile, type ParsedRow } from '@/lib/progressParser';
 
 // COA prime → discipline_code. Matches the canonical seed in migration
@@ -134,12 +135,11 @@ export function BaselineUploadCard({ projectId }: { projectId: string }) {
     },
   });
 
-  const onFile = async (e: ChangeEvent<HTMLInputElement>) => {
+  const onFile = async (f: File | null) => {
     setParseErr(null);
     setParsed([]);
     setUnmapped([]);
     submit.reset();
-    const f = e.target.files?.[0] ?? null;
     setFile(f);
     if (!f) return;
     try {
@@ -176,11 +176,12 @@ export function BaselineUploadCard({ projectId }: { projectId: string }) {
 
       <div className="grid gap-4">
         <Field label="Baseline file (xlsx or csv)" required>
-          <input
-            type="file"
+          <FileDropzone
             accept=".csv,.xlsx,.xls"
-            onChange={onFile}
-            className={inputClass}
+            onFile={onFile}
+            selected={file}
+            label="Drag the baseline file here or click to browse"
+            hint="One of Sandra's per-discipline audit templates, or the unified superset"
           />
         </Field>
 

@@ -1,4 +1,4 @@
-import { useMemo, useState, type FormEvent, type ChangeEvent } from 'react';
+import { useMemo, useState, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Upload as UploadIcon, Download, RefreshCw } from 'lucide-react';
 import { useProjectStore } from '@/stores/project';
@@ -7,6 +7,7 @@ import { useCurrentUser, useRocTemplates, hasRole } from '@/lib/queries';
 import { Card, CardHeader } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Field, inputClass } from '@/components/ui/FormField';
+import { FileDropzone } from '@/components/ui/FileDropzone';
 import {
   detectProgressDiscipline,
   parseProgressFile,
@@ -135,14 +136,13 @@ export function UploadPage() {
     },
   });
 
-  const onFile = async (e: ChangeEvent<HTMLInputElement>) => {
+  const onFile = async (f: File | null) => {
     setParseErr(null);
     setParsed([]);
     setUnmapped([]);
     setRocWeightsFromFile([]);
     setRocLabelsFromFile([]);
     updateTemplate.reset();
-    const f = e.target.files?.[0] ?? null;
     setFile(f);
     if (!f) return;
     try {
@@ -206,11 +206,11 @@ export function UploadPage() {
 
         <form onSubmit={onSubmit} className="grid gap-4">
           <Field label="File" required>
-            <input
-              type="file"
+            <FileDropzone
               accept=".csv,.xlsx,.xls"
-              onChange={onFile}
-              className={inputClass}
+              onFile={onFile}
+              selected={file}
+              hint="CSV / XLSX / XLS — Sandra's audit templates parse unchanged"
             />
           </Field>
 
