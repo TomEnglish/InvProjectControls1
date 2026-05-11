@@ -21,7 +21,9 @@ const ChangeManagementPage = lazy(() =>
   import('./pages/ChangeManagement').then((m) => ({ default: m.ChangeManagementPage })),
 );
 const CoaPage = lazy(() => import('./pages/Coa').then((m) => ({ default: m.CoaPage })));
-const RocPage = lazy(() => import('./pages/Roc').then((m) => ({ default: m.RocPage })));
+const WorkTypesPage = lazy(() =>
+  import('./pages/WorkTypes').then((m) => ({ default: m.WorkTypesPage })),
+);
 const BudgetPage = lazy(() => import('./pages/Budget').then((m) => ({ default: m.BudgetPage })));
 const ReportsPage = lazy(() =>
   import('./pages/Reports').then((m) => ({ default: m.ReportsPage })),
@@ -55,7 +57,7 @@ export const router = createBrowserRouter([
       { index: true, element: <DashboardPage />, handle: { title: 'Executive Dashboard' } },
       { path: '/projects', element: <ProjectSetupPage />, handle: { title: 'Project Setup' } },
       { path: '/coa', element: <CoaPage />, handle: { title: 'COA & Unit Rates' } },
-      { path: '/roc', element: <RocPage />, handle: { title: 'Rules of Credit' } },
+      { path: '/work-types', element: <WorkTypesPage />, handle: { title: 'Work Types' } },
       {
         path: '/budget',
         element: (

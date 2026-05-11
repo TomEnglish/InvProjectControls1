@@ -20,6 +20,8 @@ type Item = {
   rev?: string;
   code?: string;
   name?: string;
+  tag_no?: string;
+  spool_fr?: string;
   budget_hrs?: number;
   actual_hrs?: number;
   percent_complete?: number;
@@ -46,10 +48,13 @@ type Item = {
   paint_spec?: string;
   insu_spec?: string;
   heat_trace_spec?: string;
+  service?: string;
   ta_bank?: string;
   ta_bay?: string;
   ta_level?: string;
   pslip?: string;
+  work_type?: string;
+  discipline_label?: string;
   milestones?: Milestone[];
 };
 type Payload = {
@@ -139,9 +144,13 @@ Deno.serve(async (req) => {
     return json({ error: 'project not in your tenant' }, 404);
   }
 
-  const [iwpsRes, aliasesRes, maxRowRes] = await Promise.all([
+  const [iwpsRes, aliasesRes, workTypesRes, maxRowRes] = await Promise.all([
     admin.from('iwps').select('id, name').eq('project_id', body.projectId),
     admin.from('foreman_aliases').select('name, user_id').eq('tenant_id', caller.tenant_id),
+    admin
+      .from('work_types')
+      .select('id, work_type_code')
+      .eq('tenant_id', caller.tenant_id),
     admin
       .from('progress_records')
       .select('record_no')
@@ -155,51 +164,74 @@ Deno.serve(async (req) => {
   const aliasMap = new Map(
     ((aliasesRes.data ?? []) as { name: string; user_id: string }[]).map((a) => [a.name.toLowerCase(), a.user_id]),
   );
+  // WORK_TYPE codes are case-insensitive on lookup (Sandra's audit files
+  // sometimes lowercase). Unrecognised codes leave work_type_id null and
+  // fall back to the discipline default via the EV view's coalesce.
+  const workTypeMap = new Map(
+    ((workTypesRes.data ?? []) as { id: string; work_type_code: string }[]).map((w) => [
+      w.work_type_code.toLowerCase(),
+      w.id,
+    ]),
+  );
   let nextRecordNo = ((maxRowRes.data?.record_no as number | null) ?? 0) + 1;
 
-  const insertRows = body.items.map((item) => ({
-    tenant_id: caller.tenant_id,
-    project_id: body.projectId,
-    iwp_id: item.iwp_name ? (iwpMap.get(item.iwp_name.toLowerCase()) ?? null) : null,
-    record_no: nextRecordNo++,
-    source_row: item.source_row ?? null,
-    source_type: 'import',
-    source_filename: body.sourceFilename ?? null,
-    dwg: item.dwg ?? null,
-    rev: item.rev ?? null,
-    code: item.code ?? null,
-    description: item.name ?? '(unnamed)',
-    uom: (item.unit ?? 'EA').toUpperCase(),
-    budget_qty: item.budget_qty ?? null,
-    actual_qty: item.actual_qty ?? null,
-    earned_qty_imported: item.earned_qty_imported ?? null,
-    earn_whrs_imported: item.earn_whrs_imported ?? null,
-    budget_hrs: item.budget_hrs ?? 0,
-    actual_hrs: item.actual_hrs ?? 0,
-    percent_complete: item.percent_complete ?? 0,
-    status: 'active',
-    foreman_name: item.foreman_name ?? null,
-    foreman_user_id: item.foreman_name ? (aliasMap.get(item.foreman_name.toLowerCase()) ?? null) : null,
-    gen_foreman_name: item.gen_foreman_name ?? null,
-    attr_type: item.attr_type ?? null,
-    attr_size: item.attr_size ?? null,
-    attr_spec: item.attr_spec ?? null,
-    line_area: item.line_area ?? null,
-    system: item.system ?? null,
-    carea: item.carea ?? null,
-    var_area: item.var_area ?? null,
-    sched_id: item.sched_id ?? null,
-    test_pkg: item.test_pkg ?? null,
-    cwp: item.cwp ?? null,
-    spl_cnt: item.spl_cnt ?? null,
-    paint_spec: item.paint_spec ?? null,
-    insu_spec: item.insu_spec ?? null,
-    heat_trace_spec: item.heat_trace_spec ?? null,
-    ta_bank: item.ta_bank ?? null,
-    ta_bay: item.ta_bay ?? null,
-    ta_level: item.ta_level ?? null,
-    pslip: item.pslip ?? null,
-  }));
+  const insertRows = body.items.map((item) => {
+    // Description column accepts DESC_, falling back to TAG_NO or SPOOL_FR
+    // if DESC_ is missing — the unified workbook treats these as discipline-
+    // specific name variants, but downstream UI needs one resolved label.
+    const description = item.name ?? item.tag_no ?? item.spool_fr ?? '(unnamed)';
+    const workTypeId = item.work_type
+      ? (workTypeMap.get(item.work_type.toLowerCase()) ?? null)
+      : null;
+    return {
+      tenant_id: caller.tenant_id,
+      project_id: body.projectId,
+      iwp_id: item.iwp_name ? (iwpMap.get(item.iwp_name.toLowerCase()) ?? null) : null,
+      record_no: nextRecordNo++,
+      source_row: item.source_row ?? null,
+      source_type: 'import',
+      source_filename: body.sourceFilename ?? null,
+      dwg: item.dwg ?? null,
+      rev: item.rev ?? null,
+      code: item.code ?? null,
+      description,
+      tag_no: item.tag_no ?? null,
+      spool_fr: item.spool_fr ?? null,
+      uom: (item.unit ?? 'EA').toUpperCase(),
+      budget_qty: item.budget_qty ?? null,
+      actual_qty: item.actual_qty ?? null,
+      earned_qty_imported: item.earned_qty_imported ?? null,
+      earn_whrs_imported: item.earn_whrs_imported ?? null,
+      budget_hrs: item.budget_hrs ?? 0,
+      actual_hrs: item.actual_hrs ?? 0,
+      percent_complete: item.percent_complete ?? 0,
+      status: 'active',
+      foreman_name: item.foreman_name ?? null,
+      foreman_user_id: item.foreman_name ? (aliasMap.get(item.foreman_name.toLowerCase()) ?? null) : null,
+      gen_foreman_name: item.gen_foreman_name ?? null,
+      attr_type: item.attr_type ?? null,
+      attr_size: item.attr_size ?? null,
+      attr_spec: item.attr_spec ?? null,
+      line_area: item.line_area ?? null,
+      system: item.system ?? null,
+      carea: item.carea ?? null,
+      var_area: item.var_area ?? null,
+      sched_id: item.sched_id ?? null,
+      test_pkg: item.test_pkg ?? null,
+      cwp: item.cwp ?? null,
+      spl_cnt: item.spl_cnt ?? null,
+      paint_spec: item.paint_spec ?? null,
+      insu_spec: item.insu_spec ?? null,
+      heat_trace_spec: item.heat_trace_spec ?? null,
+      service: item.service ?? null,
+      ta_bank: item.ta_bank ?? null,
+      ta_bay: item.ta_bay ?? null,
+      ta_level: item.ta_level ?? null,
+      pslip: item.pslip ?? null,
+      work_type_id: workTypeId,
+      discipline_label: item.discipline_label ?? null,
+    };
+  });
 
   const { data: inserted, error: insertErr } = await admin
     .from('progress_records')

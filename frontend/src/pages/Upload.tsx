@@ -1,15 +1,14 @@
 import { useMemo, useState, type FormEvent } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Upload as UploadIcon, Download, RefreshCw } from 'lucide-react';
 import { useProjectStore } from '@/stores/project';
 import { supabase } from '@/lib/supabase';
-import { useCurrentUser, useRocTemplates, hasRole } from '@/lib/queries';
+import { useCurrentUser, useWorkTypes, hasRole } from '@/lib/queries';
 import { Card, CardHeader } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Field, inputClass } from '@/components/ui/FormField';
 import { FileDropzone } from '@/components/ui/FileDropzone';
 import {
-  detectProgressDiscipline,
   parseProgressFile,
   recentSundayISO,
   type ParsedRow,
@@ -27,11 +26,12 @@ function NoProject() {
 
 type ImportResponse = { inserted?: number; snapshot_id?: string; error?: string };
 
-type RocWeightWarning = {
-  disciplineCode: string;
+type WorkTypeWeightWarning = {
+  workTypeCode: string;
+  workTypeId: string;
+  description: string;
   fromFile: number[];
   fromTemplate: number[];
-  templateId: string | null;
   labelsFromFile: string[];
 };
 
@@ -49,90 +49,81 @@ export function UploadPage() {
   const [rocWeightsFromFile, setRocWeightsFromFile] = useState<number[]>([]);
   const [rocLabelsFromFile, setRocLabelsFromFile] = useState<string[]>([]);
 
-  const rocTemplates = useRocTemplates();
-  const disciplinesQuery = useQuery({
-    queryKey: ['project-disciplines', projectId] as const,
-    enabled: !!projectId,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('project_disciplines')
-        .select('id, discipline_code, display_name')
-        .eq('project_id', projectId!)
-        .eq('is_active', true)
-        .order('discipline_code');
-      if (error) throw error;
-      return (data ?? []) as { id: string; discipline_code: string; display_name: string }[];
-    },
-  });
+  const workTypes = useWorkTypes();
 
-  // Compare the inferred ROC weights (from the audit-file's M1..M8 columns)
-  // against the project's default ROC template for the file's discipline.
-  // Used to surface a warning when Sandra's row-level weights don't match
-  // what we have on file for that discipline. Decision #5.
-  const rocWarning: RocWeightWarning | null = useMemo(() => {
+  // Compare the inferred M1..M8 weights against the work_type referenced by
+  // the file's first row (the WORK_TYPE column). Unified workbook design:
+  // each row picks a work_type via XLOOKUP, so a single file is typically
+  // single-work-type. We sample the first row to drive the warning; if
+  // multiple work types appear in one file the user can re-upload per
+  // type.
+  const workTypeWarning: WorkTypeWeightWarning | null = useMemo(() => {
     if (rocWeightsFromFile.length === 0) return null;
-    if (!file || !disciplinesQuery.data || !rocTemplates.data) return null;
-    const disciplineId = detectProgressDiscipline(
-      file.name,
-      disciplinesQuery.data.map((d) => ({ id: d.id, name: d.display_name })),
+    if (parsed.length === 0 || !workTypes.data) return null;
+    const firstWithType = parsed.find((r) => r.work_type && r.work_type.trim());
+    const codeFromFile = firstWithType?.work_type?.trim();
+    if (!codeFromFile) return null;
+    const wt = workTypes.data.find(
+      (t) => t.work_type_code.toLowerCase() === codeFromFile.toLowerCase(),
     );
-    if (!disciplineId) return null;
-    const discipline = disciplinesQuery.data.find((d) => d.id === disciplineId);
-    if (!discipline) return null;
-    // Default template for this discipline.
-    const template = rocTemplates.data
-      .filter((t) => t.discipline_code === discipline.discipline_code)
-      .sort((a, b) => Number(b.is_default) - Number(a.is_default) || b.version - a.version)[0];
-    if (!template) return null;
-    const templateWeights = template.milestones.map((m) => m.weight);
-    // Match length first; pad with zero if the file has fewer entries.
+    if (!wt) return null;
+    const templateWeights = wt.milestones.map((m) => m.weight);
     const fileNormalized = rocWeightsFromFile.slice(0, 8);
     while (fileNormalized.length < templateWeights.length) fileNormalized.push(0);
-    const drift = templateWeights.some((w, i) => Math.abs((fileNormalized[i] ?? 0) - w) > 0.001);
+    const drift = templateWeights.some(
+      (w, i) => Math.abs((fileNormalized[i] ?? 0) - w) > 0.001,
+    );
     if (!drift) return null;
     return {
-      disciplineCode: discipline.discipline_code,
+      workTypeCode: wt.work_type_code,
+      workTypeId: wt.id,
+      description: wt.description,
       fromFile: fileNormalized,
       fromTemplate: templateWeights,
-      templateId: template.id,
       labelsFromFile: rocLabelsFromFile,
     };
-  }, [rocWeightsFromFile, rocLabelsFromFile, file, disciplinesQuery.data, rocTemplates.data]);
+  }, [rocWeightsFromFile, rocLabelsFromFile, parsed, workTypes.data]);
 
   // Admin one-click: push the file's M1..M8 weights + labels into the
-  // discipline's default template. Calls roc_template_set, which validates
-  // sum==1.0 and rewrites all 8 milestones atomically.
+  // detected work_type's milestone set. Calls work_type_milestones_set,
+  // which validates sum==1.0 and rewrites the milestones atomically.
   const updateTemplate = useMutation({
     mutationFn: async () => {
-      if (!rocWarning || !rocWarning.templateId) {
-        throw new Error('No discipline template detected for the uploaded file.');
+      if (!workTypeWarning) {
+        throw new Error('No WORK_TYPE detected for the uploaded file.');
       }
-      if (rocWarning.labelsFromFile.length !== 8) {
+      if (workTypeWarning.labelsFromFile.length === 0) {
         throw new Error(
           'File is missing M1_DESC..M8_DESC labels — fix the source then retry.',
         );
       }
-      const sum = rocWarning.fromFile.reduce((s, w) => s + w, 0);
+      const sum = workTypeWarning.fromFile.reduce((s, w) => s + w, 0);
       if (Math.abs(sum - 1) > 0.0001) {
         throw new Error(
           `File's M1..M8 weights sum to ${sum.toFixed(4)}; must equal 1.0000.`,
         );
       }
-      const milestones = rocWarning.fromFile.map((weight, i) => ({
-        seq: i + 1,
-        label: rocWarning.labelsFromFile[i]!,
-        weight,
-      }));
-      const { error } = await supabase.rpc('roc_template_set', {
-        p_template_id: rocWarning.templateId,
+      // Only include milestones with a non-empty label and a positive
+      // weight — variable-count work types (CIV-COMP has 1, others have
+      // 8) shouldn't pad with empties.
+      const milestones = workTypeWarning.fromFile
+        .map((weight, i) => ({
+          seq: i + 1,
+          label: workTypeWarning.labelsFromFile[i] ?? '',
+          weight,
+        }))
+        .filter((m) => m.label.trim() && m.weight > 0);
+      const { error } = await supabase.rpc('work_type_milestones_set', {
+        p_work_type_id: workTypeWarning.workTypeId,
         p_milestones: milestones,
       });
       if (error) throw error;
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['roc-templates'] });
-      // The roc-milestones-for-discipline keys are dynamic per disc; nuke them all.
-      qc.invalidateQueries({ predicate: (q) => q.queryKey[0] === 'roc-milestones-for-discipline' });
+      qc.invalidateQueries({ queryKey: ['work-types'] });
+      qc.invalidateQueries({
+        predicate: (q) => q.queryKey[0] === 'work-type-milestones-for-record',
+      });
     },
   });
 
@@ -249,28 +240,30 @@ export function UploadPage() {
             </div>
           )}
 
-          {rocWarning && (
+          {workTypeWarning && (
             <div className="is-toast is-toast-warn">
-              <strong>ROC weight mismatch ({rocWarning.disciplineCode})</strong>
+              <strong>
+                Milestone weight mismatch — {workTypeWarning.workTypeCode} (
+                {workTypeWarning.description})
+              </strong>
               <div className="mt-1 text-xs">
-                Weights in the file's M1–M8 columns don't match the project's
-                default ROC template for this discipline. The upload will
-                proceed using the project's template — fix either the file or
-                the ROC template on the Rules of Credit page if this was
-                unintentional.
+                Weights in the file's M1–M8 columns don't match the library's
+                template for this work type. The upload will proceed using the
+                library values — fix either the file or the work type on the{' '}
+                <strong>Work Types</strong> page if this was unintentional.
               </div>
               <div className="mt-1 text-xs font-mono">
-                File: [{rocWarning.fromFile.map((w) => w.toFixed(3)).join(', ')}]
-                {rocWarning.labelsFromFile.length === 8 && (
+                File: [{workTypeWarning.fromFile.map((w) => w.toFixed(3)).join(', ')}]
+                {workTypeWarning.labelsFromFile.length > 0 && (
                   <span className="text-[color:var(--color-text-muted)]">
                     {' '}
-                    ({rocWarning.labelsFromFile.join(', ')})
+                    ({workTypeWarning.labelsFromFile.join(', ')})
                   </span>
                 )}
                 <br />
-                Template: [{rocWarning.fromTemplate.map((w) => w.toFixed(3)).join(', ')}]
+                Library: [{workTypeWarning.fromTemplate.map((w) => w.toFixed(3)).join(', ')}]
               </div>
-              {canUpdateTemplate && rocWarning.labelsFromFile.length === 8 && (
+              {canUpdateTemplate && workTypeWarning.labelsFromFile.length > 0 && (
                 <div className="mt-2 flex items-center gap-2 flex-wrap">
                   <Button
                     type="button"
@@ -281,12 +274,12 @@ export function UploadPage() {
                   >
                     <RefreshCw size={12} />
                     {updateTemplate.isPending
-                      ? 'Updating template…'
-                      : 'Update template from this file'}
+                      ? 'Updating work type…'
+                      : `Update ${workTypeWarning.workTypeCode} from this file`}
                   </Button>
                   {updateTemplate.isSuccess && (
                     <span className="text-xs text-[color:var(--color-variance-favourable)]">
-                      Template updated.
+                      Work type updated.
                     </span>
                   )}
                   {updateTemplate.isError && (

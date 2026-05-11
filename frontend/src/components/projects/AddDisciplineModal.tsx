@@ -7,8 +7,9 @@ import { Field, inputClass } from '@/components/ui/FormField';
 
 const DISCIPLINE_CODES = [
   { v: 'CIVIL', l: 'Civil' },
-  { v: 'PIPE', l: 'Pipe' },
+  { v: 'FOUNDATIONS', l: 'Foundations' },
   { v: 'STEEL', l: 'Steel' },
+  { v: 'PIPE', l: 'Pipe' },
   { v: 'ELEC', l: 'Electrical' },
   { v: 'MECH', l: 'Mechanical' },
   { v: 'INST', l: 'Instrumentation' },
@@ -34,14 +35,16 @@ export function AddDisciplineModal({ open, onClose, projectId, existingCodes }: 
   const [displayName, setDisplayName] = useState('');
   const [budget, setBudget] = useState(0);
 
-  // Default ROC template for the picked discipline
-  const { data: roc } = useQuery({
-    queryKey: ['roc-default', code] as const,
+  // Default work_type for the picked discipline — linked as the
+  // project_discipline's default_work_type_id so progress records added
+  // under this discipline pick up the right milestone template.
+  const { data: defaultWorkType } = useQuery({
+    queryKey: ['work-type-default', code] as const,
     enabled: open && !!code,
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('roc_templates')
-        .select('id, name')
+        .from('work_types')
+        .select('id, work_type_code')
         .eq('discipline_code', code)
         .eq('is_default', true)
         .maybeSingle();
@@ -66,7 +69,7 @@ export function AddDisciplineModal({ open, onClose, projectId, existingCodes }: 
         project_id: projectId,
         discipline_code: code,
         display_name: displayName || DISCIPLINE_CODES.find((d) => d.v === code)?.l || code,
-        roc_template_id: roc?.id ?? null,
+        default_work_type_id: defaultWorkType?.id ?? null,
         budget_hrs: budget,
         is_active: true,
       });
@@ -113,11 +116,14 @@ export function AddDisciplineModal({ open, onClose, projectId, existingCodes }: 
             onChange={(e) => setBudget(Number(e.target.value))}
           />
         </Field>
-        <Field label="ROC Template" hint="Tenant-default for the selected discipline.">
+        <Field label="Default Work Type" hint="Tenant-default work type for the selected discipline; drives milestone weights for new records.">
           <input
             className={inputClass}
             readOnly
-            value={roc?.name ?? (code ? 'No default template — contact admin.' : '')}
+            value={
+              defaultWorkType?.work_type_code ??
+              (code ? 'No default work type — contact admin.' : '')
+            }
           />
         </Field>
       </div>
@@ -134,7 +140,7 @@ export function AddDisciplineModal({ open, onClose, projectId, existingCodes }: 
         </Button>
         <Button
           variant="primary"
-          disabled={!code || !roc?.id || budget <= 0 || submit.isPending}
+          disabled={!code || !defaultWorkType?.id || budget <= 0 || submit.isPending}
           onClick={() => submit.mutate()}
         >
           {submit.isPending ? 'Adding…' : 'Add Discipline'}

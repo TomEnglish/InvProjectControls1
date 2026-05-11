@@ -252,49 +252,22 @@ async function main() {
   if (coaErr) throw coaErr;
   console.log(`  coa_codes: ${coa.length}`);
 
-  // --- 4. ROC templates + milestones
-  const rocSpec = [
-    { discipline_code: 'CIVIL', milestones: ['Excavation', 'Formwork', 'Rebar', 'Concrete', 'Strip Forms', 'Backfill', 'Grade/Finish', 'Punch List'], weights: [0.10, 0.15, 0.20, 0.25, 0.10, 0.10, 0.05, 0.05] },
-    { discipline_code: 'PIPE', milestones: ['Receive Material', 'Fit-Up/Stage', 'Tack Weld', 'Final Weld', 'NDE/Test', 'Insulate', 'Paint', 'Punch List'], weights: [0.05, 0.15, 0.15, 0.25, 0.15, 0.10, 0.10, 0.05] },
-    { discipline_code: 'STEEL', milestones: ['Receive Material', 'Fit-Up', 'Bolt-Up', 'Torque/Weld', 'Deck Install', 'Handrail', 'Touch-Up Paint', 'Punch List'], weights: [0.05, 0.10, 0.20, 0.25, 0.15, 0.10, 0.10, 0.05] },
-    { discipline_code: 'ELEC', milestones: ['Lay Cable Tray', 'Pull Cable', 'Terminate', 'Megger Test', 'Energize', 'Label/Tag', 'Commission', 'Punch List'], weights: [0.10, 0.20, 0.15, 0.15, 0.15, 0.05, 0.10, 0.10] },
-    { discipline_code: 'MECH', milestones: ['Set Equipment', 'Align', 'Grout', 'Connect Pipe', 'Connect Elec', 'Lube/Fill', 'Run Test', 'Punch List'], weights: [0.20, 0.15, 0.10, 0.10, 0.10, 0.10, 0.15, 0.10] },
-    { discipline_code: 'INST', milestones: ['Mount Device', 'Run Tubing', 'Connect', 'Calibrate', 'Loop Check', 'Commission', 'Document', 'Punch List'], weights: [0.10, 0.15, 0.15, 0.15, 0.15, 0.15, 0.10, 0.05] },
-    { discipline_code: 'SITE', milestones: ['Survey', 'Clear/Grub', 'Rough Grade', 'Compact', 'Pave/Surface', 'Drainage', 'Landscape', 'Punch List'], weights: [0.05, 0.10, 0.20, 0.20, 0.20, 0.10, 0.10, 0.05] },
-  ];
-
-  const rocTemplateIds: Record<string, string> = {};
-  for (const spec of rocSpec) {
-    const { data: tmpl, error: tErr } = await sb
-      .from('roc_templates')
-      .upsert(
-        {
-          tenant_id: tenantId,
-          discipline_code: spec.discipline_code,
-          name: `${spec.discipline_code} Standard`,
-          version: 1,
-          is_default: true,
-        },
-        { onConflict: 'tenant_id,discipline_code,version' },
-      )
-      .select('id')
-      .single();
-    if (tErr) throw tErr;
-    rocTemplateIds[spec.discipline_code] = tmpl.id;
-
-    // Replace all milestones for this template
-    await sb.from('roc_milestones').delete().eq('template_id', tmpl.id);
-    const rows = spec.milestones.map((label, i) => ({
-      tenant_id: tenantId,
-      template_id: tmpl.id,
-      seq: i + 1,
-      label,
-      weight: spec.weights[i],
-    }));
-    const { error: mErr } = await sb.from('roc_milestones').insert(rows);
-    if (mErr) throw mErr;
+  // --- 4. Work types (the unified work_types library replaces the old
+  // per-discipline ROC templates as of 20260511000001). The migration
+  // seeds these per-tenant on apply; no further work needed here. We
+  // still look up each discipline's default work type below so the
+  // project_disciplines rows can link to them.
+  const { data: defaultWorkTypes, error: wtErr } = await sb
+    .from('work_types')
+    .select('id, discipline_code, work_type_code')
+    .eq('tenant_id', tenantId)
+    .eq('is_default', true);
+  if (wtErr) throw wtErr;
+  const defaultWorkTypeByDiscipline: Record<string, string> = {};
+  for (const wt of defaultWorkTypes ?? []) {
+    defaultWorkTypeByDiscipline[wt.discipline_code] = wt.id;
   }
-  console.log(`  roc_templates: ${rocSpec.length} (8 milestones each)`);
+  console.log(`  work_types: defaults found for ${Object.keys(defaultWorkTypeByDiscipline).length} disciplines`);
 
   // --- 5. Projects
   const projectSpecs = [
@@ -369,7 +342,7 @@ async function main() {
           project_id: projectIds['KIS-2026-001']!,
           discipline_code: d.code,
           display_name: d.display,
-          roc_template_id: rocTemplateIds[d.code],
+          default_work_type_id: defaultWorkTypeByDiscipline[d.code] ?? null,
           budget_hrs: d.budget,
           is_active: true,
         },

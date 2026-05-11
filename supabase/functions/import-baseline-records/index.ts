@@ -24,6 +24,8 @@ type Item = {
   rev?: string;
   code?: string;
   name?: string;
+  tag_no?: string;
+  spool_fr?: string;
   budget_hrs?: number;
   unit?: string;
   budget_qty?: number;
@@ -45,10 +47,13 @@ type Item = {
   paint_spec?: string;
   insu_spec?: string;
   heat_trace_spec?: string;
+  service?: string;
   ta_bank?: string;
   ta_bay?: string;
   ta_level?: string;
   pslip?: string;
+  work_type?: string;
+  discipline_label?: string;
   milestones?: Milestone[];
 };
 type Payload = {
@@ -274,6 +279,20 @@ Deno.serve(async (req) => {
     ((allIwps ?? []) as { id: string; name: string }[]).map((i) => [i.name.toLowerCase(), i.id]),
   );
 
+  // Resolve WORK_TYPE codes → work_type ids for this tenant. Case-insensitive
+  // lookup. Unknown codes leave the FK null and the EV view falls back to
+  // the discipline's default_work_type_id.
+  const { data: workTypesRes } = await admin
+    .from('work_types')
+    .select('id, work_type_code')
+    .eq('tenant_id', caller.tenant_id);
+  const workTypeMap = new Map(
+    ((workTypesRes ?? []) as { id: string; work_type_code: string }[]).map((w) => [
+      w.work_type_code.toLowerCase(),
+      w.id,
+    ]),
+  );
+
   // ── Step 4: insert baseline progress_records ────────────────────────────
   // Re-runnable: if a record exists with the same (project_id, source_type,
   // source_record_id) — where source_record_id is a stable hash of the
@@ -297,6 +316,10 @@ Deno.serve(async (req) => {
     const iwpId = item.iwp_name
       ? iwpIdByName.get(item.iwp_name.toLowerCase()) ?? null
       : null;
+    const workTypeId = item.work_type
+      ? (workTypeMap.get(item.work_type.toLowerCase()) ?? null)
+      : null;
+    const description = item.name ?? item.tag_no ?? item.spool_fr ?? '(unnamed)';
     return {
       tenant_id: caller.tenant_id,
       project_id: body.projectId,
@@ -309,7 +332,9 @@ Deno.serve(async (req) => {
       dwg: item.dwg ?? null,
       rev: item.rev ?? null,
       code,
-      description: item.name ?? '(unnamed)',
+      description,
+      tag_no: item.tag_no ?? null,
+      spool_fr: item.spool_fr ?? null,
       uom: (item.unit ?? 'EA').toUpperCase(),
       budget_qty: item.budget_qty ?? null,
       // Baseline = no progress yet, regardless of what the file says.
@@ -336,10 +361,13 @@ Deno.serve(async (req) => {
       paint_spec: item.paint_spec ?? null,
       insu_spec: item.insu_spec ?? null,
       heat_trace_spec: item.heat_trace_spec ?? null,
+      service: item.service ?? null,
       ta_bank: item.ta_bank ?? null,
       ta_bay: item.ta_bay ?? null,
       ta_level: item.ta_level ?? null,
       pslip: item.pslip ?? null,
+      work_type_id: workTypeId,
+      discipline_label: item.discipline_label ?? null,
     };
   });
 

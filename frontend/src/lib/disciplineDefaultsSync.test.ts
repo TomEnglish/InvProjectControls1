@@ -20,10 +20,18 @@ const MODAL_PATH = resolve(
   REPO_ROOT,
   'frontend/src/components/progress/NewRecordModal.tsx',
 );
-const MIGRATION_PATH = resolve(
-  REPO_ROOT,
-  'supabase/migrations/20260508000003_backfill_progress_records_code.sql',
-);
+const MIGRATION_PATHS = [
+  resolve(
+    REPO_ROOT,
+    'supabase/migrations/20260508000003_backfill_progress_records_code.sql',
+  ),
+  // FOUNDATIONS branch was added in this follow-up migration once the
+  // discipline became available (20260511000000 enum extension).
+  resolve(
+    REPO_ROOT,
+    'supabase/migrations/20260511000003_backfill_foundations_default_code.sql',
+  ),
+];
 
 function parseModalDefaults(ts: string): Record<string, string> {
   // Look for the DEFAULT_CODE_BY_DISCIPLINE record literal:
@@ -96,7 +104,7 @@ function parseMigrationDefaults(sql: string): Record<string, string> {
 
 describe('discipline default code parity', () => {
   const modalTs = readFileSync(MODAL_PATH, 'utf8');
-  const migrationSql = readFileSync(MIGRATION_PATH, 'utf8');
+  const migrationSql = MIGRATION_PATHS.map((p) => readFileSync(p, 'utf8')).join('\n');
 
   const fromModal = parseModalDefaults(modalTs);
   const fromMigration = parseMigrationDefaults(migrationSql);

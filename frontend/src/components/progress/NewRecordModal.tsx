@@ -1,10 +1,10 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import { Field, inputClass } from '@/components/ui/FormField';
-import { useCoaCodes } from '@/lib/queries';
+import { useCoaCodes, useWorkTypes } from '@/lib/queries';
 
 type Props = {
   open: boolean;
@@ -33,6 +33,7 @@ export function NewRecordModal({ open, onClose, projectId }: Props) {
   });
 
   const { data: coaCodes } = useCoaCodes();
+  const { data: workTypes } = useWorkTypes();
 
   // Default cost code per discipline. Mirrors the heuristic in the backfill
   // migration so manual records land in the same QMR bucket as Sandra's
@@ -45,6 +46,7 @@ export function NewRecordModal({ open, onClose, projectId }: Props) {
     MECH: '07140',
     INST: '10110',
     SITE: '01530',
+    FOUNDATIONS: '04130',
   };
 
   const { data: iwps } = useQuery({
@@ -67,12 +69,21 @@ export function NewRecordModal({ open, onClose, projectId }: Props) {
     dwg: '',
     rev: '1',
     code: '',
+    work_type_id: '',
     description: '',
     uom: 'EA' as string,
     budget_qty: 0,
     budget_hrs: 0,
     foreman_name: '',
   });
+
+  const selectedDiscipline = disciplines?.find((d) => d.id === form.discipline_id);
+  // Filter the work-type dropdown to entries matching the selected
+  // discipline. Empty list when no discipline is picked yet.
+  const workTypesForDiscipline = useMemo(() => {
+    if (!selectedDiscipline || !workTypes) return [];
+    return workTypes.filter((wt) => wt.discipline_code === selectedDiscipline.discipline_code);
+  }, [selectedDiscipline, workTypes]);
 
   const submit = useMutation({
     mutationFn: async () => {
@@ -105,6 +116,7 @@ export function NewRecordModal({ open, onClose, projectId }: Props) {
         dwg: form.dwg || null,
         rev: form.rev || null,
         code: form.code || null,
+        work_type_id: form.work_type_id || null,
         description: form.description,
         uom: form.uom,
         budget_qty: form.budget_qty || null,
@@ -124,6 +136,7 @@ export function NewRecordModal({ open, onClose, projectId }: Props) {
         dwg: '',
         rev: '1',
         code: '',
+        work_type_id: '',
         description: '',
         uom: 'EA',
         budget_qty: 0,
@@ -148,10 +161,18 @@ export function NewRecordModal({ open, onClose, projectId }: Props) {
               // user hasn't already picked one. Lets PMs add records fast
               // without searching the COA dropdown every time.
               const defaultCode = disc ? DEFAULT_CODE_BY_DISCIPLINE[disc.discipline_code] ?? '' : '';
+              // Auto-fill work_type with the discipline's is_default work_type.
+              const defaultWorkType = disc && workTypes
+                ? workTypes.find(
+                    (wt) =>
+                      wt.discipline_code === disc.discipline_code && wt.is_default,
+                  )
+                : null;
               setForm({
                 ...form,
                 discipline_id: next,
                 code: form.code || defaultCode,
+                work_type_id: form.work_type_id || defaultWorkType?.id || '',
               });
             }}
           >
@@ -211,6 +232,29 @@ export function NewRecordModal({ open, onClose, projectId }: Props) {
                   {c.code} — {c.description} ({c.uom})
                 </option>
               ))}
+          </select>
+        </Field>
+        <Field
+          label="Work Type"
+          required
+          hint="Drives the milestone template for earned-value math. Auto-fills from the discipline default."
+          className="md:col-span-2"
+        >
+          <select
+            className={inputClass}
+            value={form.work_type_id}
+            onChange={(e) => setForm({ ...form, work_type_id: e.target.value })}
+            disabled={!form.discipline_id}
+          >
+            <option value="">
+              {form.discipline_id ? '— select a work type —' : '— pick a discipline first —'}
+            </option>
+            {workTypesForDiscipline.map((wt) => (
+              <option key={wt.id} value={wt.id}>
+                {wt.work_type_code} — {wt.description}
+                {wt.is_default ? ' (default)' : ''}
+              </option>
+            ))}
           </select>
         </Field>
         <Field label="Description" className="md:col-span-2">
@@ -275,7 +319,13 @@ export function NewRecordModal({ open, onClose, projectId }: Props) {
         </Button>
         <Button
           variant="primary"
-          disabled={submit.isPending || !form.description || form.budget_hrs <= 0 || !form.code}
+          disabled={
+            submit.isPending ||
+            !form.description ||
+            form.budget_hrs <= 0 ||
+            !form.code ||
+            !form.work_type_id
+          }
           onClick={() => submit.mutate()}
         >
           {submit.isPending ? 'Saving…' : 'Add Record'}

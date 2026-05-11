@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
-import { useRocMilestonesForDiscipline, type ProgressRow } from '@/lib/queries';
+import { useWorkTypeMilestonesForRecord, type ProgressRow } from '@/lib/queries';
 import { Card, CardHeader } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { fmt } from '@/lib/format';
@@ -15,7 +15,10 @@ type Props = {
 
 export function RecordDetail({ record, projectId, onClose }: Props) {
   const qc = useQueryClient();
-  const { data: rocMilestones } = useRocMilestonesForDiscipline(record.discipline_id);
+  const { data: rocMilestones } = useWorkTypeMilestonesForRecord(
+    record.work_type_id,
+    record.discipline_id,
+  );
 
   // Local draft of milestone values (0..100). Debounced to the server.
   const [draft, setDraft] = useState<Record<number, number>>(() => {
@@ -152,12 +155,23 @@ export function RecordDetail({ record, projectId, onClose }: Props) {
       </div>
 
       <h4 className="text-sm font-semibold mb-3">
-        Milestones{record.discipline_code ? ` — ${record.discipline_code} ROC` : ''}
+        Milestones
+        {record.work_type_code ? ` — ${record.work_type_code} (${record.work_type_description ?? ''})` : ''}
       </h4>
+      {/*
+        Work types have variable milestone counts (1–8), so the matrix renders
+        only as many cells as the work_type defines. CIV-COMP shows one cell;
+        PIPE-STD shows eight.
+      */}
       <div className="grid grid-cols-4 md:grid-cols-8 gap-2">
-        {Array.from({ length: 8 }, (_, i) => {
-          const seq = i + 1;
-          const meta = weights.find((m) => m.seq === seq);
+        {weights.length === 0 && (
+          <div className="col-span-4 md:col-span-8 text-xs text-[color:var(--color-text-muted)] italic">
+            No work type assigned for this record — set one on the Work Types
+            page or via re-upload to track milestone progress.
+          </div>
+        )}
+        {weights.map((meta) => {
+          const seq = meta.seq;
           const v = draft[seq] ?? 0;
           const filled = v > 0;
           return (
@@ -173,10 +187,10 @@ export function RecordDetail({ record, projectId, onClose }: Props) {
                 M{seq}
               </div>
               <div className="text-[11px] mt-0.5 h-8 overflow-hidden text-[color:var(--color-text)]">
-                {meta?.label ?? '—'}
+                {meta.label}
               </div>
               <div className="text-[10px] text-[color:var(--color-text-subtle)] font-mono">
-                {meta ? fmt.pct(meta.weight) : '—'}
+                {fmt.pct(meta.weight)}
               </div>
               <input
                 type="number"

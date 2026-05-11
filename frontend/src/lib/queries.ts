@@ -82,25 +82,37 @@ export type ProgressPeriod = {
   acwp_hrs: number | null;
 };
 
-export type RocMilestone = { seq: number; label: string; weight: number };
+export type WorkTypeMilestone = { seq: number; label: string; weight: number };
 
-export function useRocMilestonesForDiscipline(disciplineId: string | null) {
+/**
+ * Milestones for the work_type assigned to a record. Falls back to the
+ * discipline's default_work_type_id if the record's own work_type_id is
+ * null — the same fallback the v_progress_record_ev view applies.
+ */
+export function useWorkTypeMilestonesForRecord(
+  workTypeId: string | null,
+  disciplineId: string | null,
+) {
   return useQuery({
-    queryKey: ['roc-milestones', disciplineId] as const,
-    enabled: !!disciplineId,
-    queryFn: async (): Promise<RocMilestone[]> => {
-      const { data: pd, error: pdErr } = await supabase
-        .from('project_disciplines')
-        .select('roc_template_id')
-        .eq('id', disciplineId!)
-        .maybeSingle();
-      if (pdErr) throw pdErr;
-      if (!pd?.roc_template_id) return [];
+    queryKey: ['work-type-milestones-for-record', workTypeId, disciplineId] as const,
+    enabled: !!(workTypeId || disciplineId),
+    queryFn: async (): Promise<WorkTypeMilestone[]> => {
+      let resolved = workTypeId;
+      if (!resolved && disciplineId) {
+        const { data: pd, error: pdErr } = await supabase
+          .from('project_disciplines')
+          .select('default_work_type_id')
+          .eq('id', disciplineId)
+          .maybeSingle();
+        if (pdErr) throw pdErr;
+        resolved = pd?.default_work_type_id ?? null;
+      }
+      if (!resolved) return [];
 
       const { data, error } = await supabase
-        .from('roc_milestones')
+        .from('work_type_milestones')
         .select('seq, label, weight')
-        .eq('template_id', pd.roc_template_id)
+        .eq('work_type_id', resolved)
         .order('seq');
       if (error) throw error;
       return (data ?? []).map((m) => ({
@@ -257,43 +269,45 @@ export function useCoaCodes() {
 }
 
 // ─────────────────────────────────────────────────────────────────────
-// ROC — Rules of Credit templates
+// Work Types — finer-grained ROC template per the unified workbook
 // ─────────────────────────────────────────────────────────────────────
-export type RocTemplateRow = {
+export type WorkTypeRow = {
   id: string;
+  work_type_code: string;
   discipline_code: string;
-  name: string;
+  description: string;
   version: number;
   is_default: boolean;
-  milestones: RocMilestone[];
+  milestones: WorkTypeMilestone[];
 };
 
-export function useRocTemplates() {
+export function useWorkTypes() {
   return useQuery({
-    queryKey: ['roc-templates'] as const,
-    queryFn: async (): Promise<RocTemplateRow[]> => {
+    queryKey: ['work-types'] as const,
+    queryFn: async (): Promise<WorkTypeRow[]> => {
       const { data: tpls, error: tplsErr } = await supabase
-        .from('roc_templates')
-        .select('id, discipline_code, name, version, is_default')
-        .order('discipline_code');
+        .from('work_types')
+        .select('id, work_type_code, discipline_code, description, version, is_default')
+        .order('discipline_code')
+        .order('work_type_code');
       if (tplsErr) throw tplsErr;
       if (!tpls || tpls.length === 0) return [];
 
       const { data: ms, error: msErr } = await supabase
-        .from('roc_milestones')
-        .select('template_id, seq, label, weight')
+        .from('work_type_milestones')
+        .select('work_type_id, seq, label, weight')
         .in(
-          'template_id',
+          'work_type_id',
           tpls.map((t) => t.id),
         )
         .order('seq');
       if (msErr) throw msErr;
 
-      const byTpl = new Map<string, RocMilestone[]>();
+      const byTpl = new Map<string, WorkTypeMilestone[]>();
       for (const m of ms ?? []) {
-        const list = byTpl.get(m.template_id) ?? [];
+        const list = byTpl.get(m.work_type_id) ?? [];
         list.push({ seq: m.seq, label: m.label, weight: Number(m.weight) });
-        byTpl.set(m.template_id, list);
+        byTpl.set(m.work_type_id, list);
       }
 
       return tpls.map((t) => ({
@@ -334,7 +348,14 @@ export type ProgressRow = {
   rev: string | null;
   code: string | null;
   description: string;
+  tag_no: string | null;
+  spool_fr: string | null;
   uom: string;
+  work_type_id: string | null;
+  work_type_code: string | null;
+  work_type_description: string | null;
+  discipline_label: string | null;
+  service: string | null;
   budget_qty: number | null;
   actual_qty: number | null;
   earned_qty: number | null;
@@ -391,7 +412,13 @@ export function useProgressRows(projectId: string | null) {
         rev: string | null;
         code: string | null;
         description: string;
+        tag_no: string | null;
+        spool_fr: string | null;
         uom: string;
+        work_type_id: string | null;
+        discipline_label: string | null;
+        service: string | null;
+        work_types: { work_type_code: string; description: string } | null;
         budget_qty: number | string | null;
         actual_qty: number | string | null;
         earned_qty: number | string | null;
@@ -433,13 +460,15 @@ export function useProgressRows(projectId: string | null) {
         supabase
           .from('progress_records')
           .select(
-            'id, project_id, discipline_id, iwp_id, record_no, source_row, source_type, dwg, rev, code, description, uom, ' +
+            'id, project_id, discipline_id, iwp_id, record_no, source_row, source_type, dwg, rev, code, description, ' +
+              'tag_no, spool_fr, uom, ' +
               'budget_qty, actual_qty, earned_qty, earned_qty_imported, budget_hrs, actual_hrs, earned_hrs, earn_whrs_imported, ' +
               'whrs_unit, percent_complete, status, ' +
               'foreman_user_id, foreman_name, gen_foreman_name, attr_type, attr_size, attr_spec, line_area, ' +
-              'sched_id, system, carea, var_area, test_pkg, cwp, spl_cnt, paint_spec, insu_spec, heat_trace_spec, ' +
-              'ta_bank, ta_bay, ta_level, pslip, ' +
-              'project_disciplines(discipline_code, display_name), iwps(name)',
+              'sched_id, system, carea, var_area, test_pkg, cwp, spl_cnt, paint_spec, insu_spec, heat_trace_spec, service, ' +
+              'ta_bank, ta_bay, ta_level, pslip, work_type_id, discipline_label, ' +
+              'project_disciplines(discipline_code, display_name), iwps(name), ' +
+              'work_types(work_type_code, description)',
           )
           .eq('project_id', projectId!)
           .order('dwg', { nullsFirst: false }),
@@ -485,6 +514,13 @@ export function useProgressRows(projectId: string | null) {
           rev: r.rev,
           code: r.code,
           description: r.description,
+          tag_no: r.tag_no,
+          spool_fr: r.spool_fr,
+          work_type_id: r.work_type_id,
+          work_type_code: r.work_types?.work_type_code ?? null,
+          work_type_description: r.work_types?.description ?? null,
+          discipline_label: r.discipline_label,
+          service: r.service,
           uom: r.uom,
           budget_qty: r.budget_qty != null ? Number(r.budget_qty) : null,
           actual_qty: r.actual_qty != null ? Number(r.actual_qty) : null,

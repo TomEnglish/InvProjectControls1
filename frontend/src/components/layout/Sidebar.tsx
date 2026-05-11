@@ -29,7 +29,7 @@ const sections: NavSection[] = [
     items: [
       { to: '/projects', label: 'Project Setup', icon: FolderCog },
       { to: '/coa', label: 'COA & Unit Rates', icon: ListTree },
-      { to: '/roc', label: 'Rules of Credit', icon: SlidersHorizontal },
+      { to: '/work-types', label: 'Work Types', icon: SlidersHorizontal },
     ],
   },
   {

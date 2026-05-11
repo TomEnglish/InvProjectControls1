@@ -1,37 +1,29 @@
-import type { RocTemplateRow } from '@/lib/queries';
+import type { WorkTypeRow } from '@/lib/queries';
 
 /**
- * Open a self-contained print window for a single ROC template and trigger
- * the OS print dialog. Users pick "Save as PDF" from the dialog to get a
+ * Open a self-contained print window for a single work_type and trigger the
+ * OS print dialog. Users pick "Save as PDF" from the dialog to get a
  * shareable handout for superintendents in the field.
+ *
+ * Variable milestone count (1–8) vs. the old fixed-8 ROC template — empty
+ * rows are omitted from the printable table instead of showing dashes.
  */
-export function printRocTemplate(template: RocTemplateRow): void {
+export function printWorkType(workType: WorkTypeRow): void {
   const w = window.open('', '_blank', 'width=900,height=1100');
   if (!w) return;
 
-  const totalWeight = template.milestones.reduce((s, m) => s + m.weight, 0);
+  const ms = [...workType.milestones].sort((a, b) => a.seq - b.seq);
+  const totalWeight = ms.reduce((s, m) => s + m.weight, 0);
   const totalPct = totalWeight * 100;
-  const milestonesByseq = new Map(template.milestones.map((m) => [m.seq, m]));
 
   let cumulative = 0;
-  const rows = [];
-  for (let seq = 1; seq <= 8; seq++) {
-    const m = milestonesByseq.get(seq);
-    if (!m) {
-      rows.push(`
-        <tr class="empty">
-          <td>M${seq}</td>
-          <td>—</td>
-          <td class="num">—</td>
-          <td class="num">—</td>
-        </tr>`);
-      continue;
-    }
+  const rows: string[] = [];
+  for (const m of ms) {
     const pct = m.weight * 100;
     cumulative += pct;
     rows.push(`
       <tr>
-        <td><strong>M${seq}</strong></td>
+        <td><strong>M${m.seq}</strong></td>
         <td>${escapeHtml(m.label)}</td>
         <td class="num">${pct.toFixed(2)}%</td>
         <td class="num">${cumulative.toFixed(2)}%</td>
@@ -42,7 +34,7 @@ export function printRocTemplate(template: RocTemplateRow): void {
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>ROC — ${escapeHtml(template.discipline_code)} — ${escapeHtml(template.name)}</title>
+  <title>Work Type — ${escapeHtml(workType.work_type_code)} — ${escapeHtml(workType.description)}</title>
   <style>
     @page { margin: 0.6in; }
     * { box-sizing: border-box; }
@@ -62,8 +54,8 @@ export function printRocTemplate(template: RocTemplateRow): void {
       margin-bottom: 18px;
     }
     .doc-title { color: #0369a1; font-size: 9pt; letter-spacing: 0.15em; text-transform: uppercase; font-weight: 700; }
-    .doc-discipline { font-size: 22pt; font-weight: 800; line-height: 1.1; margin-top: 2px; }
-    .doc-template { font-size: 14pt; color: #475569; margin-top: 4px; }
+    .doc-code { font-size: 22pt; font-weight: 800; line-height: 1.1; margin-top: 2px; }
+    .doc-desc { font-size: 14pt; color: #475569; margin-top: 4px; }
     .doc-meta { text-align: right; font-size: 10pt; color: #64748b; }
     .doc-total { font-size: 24pt; font-weight: 800; color: ${totalPct > 99.5 && totalPct < 100.5 ? '#059669' : '#dc2626'}; line-height: 1; }
     .doc-total-label { font-size: 8pt; letter-spacing: 0.1em; text-transform: uppercase; color: #64748b; }
@@ -86,7 +78,6 @@ export function printRocTemplate(template: RocTemplateRow): void {
       font-weight: 700;
     }
     td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
-    tr.empty td { color: #cbd5e1; }
     .footer {
       margin-top: 30px;
       padding-top: 12px;
@@ -112,14 +103,14 @@ export function printRocTemplate(template: RocTemplateRow): void {
 <body>
   <div class="doc-header">
     <div>
-      <div class="doc-title">Rules of Credit</div>
-      <div class="doc-discipline">${escapeHtml(template.discipline_code)}</div>
-      <div class="doc-template">${escapeHtml(template.name)}</div>
+      <div class="doc-title">Work Type / Rules of Credit</div>
+      <div class="doc-code">${escapeHtml(workType.work_type_code)}</div>
+      <div class="doc-desc">${escapeHtml(workType.description)} · ${escapeHtml(workType.discipline_code)}</div>
     </div>
     <div class="doc-meta">
       <div class="doc-total">${totalPct.toFixed(2)}%</div>
       <div class="doc-total-label">Total weight</div>
-      <div style="margin-top: 8px;">v${template.version}${template.is_default ? ' · Default' : ''}</div>
+      <div style="margin-top: 8px;">v${workType.version}${workType.is_default ? ' · Discipline default' : ''}</div>
       <div>Printed ${new Date().toLocaleDateString()}</div>
     </div>
   </div>
@@ -146,7 +137,7 @@ export function printRocTemplate(template: RocTemplateRow): void {
 
   <div class="footer">
     <div>Invenio ProjectControls</div>
-    <div>${escapeHtml(template.discipline_code)} · ${escapeHtml(template.name)} · v${template.version}</div>
+    <div>${escapeHtml(workType.work_type_code)} · ${escapeHtml(workType.description)} · v${workType.version}</div>
   </div>
 
   <script>

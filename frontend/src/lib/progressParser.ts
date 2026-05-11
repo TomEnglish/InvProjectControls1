@@ -9,7 +9,12 @@ export interface ParsedRow {
   dwg?: string;
   rev?: string;
   code?: string;
+  /** DESC_ — generic description of the work item (Civil/Mech/Foundations) */
   name?: string;
+  /** TAG_NO — equipment tag, Electrical / Mechanical */
+  tag_no?: string;
+  /** SPOOL_FR — spool front, Pipe / Steel / Instrumentation */
+  spool_fr?: string;
   budget_hrs?: number;
   actual_hrs?: number;
   percent_complete?: number;
@@ -44,11 +49,17 @@ export interface ParsedRow {
   paint_spec?: string;
   insu_spec?: string;
   heat_trace_spec?: string;
+  /** SERVICE — Mechanical service identifier (e.g. "Glycol Water Recovery") */
+  service?: string;
   // Turnaround location (TA / shutdown projects only)
   ta_bank?: string;
   ta_bay?: string;
   ta_level?: string;
   pslip?: string;
+  /** WORK_TYPE — code into the work_types library (e.g. 'PIPE-STD', 'CIV-FDN') */
+  work_type?: string;
+  /** DISCIPLINE — explicit per-row discipline name from the unified workbook */
+  discipline_label?: string;
   milestones?: MilestoneEntry[];
 }
 
@@ -85,14 +96,20 @@ const HEADER_MAP: Record<string, keyof ParsedRow> = {
   // COA cost code (audit files use CODE)
   code: 'code', coa_code: 'code', cost_code: 'code',
 
-  // Description / item name (audit files use DESC_, SPOOL_FR, or TAG_NO
-  // depending on discipline).
+  // Item identification — per the senior SME's Unified Audit Workbook,
+  // DESC_, TAG_NO, and SPOOL_FR are three distinct columns (not aliases
+  // for one another). The discipline determines which of the three a row
+  // populates; we keep all three as separate fields so round-tripping a
+  // record preserves the original column.
   name: 'name', description: 'name', desc: 'name', desc_: 'name',
-  item_description: 'name', tag_no: 'name', tag: 'name', spool_fr: 'name',
+  item_description: 'name',
+  tag_no: 'tag_no', tag: 'tag_no', equipment_tag: 'tag_no',
+  spool_fr: 'spool_fr', spool: 'spool_fr', spool_front: 'spool_fr',
 
-  // Budget hours — FLD_WHRS is universal except mechanical, which uses
-  // FLD_WHRS as well (IFC_WHRS is a separate "issued for construction"
-  // figure with different semantics and is intentionally NOT aliased here).
+  // Budget hours — FLD_WHRS is universal; mechanical's IFC_WHRS is a
+  // distinct "issued for construction hours" alias the unified workbook
+  // maps onto whrs_unit (not budget). Per the unified Header Crosswalk
+  // we don't fold IFC_WHRS into budget_hrs anymore.
   budget_hrs: 'budget_hrs', budget_hours: 'budget_hrs', budget: 'budget_hrs',
   budgeted_hrs: 'budget_hrs', plan_hrs: 'budget_hrs', hours: 'budget_hrs',
   fld_whrs: 'budget_hrs', field_whrs: 'budget_hrs', field_hrs: 'budget_hrs',
@@ -161,6 +178,16 @@ const HEADER_MAP: Record<string, keyof ParsedRow> = {
   test_pkg: 'test_pkg', test_pkg1: 'test_pkg', test_package: 'test_pkg',
   cwp: 'cwp', construction_work_package: 'cwp',
   spl_cnt: 'spl_cnt', spool_count: 'spl_cnt', spools: 'spl_cnt',
+
+  // WORK_TYPE — key into the work_types library; drives milestone lookup.
+  work_type: 'work_type', worktype: 'work_type', work_type_code: 'work_type',
+
+  // DISCIPLINE — explicit per-row discipline name (the unified workbook
+  // adds this so a single multi-discipline file is self-identifying).
+  discipline: 'discipline_label', discipline_label: 'discipline_label',
+
+  // SERVICE — mechanical service identifier.
+  service: 'service', service_type: 'service',
 
   // Record number from the source file → source_row.
   rec_no: 'source_row', source_row: 'source_row',
@@ -285,7 +312,8 @@ function extractInferredRocWeights(
 
 // Companion to extractInferredRocWeights: the first row's M1_DESC..M8_DESC
 // values give us per-milestone labels (e.g. "Excavation", "Formwork"). Paired
-// with the weights, they're enough to drive roc_template_set in one call.
+// with the weights, they're enough to drive work_type_milestones_set in
+// one call (e.g. the "Update template from this file" Upload action).
 function extractInferredRocLabels(
   headers: string[],
   firstRow: Record<string, unknown> | undefined,
@@ -339,6 +367,20 @@ export function parseProgressWorkbook(workbook: XLSX.WorkBook): ParseResult {
     if (h) rocWeightHeaders.add(h);
   }
 
+  // Headers we deliberately don't persist but also don't want to surface as
+  // "ignored" — they're either generated server-side (whrs_unit, ern_qty,
+  // earn_whrs, pct_earned, roc) or they're cross-reference helpers
+  // (rec_no maps to source_row separately).
+  const SUPPRESS_FROM_IGNORED: ReadonlySet<string> = new Set([
+    'whrs_unit',        // generated column = budget_hrs / budget_qty
+    'ifc_whrs',         // mechanical alias of whrs_unit per the unified workbook
+    'pct_earned',       // generated from milestones × weights server-side
+    'roc',              // generated = earn_whrs / fld_whrs server-side
+    'ern_qty',          // → earned_qty_imported, but also computed server-side
+    'earn_whrs',        // → earn_whrs_imported, but also computed server-side
+    'earn_whr',         // mechanical's mis-spelling, same as above
+  ]);
+
   const headerMapping: Record<string, keyof ParsedRow | null> = {};
   const unmapped: string[] = [];
   for (const h of inputHeaders) {
@@ -349,7 +391,7 @@ export function parseProgressWorkbook(workbook: XLSX.WorkBook): ParseResult {
     const norm = normalizeHeader(h);
     const mapped = HEADER_MAP[norm] ?? null;
     headerMapping[h] = mapped;
-    if (!mapped) unmapped.push(h);
+    if (!mapped && !SUPPRESS_FROM_IGNORED.has(norm)) unmapped.push(h);
   }
 
   const numericFields: ReadonlySet<keyof ParsedRow> = new Set([
@@ -395,7 +437,10 @@ export function parseProgressWorkbook(workbook: XLSX.WorkBook): ParseResult {
 
       return out;
     })
-    .filter((r) => r.dwg || r.name || (r.milestones && r.milestones.length > 0));
+    .filter(
+      (r) =>
+        r.dwg || r.name || r.tag_no || r.spool_fr || (r.milestones && r.milestones.length > 0),
+    );
 
   const inferredRocWeights = extractInferredRocWeights(inputHeaders, raw[0]);
   const inferredRocLabels = extractInferredRocLabels(inputHeaders, raw[0]);
