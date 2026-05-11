@@ -301,9 +301,9 @@ function AuditDetails({ record }: { record: ProgressRow }) {
             ]}
           />
           <DetailGroup
-            label="Laydown / Turnaround / Imported"
+            label="Material / Turnaround / Imported"
             fields={[
-              ['Laydown yard location', record.pslip],
+              ['Packing slip', record.pslip],
               ['TA Bank', record.ta_bank],
               ['TA Bay', record.ta_bay],
               ['TA Level', record.ta_level],
