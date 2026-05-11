@@ -130,18 +130,21 @@ describe('parseProgressWorkbook', () => {
       unit: 'CY',
       budget_hrs: 1904,
       attr_spec: 'CONC-04',
-      line_area: '401',
+      // CAREA is its own dimension after decision #1 — no longer collapsed
+      // onto line_area.
+      carea: '401',
       foreman_name: 'Alice Chen',
       iwp_name: 'CV-401-001',
+      source_row: 1, // REC_NO → source_row preserves the audit row index.
     });
+    expect(rows[0]!.line_area).toBeUndefined();
     expect(rows[0]!.milestones).toEqual([
       { name: 'Excavation', pct: 100 },
       { name: 'Formwork', pct: 50 },
     ]);
-    // REC_NO is generated server-side and isn't in the alias map, so it
-    // shows up in unmappedHeaders. Every other audit-file column we care
-    // about should resolve to a ParsedRow field.
-    expect(unmappedHeaders).toEqual(['REC_NO']);
+    // Every audit-file column we care about now resolves to a ParsedRow
+    // field — including REC_NO, which maps to source_row.
+    expect(unmappedHeaders).toEqual([]);
   });
 
   // Electrical audit uses MI_Q_N for the milestone percent (M1_DESC stays).
@@ -165,5 +168,116 @@ describe('parseProgressWorkbook', () => {
       { name: 'Receive Materials', pct: 100 },
       { name: 'Run Conduit', pct: 60 },
     ]);
+  });
+
+  // Decisions 2 + 3: ERN_QTY → earned_qty_imported; EARN_WHRS → earn_whrs_imported.
+  // Neither should land on actual_qty / actual_hrs (those are reserved for
+  // booked / timesheet figures).
+  it('routes ERN_QTY and EARN_WHRS to imported-reconciliation fields', () => {
+    const wb = workbookFromRows([
+      {
+        DWG: 'P-2001',
+        DESC_: 'Test row',
+        FLD_QTY: 100,
+        FLD_WHRS: 500,
+        ERN_QTY: 40,
+        EARN_WHRS: 200,
+        ACTUAL_HRS: 180,
+      },
+    ]);
+    const { rows } = parseProgressWorkbook(wb);
+    expect(rows[0]!).toMatchObject({
+      budget_qty: 100,
+      budget_hrs: 500,
+      earned_qty_imported: 40,
+      earn_whrs_imported: 200,
+      actual_hrs: 180,
+    });
+    expect(rows[0]!.actual_qty).toBeUndefined();
+  });
+
+  // Decision 1: SYSTEM, CAREA, LINE_AREA, VAR_AREA are four distinct dimensions.
+  it('keeps SYSTEM, CAREA, LINE_AREA, VAR_AREA as four separate fields', () => {
+    const wb = workbookFromRows([
+      {
+        DWG: 'P-2001',
+        DESC_: 'Test row',
+        SYSTEM: 'DR',
+        CAREA: 'SITE DRAIN SYS SLOP TANK UN# 2',
+        LINE_AREA: 'UG',
+        VAR_AREA: '120',
+      },
+    ]);
+    const { rows } = parseProgressWorkbook(wb);
+    expect(rows[0]!).toMatchObject({
+      system: 'DR',
+      carea: 'SITE DRAIN SYS SLOP TANK UN# 2',
+      line_area: 'UG',
+      var_area: '120',
+    });
+  });
+
+  // Decision 6: SCHED_ID placeholders normalize to undefined.
+  // Decision 8: TA_BANK/BAY/LEVEL 'N/A' normalize to undefined.
+  it('normalizes placeholder strings to undefined for SCHED_ID and TA_*', () => {
+    const wb = workbookFromRows([
+      {
+        DWG: 'A',
+        DESC_: 'Placeholder row',
+        SCHED_ID: '*C',
+        TA_BANK: 'N/A',
+        TA_BAY: '—',
+        TA_LEVEL: '',
+      },
+      {
+        DWG: 'B',
+        DESC_: 'Real row',
+        SCHED_ID: 'CN-2760',
+        TA_BANK: 'B1',
+        TA_BAY: 'Bay-3',
+        TA_LEVEL: 'L2',
+      },
+    ]);
+    const { rows } = parseProgressWorkbook(wb);
+    expect(rows[0]!.sched_id).toBeUndefined();
+    expect(rows[0]!.ta_bank).toBeUndefined();
+    expect(rows[0]!.ta_bay).toBeUndefined();
+    expect(rows[0]!.ta_level).toBeUndefined();
+    expect(rows[1]!).toMatchObject({
+      sched_id: 'CN-2760',
+      ta_bank: 'B1',
+      ta_bay: 'Bay-3',
+      ta_level: 'L2',
+    });
+  });
+
+  // Decision 5: bare M1..M8 columns surface as inferredRocWeights for the
+  // Upload page to validate against the project's ROC template.
+  it('extracts inferred ROC weights from bare M1..M8 columns', () => {
+    const wb = workbookFromRows([
+      {
+        DWG: 'A',
+        DESC_: 'Row',
+        M1: 0.05,
+        M2: 0.3,
+        M3: 0.25,
+        M4: 0.1,
+        M5: 0.1,
+        M6: 0.1,
+        M7: 0.1,
+        M8: 0,
+      },
+    ]);
+    const { rows, inferredRocWeights, unmappedHeaders } = parseProgressWorkbook(wb);
+    expect(inferredRocWeights).toEqual([0.05, 0.3, 0.25, 0.1, 0.1, 0.1, 0.1, 0]);
+    // The bare M1..M8 columns are handled (not "ignored" — handled).
+    expect(unmappedHeaders).not.toContain('M1');
+    expect(rows[0]!).not.toHaveProperty('m1');
+  });
+
+  it('returns empty inferredRocWeights when bare M_N columns are absent', () => {
+    const wb = workbookFromRows([{ DWG: 'A', DESC_: 'Row' }]);
+    const { inferredRocWeights } = parseProgressWorkbook(wb);
+    expect(inferredRocWeights).toEqual([]);
   });
 });

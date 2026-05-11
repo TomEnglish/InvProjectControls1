@@ -1,12 +1,18 @@
-import { useState, type FormEvent, type ChangeEvent } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMemo, useState, type FormEvent, type ChangeEvent } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Upload as UploadIcon, Download } from 'lucide-react';
 import { useProjectStore } from '@/stores/project';
 import { supabase } from '@/lib/supabase';
+import { useRocTemplates } from '@/lib/queries';
 import { Card, CardHeader } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Field, inputClass } from '@/components/ui/FormField';
-import { parseProgressFile, recentSundayISO, type ParsedRow } from '@/lib/progressParser';
+import {
+  detectProgressDiscipline,
+  parseProgressFile,
+  recentSundayISO,
+  type ParsedRow,
+} from '@/lib/progressParser';
 
 function NoProject() {
   return (
@@ -20,6 +26,12 @@ function NoProject() {
 
 type ImportResponse = { inserted?: number; snapshot_id?: string; error?: string };
 
+type RocWeightWarning = {
+  disciplineCode: string;
+  fromFile: number[];
+  fromTemplate: number[];
+};
+
 export function UploadPage() {
   const projectId = useProjectStore((s) => s.currentProjectId);
   const qc = useQueryClient();
@@ -29,11 +41,61 @@ export function UploadPage() {
   const [parsed, setParsed] = useState<ParsedRow[]>([]);
   const [unmapped, setUnmapped] = useState<string[]>([]);
   const [parseErr, setParseErr] = useState<string | null>(null);
+  const [rocWeightsFromFile, setRocWeightsFromFile] = useState<number[]>([]);
+
+  const rocTemplates = useRocTemplates();
+  const disciplinesQuery = useQuery({
+    queryKey: ['project-disciplines', projectId] as const,
+    enabled: !!projectId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('project_disciplines')
+        .select('id, discipline_code, display_name')
+        .eq('project_id', projectId!)
+        .eq('is_active', true)
+        .order('discipline_code');
+      if (error) throw error;
+      return (data ?? []) as { id: string; discipline_code: string; display_name: string }[];
+    },
+  });
+
+  // Compare the inferred ROC weights (from the audit-file's M1..M8 columns)
+  // against the project's default ROC template for the file's discipline.
+  // Used to surface a warning when Sandra's row-level weights don't match
+  // what we have on file for that discipline. Decision #5.
+  const rocWarning: RocWeightWarning | null = useMemo(() => {
+    if (rocWeightsFromFile.length === 0) return null;
+    if (!file || !disciplinesQuery.data || !rocTemplates.data) return null;
+    const disciplineId = detectProgressDiscipline(
+      file.name,
+      disciplinesQuery.data.map((d) => ({ id: d.id, name: d.display_name })),
+    );
+    if (!disciplineId) return null;
+    const discipline = disciplinesQuery.data.find((d) => d.id === disciplineId);
+    if (!discipline) return null;
+    // Default template for this discipline.
+    const template = rocTemplates.data
+      .filter((t) => t.discipline_code === discipline.discipline_code)
+      .sort((a, b) => Number(b.is_default) - Number(a.is_default) || b.version - a.version)[0];
+    if (!template) return null;
+    const templateWeights = template.milestones.map((m) => m.weight);
+    // Match length first; pad with zero if the file has fewer entries.
+    const fileNormalized = rocWeightsFromFile.slice(0, 8);
+    while (fileNormalized.length < templateWeights.length) fileNormalized.push(0);
+    const drift = templateWeights.some((w, i) => Math.abs((fileNormalized[i] ?? 0) - w) > 0.001);
+    if (!drift) return null;
+    return {
+      disciplineCode: discipline.discipline_code,
+      fromFile: fileNormalized,
+      fromTemplate: templateWeights,
+    };
+  }, [rocWeightsFromFile, file, disciplinesQuery.data, rocTemplates.data]);
 
   const onFile = async (e: ChangeEvent<HTMLInputElement>) => {
     setParseErr(null);
     setParsed([]);
     setUnmapped([]);
+    setRocWeightsFromFile([]);
     const f = e.target.files?.[0] ?? null;
     setFile(f);
     if (!f) return;
@@ -41,6 +103,7 @@ export function UploadPage() {
       const result = await parseProgressFile(f);
       setParsed(result.rows);
       setUnmapped(result.unmappedHeaders);
+      setRocWeightsFromFile(result.inferredRocWeights);
       if (!label) setLabel(f.name.replace(/\.[^.]+$/, ''));
     } catch (err) {
       setParseErr((err as Error).message);
@@ -136,6 +199,24 @@ export function UploadPage() {
                   </span>
                 </>
               )}
+            </div>
+          )}
+
+          {rocWarning && (
+            <div className="is-toast is-toast-warn">
+              <strong>ROC weight mismatch ({rocWarning.disciplineCode})</strong>
+              <div className="mt-1 text-xs">
+                Weights in the file's M1–M8 columns don't match the project's
+                default ROC template for this discipline. The upload will
+                proceed using the project's template — fix either the file or
+                the ROC template on the Rules of Credit page if this was
+                unintentional.
+              </div>
+              <div className="mt-1 text-xs font-mono">
+                File: [{rocWarning.fromFile.map((w) => w.toFixed(3)).join(', ')}]
+                <br />
+                Template: [{rocWarning.fromTemplate.map((w) => w.toFixed(3)).join(', ')}]
+              </div>
             </div>
           )}
 

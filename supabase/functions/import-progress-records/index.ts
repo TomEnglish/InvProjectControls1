@@ -26,12 +26,30 @@ type Item = {
   unit?: string;
   budget_qty?: number;
   actual_qty?: number;
+  earned_qty_imported?: number;
+  earn_whrs_imported?: number;
   foreman_name?: string;
+  gen_foreman_name?: string;
   iwp_name?: string;
   attr_type?: string;
   attr_size?: string;
   attr_spec?: string;
   line_area?: string;
+  system?: string;
+  carea?: string;
+  var_area?: string;
+  sched_id?: string;
+  test_pkg?: string;
+  cwp?: string;
+  spl_cnt?: number;
+  source_row?: number;
+  paint_spec?: string;
+  insu_spec?: string;
+  heat_trace_spec?: string;
+  ta_bank?: string;
+  ta_bay?: string;
+  ta_level?: string;
+  pslip?: string;
   milestones?: Milestone[];
 };
 type Payload = {
@@ -144,6 +162,7 @@ Deno.serve(async (req) => {
     project_id: body.projectId,
     iwp_id: item.iwp_name ? (iwpMap.get(item.iwp_name.toLowerCase()) ?? null) : null,
     record_no: nextRecordNo++,
+    source_row: item.source_row ?? null,
     source_type: 'import',
     source_filename: body.sourceFilename ?? null,
     dwg: item.dwg ?? null,
@@ -153,16 +172,33 @@ Deno.serve(async (req) => {
     uom: (item.unit ?? 'EA').toUpperCase(),
     budget_qty: item.budget_qty ?? null,
     actual_qty: item.actual_qty ?? null,
+    earned_qty_imported: item.earned_qty_imported ?? null,
+    earn_whrs_imported: item.earn_whrs_imported ?? null,
     budget_hrs: item.budget_hrs ?? 0,
     actual_hrs: item.actual_hrs ?? 0,
     percent_complete: item.percent_complete ?? 0,
     status: 'active',
     foreman_name: item.foreman_name ?? null,
     foreman_user_id: item.foreman_name ? (aliasMap.get(item.foreman_name.toLowerCase()) ?? null) : null,
+    gen_foreman_name: item.gen_foreman_name ?? null,
     attr_type: item.attr_type ?? null,
     attr_size: item.attr_size ?? null,
     attr_spec: item.attr_spec ?? null,
     line_area: item.line_area ?? null,
+    system: item.system ?? null,
+    carea: item.carea ?? null,
+    var_area: item.var_area ?? null,
+    sched_id: item.sched_id ?? null,
+    test_pkg: item.test_pkg ?? null,
+    cwp: item.cwp ?? null,
+    spl_cnt: item.spl_cnt ?? null,
+    paint_spec: item.paint_spec ?? null,
+    insu_spec: item.insu_spec ?? null,
+    heat_trace_spec: item.heat_trace_spec ?? null,
+    ta_bank: item.ta_bank ?? null,
+    ta_bay: item.ta_bay ?? null,
+    ta_level: item.ta_level ?? null,
+    pslip: item.pslip ?? null,
   }));
 
   const { data: inserted, error: insertErr } = await admin
