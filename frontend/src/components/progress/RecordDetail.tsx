@@ -229,9 +229,11 @@ export function RecordDetail({ record, projectId, onClose }: Props) {
 function AuditDetails({ record }: { record: ProgressRow }) {
   const [open, setOpen] = useState(false);
 
-  // Only show the section if at least one audit field is populated. Records
-  // created manually (no upload) usually have all nulls here — pointless
-  // panel for them.
+  // Only show the section if at least one of the 17 NEW audit columns
+  // (added in 20260508000004) is populated. `code` is excluded from the
+  // gate because it's now always set — required on the New Record modal
+  // and backfilled by 20260508000003 — and showing the panel just for the
+  // code would duplicate information already in the row header.
   const populated =
     record.sched_id ||
     record.system ||
@@ -251,8 +253,7 @@ function AuditDetails({ record }: { record: ProgressRow }) {
     record.earned_qty_imported != null ||
     record.earn_whrs_imported != null ||
     record.whrs_unit != null ||
-    record.source_row != null ||
-    record.code;
+    record.source_row != null;
   if (!populated) return null;
 
   return (

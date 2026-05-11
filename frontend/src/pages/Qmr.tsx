@@ -77,15 +77,15 @@ function rollUp(
     if (c.level === 2) codeMap.set(c.code, c);
   }
 
-  const leafByCode = new Map<string, QmrLeaf>();
-  for (const r of rows) {
-    if (r.status !== 'active') continue;
+  // Lookup-or-create helper so the JTD pass and the baseline subtraction
+  // pass share the same leaf shape. Returns null if the row's code is
+  // missing / unknown / out of the project's COA scope.
+  function getLeaf(r: ProgressRow): QmrLeaf | null {
     const code = (r.code ?? '').trim();
-    if (!code) continue;
+    if (!code) return null;
     const coa = codeMap.get(code);
-    if (!coa) continue; // orphan / unknown — drop until admin reconciles
-    if (inScope && !inScope.has(coa.id)) continue;
-
+    if (!coa) return null;
+    if (inScope && !inScope.has(coa.id)) return null;
     let leaf = leafByCode.get(code);
     if (!leaf) {
       leaf = {
@@ -104,21 +104,46 @@ function rollUp(
       };
       leafByCode.set(code, leaf);
     }
+    return leaf;
+  }
+
+  const leafByCode = new Map<string, QmrLeaf>();
+
+  // Pass 1: JTD totals. Only active records contribute — inactive ones
+  // (deleted / retired) shouldn't inflate Σ jtd_earned_hrs.
+  for (const r of rows) {
+    if (r.status !== 'active') continue;
+    const leaf = getLeaf(r);
+    if (!leaf) continue;
     leaf.budget_qty += r.budget_qty ?? 0;
     leaf.jtd_installed_qty += r.actual_qty ?? 0;
     leaf.budget_hrs += r.budget_hrs;
     leaf.jtd_earned_hrs += r.earned_hrs;
     leaf.record_count += 1;
+    leaf.period_earned_hrs += r.earned_hrs;
+    leaf.period_installed_qty += r.actual_qty ?? 0;
+  }
 
-    // Period delta = JTD minus the baseline-snapshot values for the same
-    // record. Missing baseline → the record didn't exist at baseline, so all
-    // current activity is "in this period" by definition.
-    if (baseline) {
+  // Pass 2: subtract baseline. Iterate every record that has a baseline
+  // entry — active OR inactive. This is the fix for the previous version's
+  // bug: records that were active at baseline but are now inactive used to
+  // be skipped entirely, leaving their baseline contribution un-subtracted
+  // and overstating the period delta. With this pass, an inactive record
+  // with 80 baseline hrs contributes -80 to the leaf's period_earned_hrs.
+  //
+  // Caveat: this attributes baseline values to the record's CURRENT code.
+  // If a record was reassigned between codes since baseline, the math nets
+  // against the wrong leaf. Tracking historical code per snapshot would
+  // require schema changes; for now we accept this limitation since
+  // post-baseline code changes are rare in normal operation.
+  if (baseline) {
+    for (const r of rows) {
       const base = baseline.get(r.id);
-      const baseEarnedHrs = base?.earned_hrs ?? 0;
-      const baseActualQty = base?.actual_qty ?? 0;
-      leaf.period_earned_hrs += r.earned_hrs - baseEarnedHrs;
-      leaf.period_installed_qty += (r.actual_qty ?? 0) - baseActualQty;
+      if (!base) continue;
+      const leaf = getLeaf(r);
+      if (!leaf) continue;
+      leaf.period_earned_hrs -= base.earned_hrs;
+      leaf.period_installed_qty -= base.actual_qty;
     }
   }
 
@@ -231,8 +256,14 @@ export function QmrPage() {
     codes.isLoading ||
     rows.isLoading ||
     projectCoa.isLoading ||
+    snapshots.isLoading ||
     (showPeriod && baselineItems.isLoading);
-  const error = codes.error || rows.error || projectCoa.error || baselineItems.error;
+  const error =
+    codes.error ||
+    rows.error ||
+    projectCoa.error ||
+    snapshots.error ||
+    baselineItems.error;
 
   const sortedSnapshots = useMemo(() => {
     return (snapshots.data ?? [])
