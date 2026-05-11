@@ -13,6 +13,7 @@ import { UsersCard } from '@/components/projects/UsersCard';
 import { ForemanAliasesCard } from '@/components/projects/ForemanAliasesCard';
 import { RollupModeCard } from '@/components/projects/RollupModeCard';
 import { ProjectCoaPickerCard } from '@/components/projects/ProjectCoaPickerCard';
+import { BaselineUploadCard } from '@/components/projects/BaselineUploadCard';
 
 type Project = {
   id: string;
@@ -243,6 +244,8 @@ export function ProjectSetupPage() {
           </table>
         </div>
       </Card>
+
+      {!locked && canEdit && <BaselineUploadCard projectId={projectId} />}
 
       <RollupModeCard projectId={projectId} />
 
