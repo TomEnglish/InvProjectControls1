@@ -280,4 +280,33 @@ describe('parseProgressWorkbook', () => {
     const { inferredRocWeights } = parseProgressWorkbook(wb);
     expect(inferredRocWeights).toEqual([]);
   });
+
+  // SME confirmation 2026-05-11: PSLIP is a text identifier (often 'N/A');
+  // the decimal values that show up in Sandra's steel audit are in trailing
+  // unnamed columns she uses for internal formulas. Both should be dropped
+  // silently — PSLIP normalised to undefined, formula columns stripped from
+  // the "Ignored columns" warning so it doesn't surface __EMPTY noise.
+  it('normalises PSLIP placeholders and silently drops unnamed formula columns', () => {
+    const wb = workbookFromRows([
+      {
+        DWG: 'ST-001',
+        DESC_: 'W10X49',
+        PSLIP: 'N/A',
+        __EMPTY: 15.735,
+        __EMPTY_1: 0.562,
+        __EMPTY_2: 8.844,
+      },
+    ]);
+    const { rows, unmappedHeaders } = parseProgressWorkbook(wb);
+    expect(rows[0]!.pslip).toBeUndefined();
+    expect(unmappedHeaders).toEqual([]); // the __EMPTY trio is gone, not "ignored"
+  });
+
+  it('keeps PSLIP when it carries a real identifier', () => {
+    const wb = workbookFromRows([
+      { DWG: 'ST-001', DESC_: 'W10X49', PSLIP: 'PS-1234' },
+    ]);
+    const { rows } = parseProgressWorkbook(wb);
+    expect(rows[0]!.pslip).toBe('PS-1234');
+  });
 });

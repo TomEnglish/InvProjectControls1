@@ -301,12 +301,12 @@ function AuditDetails({ record }: { record: ProgressRow }) {
             ]}
           />
           <DetailGroup
-            label="Turnaround / Imported"
+            label="Laydown / Turnaround / Imported"
             fields={[
+              ['Laydown yard location', record.pslip],
               ['TA Bank', record.ta_bank],
               ['TA Bay', record.ta_bay],
               ['TA Level', record.ta_level],
-              ['PSLIP', record.pslip],
               ['Imported earned qty', record.earned_qty_imported],
               ['Imported earned hrs', record.earn_whrs_imported],
               ['Hours per unit', record.whrs_unit],

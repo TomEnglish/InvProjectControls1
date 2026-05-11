@@ -180,7 +180,8 @@ const HEADER_MAP: Record<string, keyof ParsedRow> = {
   // appears as an ignored column on import, which is the desired behaviour.
 };
 
-// Strings that mean "no value" in Sandra's audit files (decisions #6 + #8).
+// Strings that mean "no value" in Sandra's audit files (decisions #6 + #8,
+// plus the post-decision PSLIP clarification from SME on 2026-05-11).
 // Applied only to columns where they're known placeholders — generic strings
 // like "0" or "0.0" stay as-is everywhere else.
 const PLACEHOLDER_STRINGS = new Set(['', 'n/a', 'na', '—', '-', '*c', '*s', '*n']);
@@ -189,6 +190,7 @@ const PLACEHOLDER_FIELDS: ReadonlySet<keyof ParsedRow> = new Set([
   'ta_bank',
   'ta_bay',
   'ta_level',
+  'pslip',
 ]);
 
 function normalizeHeader(h: string): string {
@@ -315,7 +317,17 @@ export function parseProgressWorkbook(workbook: XLSX.WorkBook): ParseResult {
   const raw: Record<string, unknown>[] = XLSX.utils.sheet_to_json(sheet, { defval: '' });
   if (raw.length === 0 || !raw[0]) return empty;
 
-  const inputHeaders = Object.keys(raw[0]);
+  const rawHeaders = Object.keys(raw[0]);
+  // Drop unnamed trailing columns (xlsx.js names them `__EMPTY`, `__EMPTY_1`,
+  // …). Sandra's steel / iron audit files have 2-3 unnamed columns at the
+  // end that hold internal formulas she uses to compute per-piece weights
+  // — per SME confirmation 2026-05-11 these aren't part of the canonical
+  // record schema. Stripping silently rather than showing them in the
+  // "Ignored columns" warning keeps the post-parse UI quiet.
+  const inputHeaders = rawHeaders.filter((h) => {
+    const norm = normalizeHeader(h);
+    return norm !== '' && !norm.startsWith('empty');
+  });
   const milestonePairs = findMilestonePairs(inputHeaders);
   const milestoneHeaderSet = new Set(milestonePairs.flatMap((p) => [p.itemHeader, p.pctHeader]));
 

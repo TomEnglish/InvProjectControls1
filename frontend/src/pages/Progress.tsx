@@ -251,7 +251,7 @@ export function ProgressPage() {
                   'TA Bank',
                   'TA Bay',
                   'TA Level',
-                  'PSLIP',
+                  'Laydown Yard Loc',
                   'Budget Qty',
                   'Actual Qty',
                   'Imported Earned Qty',
