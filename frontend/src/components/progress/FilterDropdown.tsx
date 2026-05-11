@@ -16,6 +16,7 @@ export function FilterDropdown({ label, options, selected, onChange, searchable 
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
   const ref = useRef<HTMLDivElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -24,6 +25,15 @@ export function FilterDropdown({ label, options, selected, onChange, searchable 
     };
     document.addEventListener('mousedown', onClick);
     return () => document.removeEventListener('mousedown', onClick);
+  }, [open]);
+
+  // Focus the search input when the dropdown opens. Using a ref-driven effect
+  // instead of the autoFocus prop (jsx-a11y/no-autofocus) so the focus only
+  // jumps when the user explicitly opens the dropdown.
+  useEffect(() => {
+    if (open && searchRef.current) {
+      searchRef.current.focus();
+    }
   }, [open]);
 
   const visible = search
@@ -88,11 +98,11 @@ export function FilterDropdown({ label, options, selected, onChange, searchable 
                   className="absolute left-2 top-1/2 -translate-y-1/2 text-[color:var(--color-text-muted)]"
                 />
                 <input
+                  ref={searchRef}
                   className={`${inputClass} pl-7`}
                   placeholder={`Search ${label.toLowerCase()}…`}
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  autoFocus
                 />
               </div>
             </div>

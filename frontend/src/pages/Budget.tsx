@@ -1,5 +1,5 @@
 import '@/lib/charts';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Lock, Info, Download } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
@@ -8,11 +8,19 @@ import {
   useBudgetRollup,
   useDashboardSummary,
   useCurrentUser,
+  useSnapshots,
   hasRole,
 } from '@/lib/queries';
 import { Button } from '@/components/ui/Button';
 import { ChartCard, ChartCardSkeleton } from '@/components/dashboard/ChartCard';
+import {
+  DateRangeFilter,
+  ALL_TIME_RANGE,
+  isInRange,
+  type DateRange,
+} from '@/components/ui/DateRangeFilter';
 import { fmt } from '@/lib/format';
+import { downloadCsv } from '@/lib/export';
 import { LockBaselineModal } from '@/components/budget/LockBaselineModal';
 import { BudgetByDisciplineChart } from '@/components/budget/BudgetByDisciplineChart';
 
@@ -80,6 +88,18 @@ export function BudgetPage() {
 
   const rollup = useBudgetRollup(projectId);
   const summary = useDashboardSummary(projectId);
+  const snapshots = useSnapshots(projectId);
+  const [dateRange, setDateRange] = useState<DateRange>(ALL_TIME_RANGE);
+
+  // Latest snapshot whose date falls inside the range — used to show
+  // "earned-as-of" alongside the always-current budget tiles. When the range
+  // is "all time" we pick the most recent snapshot overall.
+  const earnedSnapshot = useMemo(() => {
+    const list = (snapshots.data ?? [])
+      .slice()
+      .sort((a, b) => b.snapshot_date.localeCompare(a.snapshot_date));
+    return list.find((s) => isInRange(s.snapshot_date, dateRange)) ?? null;
+  }, [snapshots.data, dateRange]);
 
   if (!projectId || !project) {
     return (
@@ -121,8 +141,60 @@ export function BudgetPage() {
   const isDraft = project.status === 'draft';
   const recordCount = s.disciplines.reduce((acc, d) => acc + d.records, 0);
 
+  const exportBudgetCsv = () => {
+    const date = new Date().toISOString().slice(0, 10);
+    const headers = [
+      'Discipline',
+      'Original budget hrs',
+      'Current budget hrs',
+      'Forecast budget hrs',
+      'Earned hrs (snapshot)',
+      'Snapshot date',
+    ];
+    const rows = s.disciplines.map((d) => [
+      d.display_name,
+      d.budget_hrs.toFixed(0),
+      d.budget_hrs.toFixed(0), // current==original at discipline level today
+      d.budget_hrs.toFixed(0),
+      d.earned_hrs.toFixed(0),
+      earnedSnapshot?.snapshot_date ?? 'live',
+    ]);
+    rows.push([
+      'PROJECT TOTAL',
+      r.original_budget.toFixed(0),
+      r.current_budget.toFixed(0),
+      r.forecast_budget.toFixed(0),
+      s.total_earned_hrs.toFixed(0),
+      earnedSnapshot?.snapshot_date ?? 'live',
+    ]);
+    downloadCsv(`budget-${date}-${dateRange.label.replace(/\s+/g, '-').toLowerCase()}.csv`, headers, rows);
+  };
+
   return (
     <div className="space-y-4">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="is-eyebrow">Reporting period</span>
+          <DateRangeFilter value={dateRange} onChange={setDateRange} />
+          {earnedSnapshot && (
+            <span className="text-xs text-[color:var(--color-text-muted)]">
+              Earned hrs from snapshot{' '}
+              <span className="font-mono">{earnedSnapshot.snapshot_date}</span>
+              {' — '}
+              {earnedSnapshot.label}
+            </span>
+          )}
+          {!earnedSnapshot && (snapshots.data ?? []).length > 0 && (
+            <span className="text-xs text-[color:var(--color-warn)]">
+              No snapshot in this range — earned hrs reflect the latest available data.
+            </span>
+          )}
+        </div>
+        <Button variant="outline" size="sm" onClick={exportBudgetCsv}>
+          <Download size={14} /> Export CSV
+        </Button>
+      </div>
+
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <BudgetTile
           tone="primary"

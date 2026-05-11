@@ -1,5 +1,5 @@
 import '@/lib/charts';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { FileBarChart, Download, Calendar, Info } from 'lucide-react';
 import { useProjectStore } from '@/stores/project';
 import {
@@ -15,6 +15,12 @@ import { VarianceAnalysisTable } from '@/components/reports/VarianceAnalysisTabl
 import { PeriodCloseCard } from '@/components/reports/PeriodCloseCard';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
+import {
+  DateRangeFilter,
+  ALL_TIME_RANGE,
+  isInRange,
+  type DateRange,
+} from '@/components/ui/DateRangeFilter';
 import { selectClass } from '@/components/ui/FormField';
 import { fmt } from '@/lib/format';
 import { downloadCsv } from '@/lib/export';
@@ -40,6 +46,7 @@ export function ReportsPage() {
   const snapshots = useSnapshots(projectId);
 
   const [snapshotId, setSnapshotId] = useState<string | null>(null);
+  const [dateRange, setDateRange] = useState<DateRange>(ALL_TIME_RANGE);
   const selectedSnapshot = useMemo(
     () => snapshots.data?.find((s) => s.id === snapshotId) ?? null,
     [snapshots.data, snapshotId],
@@ -47,6 +54,16 @@ export function ReportsPage() {
   const snapshotSummary = useDashboardSummaryAtSnapshot(selectedSnapshot, projectId);
   const snapshotIsMissing =
     snapshotId !== null && !snapshots.isLoading && !selectedSnapshot;
+
+  // If a date range is set and the currently selected snapshot falls outside
+  // it, drop the selection so the UI doesn't keep showing a frozen view that
+  // contradicts the active range.
+  useEffect(() => {
+    if (!selectedSnapshot) return;
+    if (!isInRange(selectedSnapshot.snapshot_date, dateRange)) {
+      setSnapshotId(null);
+    }
+  }, [dateRange, selectedSnapshot]);
 
   // Pick the active data source: live state if no snapshot is selected,
   // otherwise the frozen snapshot view. Wait on the underlying snapshots
@@ -61,8 +78,9 @@ export function ReportsPage() {
   const sortedSnapshots = useMemo(() => {
     return (snapshots.data ?? [])
       .slice()
+      .filter((s) => isInRange(s.snapshot_date, dateRange))
       .sort((a, b) => (b.snapshot_date.localeCompare(a.snapshot_date)));
-  }, [snapshots.data]);
+  }, [snapshots.data, dateRange]);
 
   if (!projectId) return <NoProject />;
 
@@ -102,6 +120,8 @@ export function ReportsPage() {
           snapshots={sortedSnapshots}
           snapshotId={snapshotId}
           onChange={setSnapshotId}
+          dateRange={dateRange}
+          onDateRangeChange={setDateRange}
         />
         <Card>
           {snapshotIsMissing ? (
@@ -132,6 +152,8 @@ export function ReportsPage() {
         snapshots={sortedSnapshots}
         snapshotId={snapshotId}
         onChange={setSnapshotId}
+        dateRange={dateRange}
+        onDateRangeChange={setDateRange}
       />
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <SummaryTile
@@ -276,13 +298,18 @@ function SnapshotSelector({
   snapshots,
   snapshotId,
   onChange,
+  dateRange,
+  onDateRangeChange,
 }: {
   snapshots: SnapshotForSelector[];
   snapshotId: string | null;
   onChange: (id: string | null) => void;
+  dateRange: DateRange;
+  onDateRangeChange: (next: DateRange) => void;
 }) {
   // Find the most-recent snapshot for the "Latest snapshot" preset.
   const latest = snapshots[0];
+  const isFiltered = dateRange.label !== ALL_TIME_RANGE.label;
 
   return (
     <Card>
@@ -297,6 +324,7 @@ function SnapshotSelector({
           </div>
         </div>
         <div className="ml-auto flex items-center gap-2 flex-wrap">
+          <DateRangeFilter value={dateRange} onChange={onDateRangeChange} />
           <select
             aria-label="Snapshot selector"
             className={selectClass}
@@ -323,7 +351,13 @@ function SnapshotSelector({
           )}
         </div>
       </div>
-      {snapshots.length === 0 && (
+      {isFiltered && snapshots.length === 0 && (
+        <p className="text-xs text-[color:var(--color-warn)] mt-2">
+          No snapshots fall inside <span className="font-mono">{dateRange.label}</span>.
+          Pick a wider range or revert to "All time".
+        </p>
+      )}
+      {!isFiltered && snapshots.length === 0 && (
         <p className="text-xs text-[color:var(--color-text-muted)] mt-2">
           No snapshots yet — only live state is available. Snapshots are
           created automatically by uploads on the Progress page.

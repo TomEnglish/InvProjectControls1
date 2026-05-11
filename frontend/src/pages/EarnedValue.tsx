@@ -67,6 +67,13 @@ export function EarnedValuePage() {
     const dir = sort.dir === 'asc' ? 1 : -1;
     const key = sort.key;
     list.sort((a, b) => {
+      // Done rows always sink to the bottom regardless of the user's sort
+      // direction — Sandra's UAT feedback was that mixing completed records
+      // with in-progress ones makes the "what's still open" read hard.
+      const aDone = a.percent_complete >= 100;
+      const bDone = b.percent_complete >= 100;
+      if (aDone !== bDone) return aDone ? 1 : -1;
+
       const get = (r: ProgressRow): number | string => {
         switch (key) {
           case 'dwg': return r.dwg ?? '';
