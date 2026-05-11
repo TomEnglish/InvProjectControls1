@@ -1,3 +1,4 @@
+import { lazy } from 'react';
 import { createBrowserRouter, Navigate } from 'react-router-dom';
 import { AuthGuard } from './components/layout/AuthGuard';
 import { ProjectScopeGuard } from './components/layout/ProjectScopeGuard';
@@ -7,18 +8,35 @@ import { ForgotPasswordPage } from './pages/auth/ForgotPassword';
 import { UpdatePasswordPage } from './pages/auth/UpdatePassword';
 import { PendingAssignmentPage } from './pages/auth/PendingAssignment';
 import { DashboardPage } from './pages/Dashboard';
-import { ProjectSetupPage } from './pages/ProjectSetup';
-import { ProgressPage } from './pages/Progress';
-import { ChangeManagementPage } from './pages/ChangeManagement';
-import { CoaPage } from './pages/Coa';
-import { RocPage } from './pages/Roc';
-import { BudgetPage } from './pages/Budget';
-import { ReportsPage } from './pages/Reports';
-import { SnapshotsPage } from './pages/Snapshots';
-import { EarnedValuePage } from './pages/EarnedValue';
-import { DisciplineProgressPage } from './pages/DisciplineProgress';
-import { UploadPage } from './pages/Upload';
-import { QmrPage } from './pages/Qmr';
+
+// Lazy-load the chart-heavy / xlsx-heavy pages so they don't blow up the
+// initial bundle. The Suspense boundary lives in AppShell.
+const ProjectSetupPage = lazy(() =>
+  import('./pages/ProjectSetup').then((m) => ({ default: m.ProjectSetupPage })),
+);
+const ProgressPage = lazy(() =>
+  import('./pages/Progress').then((m) => ({ default: m.ProgressPage })),
+);
+const ChangeManagementPage = lazy(() =>
+  import('./pages/ChangeManagement').then((m) => ({ default: m.ChangeManagementPage })),
+);
+const CoaPage = lazy(() => import('./pages/Coa').then((m) => ({ default: m.CoaPage })));
+const RocPage = lazy(() => import('./pages/Roc').then((m) => ({ default: m.RocPage })));
+const BudgetPage = lazy(() => import('./pages/Budget').then((m) => ({ default: m.BudgetPage })));
+const ReportsPage = lazy(() =>
+  import('./pages/Reports').then((m) => ({ default: m.ReportsPage })),
+);
+const SnapshotsPage = lazy(() =>
+  import('./pages/Snapshots').then((m) => ({ default: m.SnapshotsPage })),
+);
+const EarnedValuePage = lazy(() =>
+  import('./pages/EarnedValue').then((m) => ({ default: m.EarnedValuePage })),
+);
+const DisciplineProgressPage = lazy(() =>
+  import('./pages/DisciplineProgress').then((m) => ({ default: m.DisciplineProgressPage })),
+);
+const UploadPage = lazy(() => import('./pages/Upload').then((m) => ({ default: m.UploadPage })));
+const QmrPage = lazy(() => import('./pages/Qmr').then((m) => ({ default: m.QmrPage })));
 
 export const router = createBrowserRouter([
   { path: '/login', element: <LoginPage /> },

@@ -132,8 +132,9 @@ export function UpdatePasswordPage({ mode: forcedMode }: { mode?: Mode } = {}) {
     >
       <form onSubmit={onSubmit} className="grid gap-4">
         <div className="is-form-field">
-          <label className="is-form-label">New password</label>
+          <label htmlFor="update-password-new" className="is-form-label">New password</label>
           <input
+            id="update-password-new"
             type="password"
             autoComplete="new-password"
             required
@@ -146,8 +147,9 @@ export function UpdatePasswordPage({ mode: forcedMode }: { mode?: Mode } = {}) {
         </div>
 
         <div className="is-form-field">
-          <label className="is-form-label">Confirm password</label>
+          <label htmlFor="update-password-confirm" className="is-form-label">Confirm password</label>
           <input
+            id="update-password-confirm"
             type="password"
             autoComplete="new-password"
             required

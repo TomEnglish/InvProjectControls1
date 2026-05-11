@@ -143,6 +143,7 @@ export function RollupModeCard({ projectId }: Props) {
               checked={mode === m.value}
               onChange={() => setMode(m.value)}
               disabled={!canEdit}
+              aria-label={m.label}
               className="mt-1"
             />
             <div>

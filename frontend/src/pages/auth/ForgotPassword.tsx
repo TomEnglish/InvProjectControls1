@@ -64,8 +64,9 @@ export function ForgotPasswordPage() {
     >
       <form onSubmit={onSubmit} className="grid gap-4">
         <div className="is-form-field">
-          <label className="is-form-label">Email</label>
+          <label htmlFor="forgot-email" className="is-form-label">Email</label>
           <input
+            id="forgot-email"
             type="email"
             autoComplete="email"
             required

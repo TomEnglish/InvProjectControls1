@@ -34,6 +34,19 @@ export function NewRecordModal({ open, onClose, projectId }: Props) {
 
   const { data: coaCodes } = useCoaCodes();
 
+  // Default cost code per discipline. Mirrors the heuristic in the backfill
+  // migration so manual records land in the same QMR bucket as Sandra's
+  // typical uploaded data. Admins can change the code before submit.
+  const DEFAULT_CODE_BY_DISCIPLINE: Record<string, string> = {
+    CIVIL: '04130',
+    PIPE: '08212',
+    STEEL: '05210',
+    ELEC: '09420',
+    MECH: '07140',
+    INST: '10110',
+    SITE: '01530',
+  };
+
   const { data: iwps } = useQuery({
     queryKey: ['iwps', projectId] as const,
     enabled: open,
@@ -128,7 +141,19 @@ export function NewRecordModal({ open, onClose, projectId }: Props) {
           <select
             className={inputClass}
             value={form.discipline_id}
-            onChange={(e) => setForm({ ...form, discipline_id: e.target.value })}
+            onChange={(e) => {
+              const next = e.target.value;
+              const disc = disciplines?.find((d) => d.id === next);
+              // Auto-fill code with the discipline default — only when the
+              // user hasn't already picked one. Lets PMs add records fast
+              // without searching the COA dropdown every time.
+              const defaultCode = disc ? DEFAULT_CODE_BY_DISCIPLINE[disc.discipline_code] ?? '' : '';
+              setForm({
+                ...form,
+                discipline_id: next,
+                code: form.code || defaultCode,
+              });
+            }}
           >
             <option value="">— select —</option>
             {disciplines?.map((d) => (
@@ -169,7 +194,8 @@ export function NewRecordModal({ open, onClose, projectId }: Props) {
         </Field>
         <Field
           label="COA Code"
-          hint="The cost code this record rolls up to in the QMR report."
+          required
+          hint="The cost code this record rolls up to in the QMR report. Auto-fills from the discipline default — change if needed."
           className="md:col-span-2"
         >
           <select
@@ -177,7 +203,7 @@ export function NewRecordModal({ open, onClose, projectId }: Props) {
             value={form.code}
             onChange={(e) => setForm({ ...form, code: e.target.value })}
           >
-            <option value="">— none —</option>
+            <option value="">— select a code —</option>
             {(coaCodes ?? [])
               .filter((c) => c.level === 2)
               .map((c) => (
@@ -249,7 +275,7 @@ export function NewRecordModal({ open, onClose, projectId }: Props) {
         </Button>
         <Button
           variant="primary"
-          disabled={submit.isPending || !form.description || form.budget_hrs <= 0}
+          disabled={submit.isPending || !form.description || form.budget_hrs <= 0 || !form.code}
           onClick={() => submit.mutate()}
         >
           {submit.isPending ? 'Saving…' : 'Add Record'}

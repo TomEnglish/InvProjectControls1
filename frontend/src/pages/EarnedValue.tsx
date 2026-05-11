@@ -42,7 +42,10 @@ export function EarnedValuePage() {
   const [showAll, setShowAll] = useState(false);
   const [sort, setSort] = useState<{ key: SortKey; dir: SortDir }>({ key: 'remaining', dir: 'desc' });
 
-  const allRows = rows.data ?? [];
+  // Memoise so the `[]` fallback identity is stable across renders — without
+  // it useMemo dependencies below would change every render and the lint
+  // rule fires.
+  const allRows = useMemo(() => rows.data ?? [], [rows.data]);
 
   const distinctStatuses = useMemo(() => {
     const set = new Set<string>();

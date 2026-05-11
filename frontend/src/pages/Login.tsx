@@ -34,8 +34,9 @@ export function LoginPage() {
     >
       <form onSubmit={onSubmit} className="grid gap-4">
         <div className="is-form-field">
-          <label className="is-form-label">Email</label>
+          <label htmlFor="login-email" className="is-form-label">Email</label>
           <input
+            id="login-email"
             type="email"
             autoComplete="email"
             required
@@ -47,7 +48,7 @@ export function LoginPage() {
 
         <div className="is-form-field">
           <div className="flex items-baseline justify-between">
-            <label className="is-form-label">Password</label>
+            <label htmlFor="login-password" className="is-form-label">Password</label>
             <Link
               to="/forgot-password"
               className="text-xs font-semibold text-[color:var(--color-primary)] hover:underline"
@@ -56,6 +57,7 @@ export function LoginPage() {
             </Link>
           </div>
           <input
+            id="login-password"
             type="password"
             autoComplete="current-password"
             required

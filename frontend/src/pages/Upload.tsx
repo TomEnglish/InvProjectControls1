@@ -1,9 +1,9 @@
 import { useMemo, useState, type FormEvent, type ChangeEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Upload as UploadIcon, Download } from 'lucide-react';
+import { Upload as UploadIcon, Download, RefreshCw } from 'lucide-react';
 import { useProjectStore } from '@/stores/project';
 import { supabase } from '@/lib/supabase';
-import { useRocTemplates } from '@/lib/queries';
+import { useCurrentUser, useRocTemplates, hasRole } from '@/lib/queries';
 import { Card, CardHeader } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Field, inputClass } from '@/components/ui/FormField';
@@ -30,11 +30,15 @@ type RocWeightWarning = {
   disciplineCode: string;
   fromFile: number[];
   fromTemplate: number[];
+  templateId: string | null;
+  labelsFromFile: string[];
 };
 
 export function UploadPage() {
   const projectId = useProjectStore((s) => s.currentProjectId);
   const qc = useQueryClient();
+  const { data: me } = useCurrentUser();
+  const canUpdateTemplate = hasRole(me?.role, 'admin');
   const [file, setFile] = useState<File | null>(null);
   const [weekEnding, setWeekEnding] = useState<string>(recentSundayISO());
   const [label, setLabel] = useState<string>('');
@@ -42,6 +46,7 @@ export function UploadPage() {
   const [unmapped, setUnmapped] = useState<string[]>([]);
   const [parseErr, setParseErr] = useState<string | null>(null);
   const [rocWeightsFromFile, setRocWeightsFromFile] = useState<number[]>([]);
+  const [rocLabelsFromFile, setRocLabelsFromFile] = useState<string[]>([]);
 
   const rocTemplates = useRocTemplates();
   const disciplinesQuery = useQuery({
@@ -88,14 +93,55 @@ export function UploadPage() {
       disciplineCode: discipline.discipline_code,
       fromFile: fileNormalized,
       fromTemplate: templateWeights,
+      templateId: template.id,
+      labelsFromFile: rocLabelsFromFile,
     };
-  }, [rocWeightsFromFile, file, disciplinesQuery.data, rocTemplates.data]);
+  }, [rocWeightsFromFile, rocLabelsFromFile, file, disciplinesQuery.data, rocTemplates.data]);
+
+  // Admin one-click: push the file's M1..M8 weights + labels into the
+  // discipline's default template. Calls roc_template_set, which validates
+  // sum==1.0 and rewrites all 8 milestones atomically.
+  const updateTemplate = useMutation({
+    mutationFn: async () => {
+      if (!rocWarning || !rocWarning.templateId) {
+        throw new Error('No discipline template detected for the uploaded file.');
+      }
+      if (rocWarning.labelsFromFile.length !== 8) {
+        throw new Error(
+          'File is missing M1_DESC..M8_DESC labels — fix the source then retry.',
+        );
+      }
+      const sum = rocWarning.fromFile.reduce((s, w) => s + w, 0);
+      if (Math.abs(sum - 1) > 0.0001) {
+        throw new Error(
+          `File's M1..M8 weights sum to ${sum.toFixed(4)}; must equal 1.0000.`,
+        );
+      }
+      const milestones = rocWarning.fromFile.map((weight, i) => ({
+        seq: i + 1,
+        label: rocWarning.labelsFromFile[i]!,
+        weight,
+      }));
+      const { error } = await supabase.rpc('roc_template_set', {
+        p_template_id: rocWarning.templateId,
+        p_milestones: milestones,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['roc-templates'] });
+      // The roc-milestones-for-discipline keys are dynamic per disc; nuke them all.
+      qc.invalidateQueries({ predicate: (q) => q.queryKey[0] === 'roc-milestones-for-discipline' });
+    },
+  });
 
   const onFile = async (e: ChangeEvent<HTMLInputElement>) => {
     setParseErr(null);
     setParsed([]);
     setUnmapped([]);
     setRocWeightsFromFile([]);
+    setRocLabelsFromFile([]);
+    updateTemplate.reset();
     const f = e.target.files?.[0] ?? null;
     setFile(f);
     if (!f) return;
@@ -104,6 +150,7 @@ export function UploadPage() {
       setParsed(result.rows);
       setUnmapped(result.unmappedHeaders);
       setRocWeightsFromFile(result.inferredRocWeights);
+      setRocLabelsFromFile(result.inferredRocLabels);
       if (!label) setLabel(f.name.replace(/\.[^.]+$/, ''));
     } catch (err) {
       setParseErr((err as Error).message);
@@ -214,9 +261,41 @@ export function UploadPage() {
               </div>
               <div className="mt-1 text-xs font-mono">
                 File: [{rocWarning.fromFile.map((w) => w.toFixed(3)).join(', ')}]
+                {rocWarning.labelsFromFile.length === 8 && (
+                  <span className="text-[color:var(--color-text-muted)]">
+                    {' '}
+                    ({rocWarning.labelsFromFile.join(', ')})
+                  </span>
+                )}
                 <br />
                 Template: [{rocWarning.fromTemplate.map((w) => w.toFixed(3)).join(', ')}]
               </div>
+              {canUpdateTemplate && rocWarning.labelsFromFile.length === 8 && (
+                <div className="mt-2 flex items-center gap-2 flex-wrap">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={updateTemplate.isPending}
+                    onClick={() => updateTemplate.mutate()}
+                  >
+                    <RefreshCw size={12} />
+                    {updateTemplate.isPending
+                      ? 'Updating template…'
+                      : 'Update template from this file'}
+                  </Button>
+                  {updateTemplate.isSuccess && (
+                    <span className="text-xs text-[color:var(--color-variance-favourable)]">
+                      Template updated.
+                    </span>
+                  )}
+                  {updateTemplate.isError && (
+                    <span className="text-xs text-[color:var(--color-variance-unfavourable)]">
+                      {(updateTemplate.error as Error).message}
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
           )}
 

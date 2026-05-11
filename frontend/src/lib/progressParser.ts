@@ -62,6 +62,12 @@ export interface ParseResult {
    * mismatch (decision #5). Empty array when no M1..M8 columns were present.
    */
   inferredRocWeights: number[];
+  /**
+   * Milestone labels picked off the first row's M1_DESC..M8_DESC columns.
+   * Paired with `inferredRocWeights` to drive the "Update template from file"
+   * one-click action on the Upload page.
+   */
+  inferredRocLabels: string[];
 }
 
 // Aliases cover the union of the seven per-discipline audit templates
@@ -275,8 +281,32 @@ function extractInferredRocWeights(
   return weights;
 }
 
+// Companion to extractInferredRocWeights: the first row's M1_DESC..M8_DESC
+// values give us per-milestone labels (e.g. "Excavation", "Formwork"). Paired
+// with the weights, they're enough to drive roc_template_set in one call.
+function extractInferredRocLabels(
+  headers: string[],
+  firstRow: Record<string, unknown> | undefined,
+): string[] {
+  if (!firstRow) return [];
+  const labels: string[] = [];
+  for (let n = 1; n <= 8; n++) {
+    const header = headers.find((h) => normalizeHeader(h) === `m${n}_desc`);
+    if (!header) return [];
+    const v = toString(firstRow[header]);
+    if (v === undefined) return [];
+    labels.push(v);
+  }
+  return labels;
+}
+
 export function parseProgressWorkbook(workbook: XLSX.WorkBook): ParseResult {
-  const empty: ParseResult = { rows: [], unmappedHeaders: [], inferredRocWeights: [] };
+  const empty: ParseResult = {
+    rows: [],
+    unmappedHeaders: [],
+    inferredRocWeights: [],
+    inferredRocLabels: [],
+  };
   const sheetName = workbook.SheetNames[0];
   if (!sheetName) return empty;
   const sheet = workbook.Sheets[sheetName];
@@ -356,8 +386,9 @@ export function parseProgressWorkbook(workbook: XLSX.WorkBook): ParseResult {
     .filter((r) => r.dwg || r.name || (r.milestones && r.milestones.length > 0));
 
   const inferredRocWeights = extractInferredRocWeights(inputHeaders, raw[0]);
+  const inferredRocLabels = extractInferredRocLabels(inputHeaders, raw[0]);
 
-  return { rows, unmappedHeaders: unmapped, inferredRocWeights };
+  return { rows, unmappedHeaders: unmapped, inferredRocWeights, inferredRocLabels };
 }
 
 export async function parseProgressFile(file: File): Promise<ParseResult> {

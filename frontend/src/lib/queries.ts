@@ -349,6 +349,28 @@ export type ProgressRow = {
   attr_size: string | null;
   attr_spec: string | null;
   line_area: string | null;
+  // Audit-file columns persisted as of 20260508000004. All nullable —
+  // populated when records arrive via Sandra's per-discipline templates,
+  // null for records created via the New Record modal unless typed in.
+  sched_id: string | null;
+  system: string | null;
+  carea: string | null;
+  var_area: string | null;
+  test_pkg: string | null;
+  cwp: string | null;
+  spl_cnt: number | null;
+  gen_foreman_name: string | null;
+  paint_spec: string | null;
+  insu_spec: string | null;
+  heat_trace_spec: string | null;
+  ta_bank: string | null;
+  ta_bay: string | null;
+  ta_level: string | null;
+  pslip: string | null;
+  earned_qty_imported: number | null;
+  earn_whrs_imported: number | null;
+  whrs_unit: number | null; // generated column: budget_hrs / budget_qty
+  source_row: number | null;
   milestones: { seq: number; value: number }[];
   earn_pct: number;
 };
@@ -384,6 +406,25 @@ export function useProgressRows(projectId: string | null) {
         attr_size: string | null;
         attr_spec: string | null;
         line_area: string | null;
+        sched_id: string | null;
+        system: string | null;
+        carea: string | null;
+        var_area: string | null;
+        test_pkg: string | null;
+        cwp: string | null;
+        spl_cnt: number | null;
+        gen_foreman_name: string | null;
+        paint_spec: string | null;
+        insu_spec: string | null;
+        heat_trace_spec: string | null;
+        ta_bank: string | null;
+        ta_bay: string | null;
+        ta_level: string | null;
+        pslip: string | null;
+        earned_qty_imported: number | string | null;
+        earn_whrs_imported: number | string | null;
+        whrs_unit: number | string | null;
+        source_row: number | null;
         project_disciplines: { discipline_code: string; display_name: string } | null;
         iwps: { name: string } | null;
       };
@@ -392,9 +433,12 @@ export function useProgressRows(projectId: string | null) {
         supabase
           .from('progress_records')
           .select(
-            'id, project_id, discipline_id, iwp_id, record_no, source_type, dwg, rev, code, description, uom, ' +
-              'budget_qty, actual_qty, earned_qty, budget_hrs, actual_hrs, earned_hrs, percent_complete, status, ' +
-              'foreman_user_id, foreman_name, attr_type, attr_size, attr_spec, line_area, ' +
+            'id, project_id, discipline_id, iwp_id, record_no, source_row, source_type, dwg, rev, code, description, uom, ' +
+              'budget_qty, actual_qty, earned_qty, earned_qty_imported, budget_hrs, actual_hrs, earned_hrs, earn_whrs_imported, ' +
+              'whrs_unit, percent_complete, status, ' +
+              'foreman_user_id, foreman_name, gen_foreman_name, attr_type, attr_size, attr_spec, line_area, ' +
+              'sched_id, system, carea, var_area, test_pkg, cwp, spl_cnt, paint_spec, insu_spec, heat_trace_spec, ' +
+              'ta_bank, ta_bay, ta_level, pslip, ' +
               'project_disciplines(discipline_code, display_name), iwps(name)',
           )
           .eq('project_id', projectId!)
@@ -456,6 +500,25 @@ export function useProgressRows(projectId: string | null) {
           attr_size: r.attr_size,
           attr_spec: r.attr_spec,
           line_area: r.line_area,
+          sched_id: r.sched_id,
+          system: r.system,
+          carea: r.carea,
+          var_area: r.var_area,
+          test_pkg: r.test_pkg,
+          cwp: r.cwp,
+          spl_cnt: r.spl_cnt,
+          gen_foreman_name: r.gen_foreman_name,
+          paint_spec: r.paint_spec,
+          insu_spec: r.insu_spec,
+          heat_trace_spec: r.heat_trace_spec,
+          ta_bank: r.ta_bank,
+          ta_bay: r.ta_bay,
+          ta_level: r.ta_level,
+          pslip: r.pslip,
+          earned_qty_imported: r.earned_qty_imported != null ? Number(r.earned_qty_imported) : null,
+          earn_whrs_imported: r.earn_whrs_imported != null ? Number(r.earn_whrs_imported) : null,
+          whrs_unit: r.whrs_unit != null ? Number(r.whrs_unit) : null,
+          source_row: r.source_row,
           milestones: ms,
           earn_pct: evByRecord.get(r.id) ?? Number(r.percent_complete) / 100,
         };

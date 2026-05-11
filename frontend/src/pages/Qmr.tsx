@@ -1,15 +1,19 @@
-import { useMemo } from 'react';
-import { Download, FileBarChart } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { Download, FileBarChart, Calendar } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
 import { useProjectStore } from '@/stores/project';
 import {
   useCoaCodes,
   useProgressRows,
   useProjectCoaCodes,
+  useSnapshots,
   type CoaCodeRow,
   type ProgressRow,
 } from '@/lib/queries';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
+import { selectClass } from '@/components/ui/FormField';
 import { fmt } from '@/lib/format';
 import { downloadCsv } from '@/lib/export';
 
@@ -24,8 +28,10 @@ type QmrLeaf = {
   pf_rate: number;
   budget_qty: number;
   jtd_installed_qty: number;
+  period_installed_qty: number;
   budget_hrs: number;
   jtd_earned_hrs: number;
+  period_earned_hrs: number;
   percent_complete: number;
   record_count: number;
 };
@@ -37,8 +43,10 @@ type QmrCraft = {
   totals: {
     budget_qty: number;
     jtd_installed_qty: number;
+    period_installed_qty: number;
     budget_hrs: number;
     jtd_earned_hrs: number;
+    period_earned_hrs: number;
     percent_complete: number;
     record_count: number;
   };
@@ -54,10 +62,13 @@ const PRIME_DISPLAY: Record<string, string> = {
   '10': 'Instrumentation',
 };
 
+type BaselineMap = Map<string, { earned_hrs: number; earned_qty: number; actual_qty: number }>;
+
 function rollUp(
   rows: ProgressRow[],
   codes: CoaCodeRow[],
   inScope: Set<string> | null,
+  baseline: BaselineMap | null,
 ): QmrCraft[] {
   // Index COA codes by code string so we can pick up description + pf_rate
   // for the leaf rows. Skip level-1 prime rows; they're craft headers.
@@ -84,8 +95,10 @@ function rollUp(
         pf_rate: coa.pf_rate,
         budget_qty: 0,
         jtd_installed_qty: 0,
+        period_installed_qty: 0,
         budget_hrs: 0,
         jtd_earned_hrs: 0,
+        period_earned_hrs: 0,
         percent_complete: 0,
         record_count: 0,
       };
@@ -96,6 +109,17 @@ function rollUp(
     leaf.budget_hrs += r.budget_hrs;
     leaf.jtd_earned_hrs += r.earned_hrs;
     leaf.record_count += 1;
+
+    // Period delta = JTD minus the baseline-snapshot values for the same
+    // record. Missing baseline → the record didn't exist at baseline, so all
+    // current activity is "in this period" by definition.
+    if (baseline) {
+      const base = baseline.get(r.id);
+      const baseEarnedHrs = base?.earned_hrs ?? 0;
+      const baseActualQty = base?.actual_qty ?? 0;
+      leaf.period_earned_hrs += r.earned_hrs - baseEarnedHrs;
+      leaf.period_installed_qty += (r.actual_qty ?? 0) - baseActualQty;
+    }
   }
 
   for (const leaf of leafByCode.values()) {
@@ -119,16 +143,20 @@ function rollUp(
       (acc, l) => ({
         budget_qty: acc.budget_qty + l.budget_qty,
         jtd_installed_qty: acc.jtd_installed_qty + l.jtd_installed_qty,
+        period_installed_qty: acc.period_installed_qty + l.period_installed_qty,
         budget_hrs: acc.budget_hrs + l.budget_hrs,
         jtd_earned_hrs: acc.jtd_earned_hrs + l.jtd_earned_hrs,
+        period_earned_hrs: acc.period_earned_hrs + l.period_earned_hrs,
         record_count: acc.record_count + l.record_count,
         percent_complete: 0,
       }),
       {
         budget_qty: 0,
         jtd_installed_qty: 0,
+        period_installed_qty: 0,
         budget_hrs: 0,
         jtd_earned_hrs: 0,
+        period_earned_hrs: 0,
         percent_complete: 0,
         record_count: 0,
       },
@@ -165,17 +193,59 @@ export function QmrPage() {
   const codes = useCoaCodes();
   const rows = useProgressRows(projectId);
   const projectCoa = useProjectCoaCodes(projectId);
+  const snapshots = useSnapshots(projectId);
 
-  const isLoading = codes.isLoading || rows.isLoading || projectCoa.isLoading;
-  const error = codes.error || rows.error || projectCoa.error;
+  // Baseline snapshot for period-over-period math (Sandra's QMR has "Period
+  // Installed" / "Period Earned" columns = current - baseline). When null,
+  // the period columns hide.
+  const [baselineSnapshotId, setBaselineSnapshotId] = useState<string | null>(null);
+
+  const baselineItems = useQuery({
+    queryKey: ['qmr-baseline-items', baselineSnapshotId] as const,
+    enabled: !!baselineSnapshotId,
+    queryFn: async (): Promise<BaselineMap> => {
+      const { data, error } = await supabase
+        .from('progress_snapshot_items')
+        .select('progress_record_id, earned_hrs, earned_qty, actual_qty')
+        .eq('snapshot_id', baselineSnapshotId!);
+      if (error) throw error;
+      const map: BaselineMap = new Map();
+      for (const row of (data ?? []) as {
+        progress_record_id: string;
+        earned_hrs: number | string | null;
+        earned_qty: number | string | null;
+        actual_qty: number | string | null;
+      }[]) {
+        map.set(row.progress_record_id, {
+          earned_hrs: row.earned_hrs != null ? Number(row.earned_hrs) : 0,
+          earned_qty: row.earned_qty != null ? Number(row.earned_qty) : 0,
+          actual_qty: row.actual_qty != null ? Number(row.actual_qty) : 0,
+        });
+      }
+      return map;
+    },
+  });
+
+  const showPeriod = baselineSnapshotId !== null;
+  const isLoading =
+    codes.isLoading ||
+    rows.isLoading ||
+    projectCoa.isLoading ||
+    (showPeriod && baselineItems.isLoading);
+  const error = codes.error || rows.error || projectCoa.error || baselineItems.error;
+
+  const sortedSnapshots = useMemo(() => {
+    return (snapshots.data ?? [])
+      .slice()
+      .sort((a, b) => b.snapshot_date.localeCompare(a.snapshot_date));
+  }, [snapshots.data]);
 
   const crafts = useMemo(() => {
     if (!codes.data || !rows.data) return [];
-    // If the project has explicitly picked a code subset, honour it; otherwise
-    // (no picks made yet) show every code that has progress against it.
     const inScope = projectCoa.data && projectCoa.data.size > 0 ? projectCoa.data : null;
-    return rollUp(rows.data, codes.data, inScope);
-  }, [codes.data, rows.data, projectCoa.data]);
+    const baseline = showPeriod ? (baselineItems.data ?? null) : null;
+    return rollUp(rows.data, codes.data, inScope, baseline);
+  }, [codes.data, rows.data, projectCoa.data, baselineItems.data, showPeriod]);
 
   if (!projectId) return <NoProject />;
 
@@ -202,11 +272,21 @@ export function QmrPage() {
     (acc, c) => ({
       budget_qty: acc.budget_qty + c.totals.budget_qty,
       jtd_installed_qty: acc.jtd_installed_qty + c.totals.jtd_installed_qty,
+      period_installed_qty: acc.period_installed_qty + c.totals.period_installed_qty,
       budget_hrs: acc.budget_hrs + c.totals.budget_hrs,
       jtd_earned_hrs: acc.jtd_earned_hrs + c.totals.jtd_earned_hrs,
+      period_earned_hrs: acc.period_earned_hrs + c.totals.period_earned_hrs,
       record_count: acc.record_count + c.totals.record_count,
     }),
-    { budget_qty: 0, jtd_installed_qty: 0, budget_hrs: 0, jtd_earned_hrs: 0, record_count: 0 },
+    {
+      budget_qty: 0,
+      jtd_installed_qty: 0,
+      period_installed_qty: 0,
+      budget_hrs: 0,
+      jtd_earned_hrs: 0,
+      period_earned_hrs: 0,
+      record_count: 0,
+    },
   );
   const grandPct =
     grandTotals.budget_hrs > 0
@@ -224,8 +304,10 @@ export function QmrPage() {
       'U/R (PF)',
       'Budget Qty',
       'JTD Installed Qty',
+      ...(showPeriod ? ['Period Installed Qty'] : []),
       'Budget Hrs',
       'JTD Earned Hrs',
+      ...(showPeriod ? ['Period Earned Hrs'] : []),
       'Records',
     ];
     const data: string[][] = [];
@@ -240,8 +322,10 @@ export function QmrPage() {
           leaf.pf_rate.toFixed(4),
           leaf.budget_qty.toFixed(2),
           leaf.jtd_installed_qty.toFixed(2),
+          ...(showPeriod ? [leaf.period_installed_qty.toFixed(2)] : []),
           leaf.budget_hrs.toFixed(0),
           leaf.jtd_earned_hrs.toFixed(0),
+          ...(showPeriod ? [leaf.period_earned_hrs.toFixed(0)] : []),
           String(leaf.record_count),
         ]);
       }
@@ -254,8 +338,10 @@ export function QmrPage() {
         '',
         craft.totals.budget_qty.toFixed(2),
         craft.totals.jtd_installed_qty.toFixed(2),
+        ...(showPeriod ? [craft.totals.period_installed_qty.toFixed(2)] : []),
         craft.totals.budget_hrs.toFixed(0),
         craft.totals.jtd_earned_hrs.toFixed(0),
+        ...(showPeriod ? [craft.totals.period_earned_hrs.toFixed(0)] : []),
         String(craft.totals.record_count),
       ]);
     }
@@ -268,29 +354,14 @@ export function QmrPage() {
       '',
       grandTotals.budget_qty.toFixed(2),
       grandTotals.jtd_installed_qty.toFixed(2),
+      ...(showPeriod ? [grandTotals.period_installed_qty.toFixed(2)] : []),
       grandTotals.budget_hrs.toFixed(0),
       grandTotals.jtd_earned_hrs.toFixed(0),
+      ...(showPeriod ? [grandTotals.period_earned_hrs.toFixed(0)] : []),
       String(grandTotals.record_count),
     ]);
     downloadCsv(`qmr-report-${date}.csv`, headers, data);
   };
-
-  if (crafts.length === 0) {
-    return (
-      <div className="is-surface is-empty">
-        <div className="is-empty-icon">
-          <FileBarChart size={28} />
-        </div>
-        <div className="is-empty-title">No QMR data yet</div>
-        <p className="is-empty-caption">
-          Once progress records are tagged with COA codes (via upload or the
-          New Record modal) they'll roll up here automatically. Records with
-          unrecognised codes are dropped — fix the code or add it on the
-          COA page to include them.
-        </p>
-      </div>
-    );
-  }
 
   return (
     <div className="space-y-4">
@@ -302,62 +373,130 @@ export function QmrPage() {
             <p className="text-xs text-[color:var(--color-text-muted)] mt-1 max-w-2xl">
               Auto-calculated from active progress records grouped by COA code. % Complete
               is hours-weighted (Σearned hrs ÷ Σbudget hrs); U/R is the productivity-factor-adjusted
-              rate from the COA library. Period-over-period deltas come from snapshots
-              once they're available.
+              rate from the COA library. Pick a baseline snapshot to fill in the
+              Period columns (current − snapshot).
             </p>
           </div>
           <Button variant="outline" size="sm" onClick={exportCsv}>
             <Download size={14} /> Export CSV
           </Button>
         </div>
+
+        <div className="mt-4 flex items-center gap-2 flex-wrap">
+          <Calendar size={14} className="text-[color:var(--color-text-muted)]" />
+          <span className="is-eyebrow">Baseline snapshot</span>
+          <select
+            aria-label="Baseline snapshot for period delta"
+            className={selectClass}
+            value={baselineSnapshotId ?? ''}
+            onChange={(e) => setBaselineSnapshotId(e.target.value || null)}
+          >
+            <option value="">— none (JTD only) —</option>
+            {sortedSnapshots.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.snapshot_date} — {s.label}
+              </option>
+            ))}
+          </select>
+          {baselineSnapshotId && (
+            <Button variant="ghost" size="sm" onClick={() => setBaselineSnapshotId(null)}>
+              Clear baseline
+            </Button>
+          )}
+          {sortedSnapshots.length === 0 && (
+            <span className="text-xs text-[color:var(--color-text-muted)]">
+              No snapshots yet — upload progress data to create one.
+            </span>
+          )}
+        </div>
       </Card>
 
-      <div className="is-surface overflow-hidden">
-        <div style={{ overflow: 'visible' }}>
-          <table className="is-table" style={{ width: '100%' }}>
-            <thead>
-              <tr>
-                <th style={{ minWidth: 80 }}>Code</th>
-                <th>Description</th>
-                <th>UOM</th>
-                <th style={{ textAlign: 'right' }}>% Complete</th>
-                <th style={{ textAlign: 'right' }}>U/R</th>
-                <th style={{ textAlign: 'right' }}>Budget Qty</th>
-                <th style={{ textAlign: 'right' }}>JTD Installed</th>
-                <th style={{ textAlign: 'right' }}>Budget Hrs</th>
-                <th style={{ textAlign: 'right' }}>JTD Earned Hrs</th>
-                <th style={{ textAlign: 'right' }}>Records</th>
-              </tr>
-            </thead>
-            <tbody>
-              {crafts.map((craft) => (
-                <CraftBlock key={craft.prime} craft={craft} />
-              ))}
-              <tr style={{ background: 'var(--color-primary-soft)' }}>
-                <td className="font-bold" colSpan={3}>
-                  PROJECT TOTAL
-                </td>
-                <td className="text-right font-mono font-bold">{grandPct.toFixed(2)}%</td>
-                <td></td>
-                <td className="text-right font-mono font-bold">{fmt.int(grandTotals.budget_qty)}</td>
-                <td className="text-right font-mono font-bold">{fmt.int(grandTotals.jtd_installed_qty)}</td>
-                <td className="text-right font-mono font-bold">{fmt.int(grandTotals.budget_hrs)}</td>
-                <td className="text-right font-mono font-bold">{fmt.int(grandTotals.jtd_earned_hrs)}</td>
-                <td className="text-right font-mono font-bold">{grandTotals.record_count}</td>
-              </tr>
-            </tbody>
-          </table>
+      {crafts.length === 0 ? (
+        <div className="is-surface is-empty">
+          <div className="is-empty-icon">
+            <FileBarChart size={28} />
+          </div>
+          <div className="is-empty-title">No QMR data yet</div>
+          <p className="is-empty-caption">
+            Once progress records are tagged with COA codes (via upload or the
+            New Record modal) they'll roll up here automatically. Records with
+            unrecognised codes are dropped — fix the code or add it on the
+            COA page to include them.
+          </p>
         </div>
-      </div>
+      ) : (
+        <div className="is-surface overflow-hidden">
+          <div style={{ overflow: 'visible' }}>
+            <table className="is-table" style={{ width: '100%' }}>
+              <thead>
+                <tr>
+                  <th style={{ minWidth: 80 }}>Code</th>
+                  <th>Description</th>
+                  <th>UOM</th>
+                  <th style={{ textAlign: 'right' }}>% Complete</th>
+                  <th style={{ textAlign: 'right' }}>U/R</th>
+                  <th style={{ textAlign: 'right' }}>Budget Qty</th>
+                  <th style={{ textAlign: 'right' }}>JTD Installed</th>
+                  {showPeriod && (
+                    <th style={{ textAlign: 'right' }}>Period Installed</th>
+                  )}
+                  <th style={{ textAlign: 'right' }}>Budget Hrs</th>
+                  <th style={{ textAlign: 'right' }}>JTD Earned Hrs</th>
+                  {showPeriod && (
+                    <th style={{ textAlign: 'right' }}>Period Earned Hrs</th>
+                  )}
+                  <th style={{ textAlign: 'right' }}>Records</th>
+                </tr>
+              </thead>
+              <tbody>
+                {crafts.map((craft) => (
+                  <CraftBlock key={craft.prime} craft={craft} showPeriod={showPeriod} />
+                ))}
+                <tr style={{ background: 'var(--color-primary-soft)' }}>
+                  <td className="font-bold" colSpan={3}>
+                    PROJECT TOTAL
+                  </td>
+                  <td className="text-right font-mono font-bold">{grandPct.toFixed(2)}%</td>
+                  <td></td>
+                  <td className="text-right font-mono font-bold">
+                    {fmt.int(grandTotals.budget_qty)}
+                  </td>
+                  <td className="text-right font-mono font-bold">
+                    {fmt.int(grandTotals.jtd_installed_qty)}
+                  </td>
+                  {showPeriod && (
+                    <td className="text-right font-mono font-bold">
+                      {fmt.int(grandTotals.period_installed_qty)}
+                    </td>
+                  )}
+                  <td className="text-right font-mono font-bold">
+                    {fmt.int(grandTotals.budget_hrs)}
+                  </td>
+                  <td className="text-right font-mono font-bold">
+                    {fmt.int(grandTotals.jtd_earned_hrs)}
+                  </td>
+                  {showPeriod && (
+                    <td className="text-right font-mono font-bold">
+                      {fmt.int(grandTotals.period_earned_hrs)}
+                    </td>
+                  )}
+                  <td className="text-right font-mono font-bold">{grandTotals.record_count}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-function CraftBlock({ craft }: { craft: QmrCraft }) {
+function CraftBlock({ craft, showPeriod }: { craft: QmrCraft; showPeriod: boolean }) {
+  const headerColspan = showPeriod ? 12 : 10;
   return (
     <>
       <tr style={{ background: 'var(--color-raised)' }}>
-        <td className="font-bold uppercase tracking-wide text-[11px]" colSpan={10}>
+        <td className="font-bold uppercase tracking-wide text-[11px]" colSpan={headerColspan}>
           {craft.display_name} ({craft.prime})
         </td>
       </tr>
@@ -370,8 +509,20 @@ function CraftBlock({ craft }: { craft: QmrCraft }) {
           <td className="text-right font-mono">{leaf.pf_rate.toFixed(4)}</td>
           <td className="text-right font-mono">{fmt.int(leaf.budget_qty)}</td>
           <td className="text-right font-mono">{fmt.int(leaf.jtd_installed_qty)}</td>
+          {showPeriod && (
+            <td className="text-right font-mono">
+              {leaf.period_installed_qty > 0 ? '+' : ''}
+              {fmt.int(leaf.period_installed_qty)}
+            </td>
+          )}
           <td className="text-right font-mono">{fmt.int(leaf.budget_hrs)}</td>
           <td className="text-right font-mono">{fmt.int(leaf.jtd_earned_hrs)}</td>
+          {showPeriod && (
+            <td className="text-right font-mono">
+              {leaf.period_earned_hrs > 0 ? '+' : ''}
+              {fmt.int(leaf.period_earned_hrs)}
+            </td>
+          )}
           <td className="text-right font-mono">{leaf.record_count}</td>
         </tr>
       ))}
@@ -384,9 +535,25 @@ function CraftBlock({ craft }: { craft: QmrCraft }) {
         </td>
         <td></td>
         <td className="text-right font-mono font-semibold">{fmt.int(craft.totals.budget_qty)}</td>
-        <td className="text-right font-mono font-semibold">{fmt.int(craft.totals.jtd_installed_qty)}</td>
+        <td className="text-right font-mono font-semibold">
+          {fmt.int(craft.totals.jtd_installed_qty)}
+        </td>
+        {showPeriod && (
+          <td className="text-right font-mono font-semibold">
+            {craft.totals.period_installed_qty > 0 ? '+' : ''}
+            {fmt.int(craft.totals.period_installed_qty)}
+          </td>
+        )}
         <td className="text-right font-mono font-semibold">{fmt.int(craft.totals.budget_hrs)}</td>
-        <td className="text-right font-mono font-semibold">{fmt.int(craft.totals.jtd_earned_hrs)}</td>
+        <td className="text-right font-mono font-semibold">
+          {fmt.int(craft.totals.jtd_earned_hrs)}
+        </td>
+        {showPeriod && (
+          <td className="text-right font-mono font-semibold">
+            {craft.totals.period_earned_hrs > 0 ? '+' : ''}
+            {fmt.int(craft.totals.period_earned_hrs)}
+          </td>
+        )}
         <td className="text-right font-mono font-semibold">{craft.totals.record_count}</td>
       </tr>
     </>

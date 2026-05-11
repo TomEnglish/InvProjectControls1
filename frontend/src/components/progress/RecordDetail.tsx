@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { ChevronDown, ChevronRight } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useRocMilestonesForDiscipline, type ProgressRow } from '@/lib/queries';
 import { Card, CardHeader } from '@/components/ui/Card';
@@ -212,6 +213,130 @@ export function RecordDetail({ record, projectId, onClose }: Props) {
           <div className="font-mono text-base mt-0.5">{liveEarnHrs.toFixed(2)}</div>
         </div>
       </div>
+
+      <AuditDetails record={record} />
     </Card>
+  );
+}
+
+/**
+ * Read-only display of the audit-file columns we persist but don't edit yet
+ * (sched_id, cwp, test_pkg, spec triplet, TA_*, PSLIP, imported earned values,
+ * generated whrs_unit). Collapsed by default — users open it when they want
+ * the full schedule / spec / turnaround context for a row that came in via
+ * Sandra's per-discipline upload.
+ */
+function AuditDetails({ record }: { record: ProgressRow }) {
+  const [open, setOpen] = useState(false);
+
+  // Only show the section if at least one audit field is populated. Records
+  // created manually (no upload) usually have all nulls here — pointless
+  // panel for them.
+  const populated =
+    record.sched_id ||
+    record.system ||
+    record.carea ||
+    record.var_area ||
+    record.test_pkg ||
+    record.cwp ||
+    record.spl_cnt != null ||
+    record.gen_foreman_name ||
+    record.paint_spec ||
+    record.insu_spec ||
+    record.heat_trace_spec ||
+    record.ta_bank ||
+    record.ta_bay ||
+    record.ta_level ||
+    record.pslip ||
+    record.earned_qty_imported != null ||
+    record.earn_whrs_imported != null ||
+    record.whrs_unit != null ||
+    record.source_row != null ||
+    record.code;
+  if (!populated) return null;
+
+  return (
+    <div className="mt-4 border-t border-[color:var(--color-line)] pt-4">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="inline-flex items-center gap-1.5 text-xs font-semibold text-[color:var(--color-text-muted)] hover:text-[color:var(--color-text)] transition-colors"
+        aria-expanded={open}
+      >
+        {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+        Audit details
+      </button>
+
+      {open && (
+        <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-4">
+          <DetailGroup
+            label="Schedule & Package"
+            fields={[
+              ['COA code', record.code],
+              ['Schedule ID', record.sched_id],
+              ['CWP', record.cwp],
+              ['Test package', record.test_pkg],
+              ['Spool count', record.spl_cnt],
+              ['General foreman', record.gen_foreman_name],
+              ['Source row', record.source_row],
+            ]}
+          />
+          <DetailGroup
+            label="Area dimensions"
+            fields={[
+              ['System', record.system],
+              ['CAREA', record.carea],
+              ['Line / area', record.line_area],
+              ['Variant area', record.var_area],
+            ]}
+          />
+          <DetailGroup
+            label="Specs"
+            fields={[
+              ['Material spec', record.attr_spec],
+              ['Paint spec', record.paint_spec],
+              ['Insulation spec', record.insu_spec],
+              ['Heat-trace spec', record.heat_trace_spec],
+            ]}
+          />
+          <DetailGroup
+            label="Turnaround / Imported"
+            fields={[
+              ['TA Bank', record.ta_bank],
+              ['TA Bay', record.ta_bay],
+              ['TA Level', record.ta_level],
+              ['PSLIP', record.pslip],
+              ['Imported earned qty', record.earned_qty_imported],
+              ['Imported earned hrs', record.earn_whrs_imported],
+              ['Hours per unit', record.whrs_unit],
+            ]}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DetailGroup({
+  label,
+  fields,
+}: {
+  label: string;
+  fields: [string, string | number | null | undefined][];
+}) {
+  const populated = fields.filter(([, v]) => v != null && v !== '');
+  if (populated.length === 0) return null;
+  return (
+    <div className="rounded-md p-3" style={{ background: 'var(--color-raised)' }}>
+      <div className="is-stat-label mb-2">{label}</div>
+      <dl className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs">
+        {populated.map(([k, v]) => (
+          <div key={k} className="contents">
+            <dt className="text-[color:var(--color-text-muted)]">{k}</dt>
+            <dd className="font-mono text-right">{String(v)}</dd>
+          </div>
+        ))}
+      </dl>
+    </div>
   );
 }
