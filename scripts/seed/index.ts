@@ -252,11 +252,150 @@ async function main() {
   if (coaErr) throw coaErr;
   console.log(`  coa_codes: ${coa.length}`);
 
-  // --- 4. Work types (the unified work_types library replaces the old
-  // per-discipline ROC templates as of 20260511000001). The migration
-  // seeds these per-tenant on apply; no further work needed here. We
-  // still look up each discipline's default work type below so the
-  // project_disciplines rows can link to them.
+  // --- 4. Work types (replaces the old per-discipline ROC templates as
+  // of 20260511000001). On migrations applied against an EXISTING DB the
+  // migration's per-tenant loop seeds these for every tenant that already
+  // exists. For a fresh-DB path where this seed script creates the tenant
+  // AFTER migrations, we have to do the seed here ourselves.
+  //
+  // Idempotent: the upsert on (tenant_id, work_type_code) makes re-runs
+  // a no-op for tenants the migration already covered.
+  const WORK_TYPE_SEED: {
+    code: string;
+    discipline: string;
+    description: string;
+    is_default: boolean;
+    milestones: { label: string; weight: number }[];
+  }[] = [
+    { code: 'CIV-PIER',  discipline: 'CIVIL',       description: 'Drilled Piers',                       is_default: false, milestones: [
+      { label: 'Drill', weight: 0.30 }, { label: 'Rebar', weight: 0.25 },
+      { label: 'Formwork', weight: 0.30 }, { label: 'Concrete', weight: 0.05 },
+      { label: 'Strip Form', weight: 0.05 }, { label: 'Rub/Patch', weight: 0.05 },
+    ] },
+    { code: 'CIV-FDN',   discipline: 'CIVIL',       description: 'Foundations (w/ Excavation)',         is_default: true,  milestones: [
+      { label: 'Excavation', weight: 0.05 }, { label: 'Formwork', weight: 0.30 },
+      { label: 'Rebar', weight: 0.25 }, { label: 'Concrete Placement', weight: 0.10 },
+      { label: 'Strip Forms', weight: 0.10 }, { label: 'Rub/Patch', weight: 0.10 },
+      { label: 'Backfill/Compact', weight: 0.10 },
+    ] },
+    { code: 'CIV-COMP',  discipline: 'CIVIL',       description: 'Simple Completion',                   is_default: false, milestones: [
+      { label: 'Complete', weight: 1.0 },
+    ] },
+    { code: 'PIPE-STD',  discipline: 'PIPE',        description: 'Standard Pipe',                       is_default: true,  milestones: [
+      { label: 'Receive', weight: 0.02 }, { label: 'Stage', weight: 0.03 },
+      { label: 'Erect', weight: 0.20 }, { label: 'Connect', weight: 0.30 },
+      { label: 'Support', weight: 0.10 }, { label: 'Punch', weight: 0.10 },
+      { label: 'Test', weight: 0.15 }, { label: 'Post', weight: 0.10 },
+    ] },
+    { code: 'PIPE-JT',   discipline: 'PIPE',        description: 'Pipe w/ Jeep/Trace',                  is_default: false, milestones: [
+      { label: 'Receive', weight: 0.02 }, { label: 'Stage', weight: 0.03 },
+      { label: 'Erect', weight: 0.20 }, { label: 'Connect', weight: 0.30 },
+      { label: 'Jeep/Trace', weight: 0.10 }, { label: 'Punch', weight: 0.10 },
+      { label: 'Test', weight: 0.15 }, { label: 'Post', weight: 0.10 },
+    ] },
+    { code: 'STL-STD',   discipline: 'STEEL',       description: 'Standard Structural Steel',           is_default: true,  milestones: [
+      { label: 'Receive', weight: 0.05 }, { label: 'Shake Out', weight: 0.05 },
+      { label: 'PreAssemble', weight: 0.15 }, { label: 'Erect', weight: 0.20 },
+      { label: 'Bolt Up', weight: 0.20 }, { label: 'Impact', weight: 0.20 },
+      { label: 'Punch', weight: 0.10 }, { label: 'Sell Off', weight: 0.05 },
+    ] },
+    { code: 'ELEC-UG',   discipline: 'ELEC',        description: 'Underground / Ductbank',              is_default: false, milestones: [
+      { label: 'Trenching', weight: 0.30 }, { label: 'Install Wire', weight: 0.50 },
+      { label: 'Backfill', weight: 0.20 },
+    ] },
+    { code: 'ELEC-LTG',  discipline: 'ELEC',        description: 'Lighting',                            is_default: false, milestones: [
+      { label: 'Install Supports', weight: 0.15 }, { label: 'Install Fixtures', weight: 0.55 },
+      { label: 'Test', weight: 0.10 }, { label: 'Sell Off', weight: 0.20 },
+    ] },
+    { code: 'ELEC-COND', discipline: 'ELEC',        description: 'Conduit',                             is_default: false, milestones: [
+      { label: 'Receive Materials', weight: 0.30 }, { label: 'Run Conduit', weight: 0.70 },
+    ] },
+    { code: 'ELEC-TRAY', discipline: 'ELEC',        description: 'Cable Tray',                          is_default: false, milestones: [
+      { label: 'Receive Materials', weight: 0.05 }, { label: 'Install Supports', weight: 0.30 },
+      { label: 'Install Cable Tray', weight: 0.55 }, { label: 'Sell Off', weight: 0.10 },
+    ] },
+    { code: 'ELEC-PULL', discipline: 'ELEC',        description: 'Cable Pull / Termination',            is_default: false, milestones: [
+      { label: 'Set Up', weight: 0.05 }, { label: 'Pull Cable', weight: 0.55 },
+      { label: 'Tie Wrap', weight: 0.20 }, { label: 'Tail In', weight: 0.15 },
+      { label: 'Test', weight: 0.05 },
+    ] },
+    { code: 'ELEC-SEAL', discipline: 'ELEC',        description: 'Conduit w/ Seals',                    is_default: false, milestones: [
+      { label: 'Install Supports', weight: 0.25 }, { label: 'Run Conduit', weight: 0.70 },
+      { label: 'Pour Seals', weight: 0.05 },
+    ] },
+    { code: 'ELEC-INST', discipline: 'ELEC',        description: 'Electrical Install (General)',        is_default: true,  milestones: [
+      { label: 'Receive', weight: 0.05 }, { label: 'Supports', weight: 0.55 },
+      { label: 'Install', weight: 0.20 }, { label: 'Testing', weight: 0.15 },
+      { label: 'Sell Off', weight: 0.05 },
+    ] },
+    { code: 'MECH-ROT',  discipline: 'MECH',        description: 'Rotating Equipment',                  is_default: false, milestones: [
+      { label: 'Prep FDN', weight: 0.05 }, { label: 'Receive', weight: 0.05 },
+      { label: 'Set', weight: 0.15 }, { label: 'Pre Align', weight: 0.25 },
+      { label: 'Pipe Align', weight: 0.10 }, { label: 'Final Align', weight: 0.25 },
+      { label: 'Run-In', weight: 0.10 }, { label: 'Sell Off', weight: 0.05 },
+    ] },
+    { code: 'MECH-VES',  discipline: 'MECH',        description: 'Vessels / Static Equipment',          is_default: false, milestones: [
+      { label: 'Prep FDN', weight: 0.05 }, { label: 'Receive', weight: 0.10 },
+      { label: 'Set', weight: 0.25 }, { label: 'Internals/S-C', weight: 0.25 },
+      { label: 'Inspect/Button Up', weight: 0.25 }, { label: 'Sell Off', weight: 0.10 },
+    ] },
+    { code: 'MECH-MISC', discipline: 'MECH',        description: 'Mechanical Install (General)',        is_default: true,  milestones: [
+      { label: 'Receive', weight: 0.05 }, { label: 'Support', weight: 0.20 },
+      { label: 'Install', weight: 0.60 }, { label: 'Testing', weight: 0.10 },
+      { label: 'Sell Off', weight: 0.05 },
+    ] },
+    { code: 'INST-STD',  discipline: 'INST',        description: 'Standard Instrumentation',            is_default: true,  milestones: [
+      { label: 'Receive', weight: 0.05 }, { label: 'Calibrate/Spec Check', weight: 0.10 },
+      { label: 'Stand', weight: 0.15 }, { label: 'Install Device', weight: 0.30 },
+      { label: 'Tray and Tube', weight: 0.30 }, { label: 'Process Connection', weight: 0.10 },
+    ] },
+    { code: 'INST-MISC', discipline: 'INST',        description: 'Instrumentation Install (General)',   is_default: false, milestones: [
+      { label: 'Support', weight: 0.45 }, { label: 'Install', weight: 0.45 },
+      { label: 'Test', weight: 0.10 },
+    ] },
+    { code: 'SITE-COMP', discipline: 'SITE',        description: 'Site Work Completion',                is_default: true,  milestones: [
+      { label: 'Complete', weight: 1.0 },
+    ] },
+    { code: 'FDN-STD',   discipline: 'FOUNDATIONS', description: 'Standard Foundations',                is_default: true,  milestones: [
+      { label: 'Excavation', weight: 0.05 }, { label: 'Formwork', weight: 0.30 },
+      { label: 'Rebar', weight: 0.25 }, { label: 'Concrete Placement', weight: 0.10 },
+      { label: 'Strip Forms', weight: 0.10 }, { label: 'Rub/Patch', weight: 0.10 },
+      { label: 'Backfill/Compact', weight: 0.10 },
+    ] },
+  ];
+
+  for (const wt of WORK_TYPE_SEED) {
+    const { data: wtRow, error: wtUpsertErr } = await sb
+      .from('work_types')
+      .upsert(
+        {
+          tenant_id: tenantId,
+          work_type_code: wt.code,
+          discipline_code: wt.discipline,
+          description: wt.description,
+          is_default: wt.is_default,
+        },
+        { onConflict: 'tenant_id,work_type_code' },
+      )
+      .select('id')
+      .single();
+    if (wtUpsertErr) throw wtUpsertErr;
+    // Replace milestones for idempotency.
+    await sb.from('work_type_milestones').delete().eq('work_type_id', wtRow.id);
+    const msRows = wt.milestones.map((m, i) => ({
+      tenant_id: tenantId,
+      work_type_id: wtRow.id,
+      seq: i + 1,
+      label: m.label,
+      weight: m.weight,
+    }));
+    const { error: msErr } = await sb.from('work_type_milestones').insert(msRows);
+    if (msErr) throw msErr;
+  }
+  console.log(`  work_types: ${WORK_TYPE_SEED.length} (${WORK_TYPE_SEED.reduce((s, w) => s + w.milestones.length, 0)} milestones)`);
+
+  // Now look up the is_default work type per discipline so project_disciplines
+  // rows below can link to them.
   const { data: defaultWorkTypes, error: wtErr } = await sb
     .from('work_types')
     .select('id, discipline_code, work_type_code')
@@ -267,7 +406,6 @@ async function main() {
   for (const wt of defaultWorkTypes ?? []) {
     defaultWorkTypeByDiscipline[wt.discipline_code] = wt.id;
   }
-  console.log(`  work_types: defaults found for ${Object.keys(defaultWorkTypeByDiscipline).length} disciplines`);
 
   // --- 5. Projects
   const projectSpecs = [
@@ -595,11 +733,37 @@ async function main() {
   const foremanByName = new Map<string, string>();
   for (const f of foremanLinkSpec) foremanByName.set(f.name.toLowerCase(), f.userId);
 
-  // ROC weights + labels per discipline (pulled from rocSpec defined earlier).
+  // Milestone weights + labels per discipline — pulled from the discipline's
+  // default work_type in the seeded work_types library. Variable count
+  // (CIV-COMP has 1 milestone, PIPE-STD has 8) so we read the rows that
+  // exist and trust their length.
   const rocByDiscipline = new Map<string, { weights: number[]; labels: string[] }>();
-  for (const r of rocSpec) rocByDiscipline.set(r.discipline_code, { weights: r.weights, labels: r.milestones });
+  {
+    const defaultIds = Object.values(defaultWorkTypeByDiscipline);
+    if (defaultIds.length > 0) {
+      const { data: wtMs, error: wtmErr } = await sb
+        .from('work_type_milestones')
+        .select('work_type_id, seq, label, weight')
+        .in('work_type_id', defaultIds)
+        .order('seq');
+      if (wtmErr) throw wtmErr;
+      const msByWorkType = new Map<string, { seq: number; label: string; weight: number }[]>();
+      for (const m of (wtMs ?? []) as { work_type_id: string; seq: number; label: string; weight: number }[]) {
+        const arr = msByWorkType.get(m.work_type_id) ?? [];
+        arr.push({ seq: m.seq, label: m.label, weight: Number(m.weight) });
+        msByWorkType.set(m.work_type_id, arr);
+      }
+      for (const [disc, wtId] of Object.entries(defaultWorkTypeByDiscipline)) {
+        const ms = msByWorkType.get(wtId) ?? [];
+        rocByDiscipline.set(disc, {
+          weights: ms.map((m) => m.weight),
+          labels: ms.map((m) => m.label),
+        });
+      }
+    }
+  }
 
-  // Distribute a percent_complete across 8 milestones in declared order:
+  // Distribute a percent_complete across milestones in declared order:
   // earlier milestones complete first, the next milestone is partial,
   // remaining are 0. Σ(value × weight) = percent_complete (fraction).
   function distributeProgress(percentComplete: number, weights: number[]): number[] {
@@ -644,6 +808,10 @@ async function main() {
     attr_size: s.size ?? null,
     attr_spec: s.spec ?? null,
     line_area: s.area,
+    // Each seeded record links to its discipline's default work_type so the
+    // EV view picks up the right milestone weights — same convention the
+    // backfill migration applies to existing records.
+    work_type_id: defaultWorkTypeByDiscipline[s.disc] ?? null,
   }));
 
   const { data: insertedRecords, error: recErr } = await sb
@@ -653,14 +821,17 @@ async function main() {
   if (recErr) throw recErr;
   console.log(`  progress_records: ${recordRows.length}`);
 
-  // Milestone rows — 8 per record, distributed by ROC template weights.
-  const fallbackWeights = [0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125, 0.125];
+  // Milestone rows — 1..N per record per work_type. The work_type_id was
+  // backfilled on insert by migration 20260511000001 step 5, but seed
+  // records are freshly inserted here so set it explicitly via the
+  // discipline's default below.
   const milestoneRows: Record<string, unknown>[] = [];
   progressSpec.forEach((s, i) => {
     const recId = insertedRecords![i]!.id;
-    const roc = rocByDiscipline.get(s.disc) ?? { weights: fallbackWeights, labels: [] };
+    const roc = rocByDiscipline.get(s.disc);
+    if (!roc || roc.weights.length === 0) return; // no work_type milestones — skip
     const values = distributeProgress(s.pct, roc.weights);
-    for (let seq = 1; seq <= 8; seq++) {
+    for (let seq = 1; seq <= roc.weights.length; seq++) {
       milestoneRows.push({
         tenant_id: tenantId,
         progress_record_id: recId,

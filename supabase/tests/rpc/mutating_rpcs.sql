@@ -24,7 +24,7 @@ select plan(35);
 -- 1. Existence checks for every RPC the frontend depends on.
 -- ─────────────────────────────────────────────────────────────────────
 select has_function('projectcontrols', 'coa_code_upsert',     array['jsonb'],         'coa_code_upsert exists');
-select has_function('projectcontrols', 'roc_template_set',    array['uuid', 'jsonb'], 'roc_template_set exists');
+select has_function('projectcontrols', 'work_type_milestones_set', array['uuid', 'jsonb'], 'work_type_milestones_set exists');
 select has_function('projectcontrols', 'co_submit',           array['jsonb'],         'co_submit exists');
 select has_function('projectcontrols', 'co_pc_review',        array['uuid', 'text', 'text'], 'co_pc_review exists');
 select has_function('projectcontrols', 'co_approve',          array['uuid', 'text', 'text'], 'co_approve exists');
@@ -45,9 +45,9 @@ select is(
   'coa_code_upsert is SECURITY DEFINER'
 );
 select is(
-  (select prosecdef from pg_proc where oid = 'projectcontrols.roc_template_set(uuid, jsonb)'::regprocedure),
+  (select prosecdef from pg_proc where oid = 'projectcontrols.work_type_milestones_set(uuid, jsonb)'::regprocedure),
   true,
-  'roc_template_set is SECURITY DEFINER'
+  'work_type_milestones_set is SECURITY DEFINER'
 );
 select is(
   (select prosecdef from pg_proc where oid = 'projectcontrols.co_submit(jsonb)'::regprocedure),

@@ -34,7 +34,8 @@ type Discipline = {
   display_name: string;
   budget_hrs: number;
   is_active: boolean;
-  roc_template_id: string | null;
+  default_work_type_id: string | null;
+  work_types: { work_type_code: string; description: string } | null;
 };
 
 function NoProjectSelected() {
@@ -73,11 +74,16 @@ export function ProjectSetupPage() {
     queryFn: async (): Promise<Discipline[]> => {
       const { data, error } = await supabase
         .from('project_disciplines')
-        .select('id, discipline_code, display_name, budget_hrs, is_active, roc_template_id')
+        .select(
+          'id, discipline_code, display_name, budget_hrs, is_active, default_work_type_id, work_types(work_type_code, description)',
+        )
         .eq('project_id', projectId!)
         .order('discipline_code');
       if (error) throw error;
-      return (data ?? []) as Discipline[];
+      // Supabase types the FK join as an array by default but at runtime
+      // returns a single object for many-to-one. Cast through `unknown` to
+      // match the actual shape downstream.
+      return (data ?? []) as unknown as Discipline[];
     },
   });
 
@@ -215,7 +221,7 @@ export function ProjectSetupPage() {
                 <th>Discipline</th>
                 <th>Code</th>
                 <th style={{ textAlign: 'right' }}>Budget Hours</th>
-                <th>ROC Template</th>
+                <th>Default Work Type</th>
                 <th>Status</th>
               </tr>
             </thead>
@@ -226,7 +232,9 @@ export function ProjectSetupPage() {
                   <td className="font-mono">{d.discipline_code}</td>
                   <td className="text-right font-mono">{fmt.int(d.budget_hrs)}</td>
                   <td className="text-[color:var(--color-text-muted)]">
-                    {d.roc_template_id ? `${d.discipline_code} Standard (8 milestones)` : '— none —'}
+                    {d.work_types
+                      ? `${d.work_types.work_type_code} — ${d.work_types.description}`
+                      : '— none —'}
                   </td>
                   <td>
                     <StatusChip kind={d.is_active ? 'active' : 'closed'} />

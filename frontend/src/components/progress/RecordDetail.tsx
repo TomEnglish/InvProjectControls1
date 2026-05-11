@@ -56,15 +56,15 @@ export function RecordDetail({ record, projectId, onClose }: Props) {
     onMutate: async (milestones) => {
       await qc.cancelQueries({ queryKey: ['progress-rows', projectId] });
       const prev = qc.getQueryData<ProgressRow[]>(['progress-rows', projectId]);
+      // Optimistic update mirrors exactly what was sent — work types can
+      // have 1..N milestones, so a fixed length-8 array would lie about the
+      // persisted shape for any work_type with <8 entries (e.g. CIV-COMP).
       qc.setQueryData<ProgressRow[]>(['progress-rows', projectId], (old) =>
         (old ?? []).map((r) =>
           r.id === record.id
             ? {
                 ...r,
-                milestones: Array.from({ length: 8 }, (_, i) => ({
-                  seq: i + 1,
-                  value: milestones.find((m) => m.seq === i + 1)?.value ?? 0,
-                })),
+                milestones: milestones.map((m) => ({ seq: m.seq, value: m.value })),
               }
             : r,
         ),
