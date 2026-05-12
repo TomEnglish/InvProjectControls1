@@ -62,12 +62,19 @@ export function UploadPage() {
     const known = new Set(
       workTypes.data.map((w) => w.work_type_code.toLowerCase()),
     );
-    const seen = new Set<string>();
+    // Dedup case-insensitively (PIPE-XYZ and pipe-xyz collapse to one entry,
+    // keyed by the first-seen casing) so the warning doesn't list what looks
+    // like duplicate codes. Sort case-insensitively for the same reason.
+    const seen = new Map<string, string>();
     for (const r of parsed) {
       const code = r.work_type?.trim();
-      if (code && !known.has(code.toLowerCase())) seen.add(code);
+      if (!code) continue;
+      const key = code.toLowerCase();
+      if (!known.has(key) && !seen.has(key)) seen.set(key, code);
     }
-    return Array.from(seen).sort();
+    return Array.from(seen.values()).sort((a, b) =>
+      a.toLowerCase().localeCompare(b.toLowerCase()),
+    );
   }, [parsed, workTypes.data]);
 
   // Compare the inferred M1..M8 weights against the work_type referenced by

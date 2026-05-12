@@ -107,6 +107,7 @@ export function WorkTypeModal({ open, onClose, workType }: Props) {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['work-types'] });
+      qc.invalidateQueries({ queryKey: ['work-type-usage'] });
       qc.invalidateQueries({
         predicate: (q) => q.queryKey[0] === 'work-type-milestones-for-record',
       });
@@ -237,6 +238,14 @@ export function WorkTypeModal({ open, onClose, workType }: Props) {
           <div className="is-toast is-toast-danger">{(save.error as Error).message}</div>
         )}
 
+        {usage.isError && (
+          <div className="is-toast is-toast-danger">
+            Couldn't determine how many records use this work type:{' '}
+            {(usage.error as Error).message}. Save is blocked until the count
+            resolves — retry to continue.
+          </div>
+        )}
+
         {confirming && (
           <div className="is-toast is-toast-warn">
             <strong>
@@ -271,7 +280,14 @@ export function WorkTypeModal({ open, onClose, workType }: Props) {
           <Button
             type="submit"
             variant="primary"
-            disabled={!totalOk || !allLabelled || !countOk || save.isPending || usage.isLoading}
+            disabled={
+              !totalOk ||
+              !allLabelled ||
+              !countOk ||
+              save.isPending ||
+              usage.isLoading ||
+              usage.isError
+            }
           >
             {save.isPending
               ? 'Saving…'
