@@ -51,6 +51,25 @@ export function UploadPage() {
 
   const workTypes = useWorkTypes();
 
+  // Distinct WORK_TYPE codes in the parsed rows that aren't in the
+  // tenant's work_types library. The import edge function silently
+  // resolves these to null and the EV view falls back to the discipline
+  // default — surfacing them here lets the user catch typos or add the
+  // missing work type before importing rows whose milestone math will
+  // quietly use the wrong template.
+  const unknownWorkTypes = useMemo(() => {
+    if (parsed.length === 0 || !workTypes.data) return [] as string[];
+    const known = new Set(
+      workTypes.data.map((w) => w.work_type_code.toLowerCase()),
+    );
+    const seen = new Set<string>();
+    for (const r of parsed) {
+      const code = r.work_type?.trim();
+      if (code && !known.has(code.toLowerCase())) seen.add(code);
+    }
+    return Array.from(seen).sort();
+  }, [parsed, workTypes.data]);
+
   // Compare the inferred M1..M8 weights against the work_type referenced by
   // the file's first row (the WORK_TYPE column). Unified workbook design:
   // each row picks a work_type via XLOOKUP, so a single file is typically
@@ -237,6 +256,22 @@ export function UploadPage() {
                   </span>
                 </>
               )}
+            </div>
+          )}
+
+          {unknownWorkTypes.length > 0 && (
+            <div className="is-toast is-toast-warn">
+              <strong>
+                Unknown WORK_TYPE code{unknownWorkTypes.length === 1 ? '' : 's'}
+              </strong>
+              <div className="mt-1 text-xs">
+                {unknownWorkTypes.length === 1 ? 'This code is' : 'These codes are'} not in the work-types library:{' '}
+                <span className="font-mono">{unknownWorkTypes.join(', ')}</span>.
+                Rows referencing {unknownWorkTypes.length === 1 ? 'it' : 'them'} will import with no work type and
+                fall back to the discipline's default for earned-value math.
+                Add {unknownWorkTypes.length === 1 ? 'it' : 'them'} on the{' '}
+                <strong>Work Types</strong> page or fix the file to suppress this warning.
+              </div>
             </div>
           )}
 

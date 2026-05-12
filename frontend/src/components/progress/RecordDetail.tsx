@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
@@ -102,12 +102,38 @@ export function RecordDetail({ record, projectId, onClose }: Props) {
     };
   }, [draft, save]);
 
-  const weights = rocMilestones ?? [];
+  const weights = useMemo(() => rocMilestones ?? [], [rocMilestones]);
   // weights[i].weight sums to 1.0; draft values are 0..100.
   // earn_pct (0..1) = sum(value/100 * weight).
   const liveEarnPct = weights.reduce((sum, m) => sum + ((draft[m.seq] ?? 0) / 100) * m.weight, 0);
   const liveEarnHrs = record.budget_hrs * liveEarnPct;
   const liveEarnedQty = (record.budget_qty ?? 0) * liveEarnPct;
+
+  // Detect milestone rows that don't line up with the current work_type's
+  // milestone set. These are leftover values from when the record (or its
+  // work_type) had more milestones — v_progress_record_ev's seq-keyed join
+  // silently drops them from earned-percentage math. Surface them so a PM
+  // editing the record knows the orphaned numbers aren't counting.
+  const orphans = useMemo(() => {
+    if (weights.length === 0) return [] as { seq: number; value: number }[];
+    const valid = new Set(weights.map((m) => m.seq));
+    return Object.entries(draft)
+      .map(([seq, value]) => ({ seq: Number(seq), value }))
+      .filter((m) => !valid.has(m.seq) && m.value > 0)
+      .sort((a, b) => a.seq - b.seq);
+  }, [weights, draft]);
+
+  const clearOrphans = () => {
+    if (orphans.length === 0) return;
+    // Persist orphans as zero rather than deleting locally — upsert leaves
+    // existing rows alone, so on the next read they'd re-populate and the
+    // warning would reappear. Setting value=0 keeps the row consistent and
+    // makes the "stale" state durable.
+    const next = { ...draft };
+    for (const o of orphans) next[o.seq] = 0;
+    setDraft(next);
+    flush(next);
+  };
 
   const setMilestone = (seq: number, raw: number) => {
     const clamped = Math.min(100, Math.max(0, raw));
@@ -207,6 +233,27 @@ export function RecordDetail({ record, projectId, onClose }: Props) {
           );
         })}
       </div>
+
+      {orphans.length > 0 && (
+        <div className="is-toast is-toast-warn mt-3 text-xs">
+          <strong>
+            {orphans.length} stale milestone value{orphans.length === 1 ? '' : 's'} — not counted toward earned %
+          </strong>
+          <div className="mt-1">
+            Recorded at M{orphans.map((o) => o.seq).join(', M')}, which the
+            current work type ({record.work_type_code ?? '—'}) doesn't define.
+            They remain in the database but don't contribute to earned-value
+            math.
+            <button
+              type="button"
+              onClick={clearOrphans}
+              className="ml-2 underline text-[color:var(--color-text)] hover:text-[color:var(--color-primary)]"
+            >
+              Clear them
+            </button>
+          </div>
+        </div>
+      )}
 
       <div
         className="flex items-center justify-between mt-4 p-4 rounded-md flex-wrap gap-4 text-sm"

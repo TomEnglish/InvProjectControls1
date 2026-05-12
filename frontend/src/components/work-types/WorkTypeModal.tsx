@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Trash2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import type { WorkTypeRow } from '@/lib/queries';
@@ -27,6 +27,7 @@ type DraftMilestone = { seq: number; label: string; weight: string };
 export function WorkTypeModal({ open, onClose, workType }: Props) {
   const qc = useQueryClient();
   const [drafts, setDrafts] = useState<DraftMilestone[]>([]);
+  const [confirming, setConfirming] = useState(false);
 
   useEffect(() => {
     if (!open || !workType) return;
@@ -39,7 +40,28 @@ export function WorkTypeModal({ open, onClose, workType }: Props) {
       }));
     if (ms.length === 0) ms.push({ seq: 1, label: '', weight: '100.00' });
     setDrafts(ms);
+    setConfirming(false);
   }, [open, workType]);
+
+  // Count of progress_records that reference this work_type directly. The
+  // RPC rewrites the milestone set atomically, which silently recomputes
+  // earn_pct for every one of these records on the next query — and any
+  // record with a milestone row at seq > new-count gets dropped from EV.
+  // Surface the impact before save so PMs can intervene if a mid-project
+  // milestone edit would change reported earnings.
+  const usage = useQuery({
+    queryKey: ['work-type-usage', workType?.id] as const,
+    enabled: open && !!workType,
+    queryFn: async (): Promise<number> => {
+      if (!workType) return 0;
+      const { count, error } = await supabase
+        .from('progress_records')
+        .select('id', { count: 'exact', head: true })
+        .eq('work_type_id', workType.id);
+      if (error) throw error;
+      return count ?? 0;
+    },
+  });
 
   const totalPct = useMemo(
     () => drafts.reduce((s, d) => s + (Number(d.weight) || 0), 0),
@@ -50,14 +72,17 @@ export function WorkTypeModal({ open, onClose, workType }: Props) {
   const countOk = drafts.length >= 1 && drafts.length <= 8;
 
   const setDraft = (idx: number, patch: Partial<DraftMilestone>) => {
+    setConfirming(false);
     setDrafts((d) => d.map((m, i) => (i === idx ? { ...m, ...patch } : m)));
   };
 
   const addMilestone = () => {
     if (drafts.length >= 8) return;
+    setConfirming(false);
     setDrafts((d) => [...d, { seq: d.length + 1, label: '', weight: '0.00' }]);
   };
   const removeMilestone = (idx: number) => {
+    setConfirming(false);
     setDrafts((d) =>
       d
         .filter((_, i) => i !== idx)
@@ -89,9 +114,34 @@ export function WorkTypeModal({ open, onClose, workType }: Props) {
     },
   });
 
+  const originalCount = workType?.milestones.length ?? 0;
+  const newCount = drafts.length;
+  const usageCount = usage.data ?? 0;
+  // Detect meaningful drift vs. the persisted milestone set. Re-saving the
+  // same labels + weights shouldn't require a confirm step.
+  const hasChanges = useMemo(() => {
+    if (!workType) return false;
+    const persisted = [...workType.milestones].sort((a, b) => a.seq - b.seq);
+    if (persisted.length !== drafts.length) return true;
+    return drafts.some((d, i) => {
+      const p = persisted[i];
+      if (!p) return true;
+      const w = (Number(d.weight) || 0) / 100;
+      return d.label.trim() !== p.label || Math.abs(w - p.weight) > 0.0001;
+    });
+  }, [workType, drafts]);
+  const willDropSeqs = newCount < originalCount && usageCount > 0;
+
   const onSubmit = (e: FormEvent) => {
     e.preventDefault();
     if (!totalOk || !allLabelled || !countOk) return;
+    // Confirm before rewriting milestones for a work type already in use:
+    // existing records' earn_pct recomputes against the new weights, and
+    // any progress_record_milestones row at seq > newCount drops from EV.
+    if (hasChanges && usageCount > 0 && !confirming) {
+      setConfirming(true);
+      return;
+    }
     save.mutate();
   };
 
@@ -187,16 +237,47 @@ export function WorkTypeModal({ open, onClose, workType }: Props) {
           <div className="is-toast is-toast-danger">{(save.error as Error).message}</div>
         )}
 
+        {confirming && (
+          <div className="is-toast is-toast-warn">
+            <strong>
+              {usageCount} record{usageCount === 1 ? '' : 's'} use this work type.
+            </strong>
+            <div className="mt-1 text-xs">
+              Saving recomputes earned percentage on every one of those records
+              against the new weights and labels.
+              {willDropSeqs && (
+                <>
+                  {' '}
+                  Reducing milestones from <strong>{originalCount}</strong> to{' '}
+                  <strong>{newCount}</strong> will also strip any milestone
+                  values recorded at M{newCount + 1}–M{originalCount} from
+                  earned-value math — those values stay in the database but no
+                  longer contribute to earnings.
+                </>
+              )}{' '}
+              Confirm to proceed, or cancel and adjust.
+            </div>
+          </div>
+        )}
+
         <div className="flex justify-end gap-2">
-          <Button type="button" variant="outline" onClick={onClose}>
-            Cancel
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => (confirming ? setConfirming(false) : onClose())}
+          >
+            {confirming ? 'Back' : 'Cancel'}
           </Button>
           <Button
             type="submit"
             variant="primary"
-            disabled={!totalOk || !allLabelled || !countOk || save.isPending}
+            disabled={!totalOk || !allLabelled || !countOk || save.isPending || usage.isLoading}
           >
-            {save.isPending ? 'Saving…' : 'Save work type'}
+            {save.isPending
+              ? 'Saving…'
+              : confirming
+                ? `Confirm — rewrite ${usageCount} record${usageCount === 1 ? '' : 's'}`
+                : 'Save work type'}
           </Button>
         </div>
       </form>
