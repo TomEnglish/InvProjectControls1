@@ -18,7 +18,12 @@ begin;
 -- (record_bulk_upsert, record_update_milestones, project_summary dropped
 -- in 20260504000002_retire_audit_records.sql; superseded by canonical
 -- progress_records surface.)
-select plan(35);
+--
+-- A20 Wave 1 additions:
+--   mutating: clerk_crafts_set, upload_queue_submit,
+--             upload_queue_state_transition, upload_queue_llm_update
+--   user_role enum gains 'clerk' (rank 2, between viewer and editor)
+select plan(48);
 
 -- ─────────────────────────────────────────────────────────────────────
 -- 1. Existence checks for every RPC the frontend depends on.
@@ -136,8 +141,76 @@ select has_column('projectcontrols', 'audit_log', 'created_at', 'audit_log has c
 -- ─────────────────────────────────────────────────────────────────────
 select set_eq(
   $$ select unnest(enum_range(null::projectcontrols.user_role))::text $$,
-  $$ values ('super_admin'), ('admin'), ('pm'), ('pc_reviewer'), ('editor'), ('viewer') $$,
-  'user_role enum has the six expected values'
+  $$ values ('super_admin'), ('admin'), ('pm'), ('pc_reviewer'), ('editor'), ('clerk'), ('viewer') $$,
+  'user_role enum has the seven expected values (clerk added in A20 Wave 1)'
+);
+
+-- ─────────────────────────────────────────────────────────────────────
+-- 6. A20 Wave 1 — clerk_crafts_set + upload_queue RPC surface.
+--    All four RPCs must exist with the right signatures, be SECURITY
+--    DEFINER, and have execute granted to the appropriate roles. The
+--    LLM-update RPC's grant goes to service_role (NOT authenticated) —
+--    only the queue-llm-check edge fn (which holds the service-role key)
+--    should be able to spoof an LLM scan result.
+-- ─────────────────────────────────────────────────────────────────────
+select has_function('projectcontrols', 'clerk_crafts_set',
+  array['uuid', 'uuid', 'projectcontrols.discipline_code[]'],
+  'clerk_crafts_set exists');
+select has_function('projectcontrols', 'upload_queue_submit',
+  array['uuid', 'projectcontrols.discipline_code', 'text', 'text', 'text',
+        'bigint', 'jsonb', 'jsonb', 'boolean', 'date', 'text'],
+  'upload_queue_submit exists');
+select has_function('projectcontrols', 'upload_queue_state_transition',
+  array['uuid', 'text', 'uuid', 'text'],
+  'upload_queue_state_transition exists');
+select has_function('projectcontrols', 'upload_queue_llm_update',
+  array['uuid', 'jsonb', 'text'],
+  'upload_queue_llm_update exists');
+
+select is(
+  (select prosecdef from pg_proc
+     where oid = 'projectcontrols.clerk_crafts_set(uuid, uuid, projectcontrols.discipline_code[])'::regprocedure),
+  true,
+  'clerk_crafts_set is SECURITY DEFINER'
+);
+select is(
+  (select prosecdef from pg_proc
+     where oid = 'projectcontrols.upload_queue_submit(uuid, projectcontrols.discipline_code, text, text, text, bigint, jsonb, jsonb, boolean, date, text)'::regprocedure),
+  true,
+  'upload_queue_submit is SECURITY DEFINER'
+);
+select is(
+  (select prosecdef from pg_proc
+     where oid = 'projectcontrols.upload_queue_state_transition(uuid, text, uuid, text)'::regprocedure),
+  true,
+  'upload_queue_state_transition is SECURITY DEFINER'
+);
+select is(
+  (select prosecdef from pg_proc
+     where oid = 'projectcontrols.upload_queue_llm_update(uuid, jsonb, text)'::regprocedure),
+  true,
+  'upload_queue_llm_update is SECURITY DEFINER'
+);
+
+select ok(
+  has_function_privilege('authenticated', 'projectcontrols.clerk_crafts_set(uuid, uuid, projectcontrols.discipline_code[])', 'execute'),
+  'authenticated can execute clerk_crafts_set'
+);
+select ok(
+  has_function_privilege('authenticated', 'projectcontrols.upload_queue_submit(uuid, projectcontrols.discipline_code, text, text, text, bigint, jsonb, jsonb, boolean, date, text)', 'execute'),
+  'authenticated can execute upload_queue_submit'
+);
+select ok(
+  has_function_privilege('authenticated', 'projectcontrols.upload_queue_state_transition(uuid, text, uuid, text)', 'execute'),
+  'authenticated can execute upload_queue_state_transition'
+);
+select ok(
+  has_function_privilege('service_role', 'projectcontrols.upload_queue_llm_update(uuid, jsonb, text)', 'execute'),
+  'service_role can execute upload_queue_llm_update'
+);
+select ok(
+  not has_function_privilege('authenticated', 'projectcontrols.upload_queue_llm_update(uuid, jsonb, text)', 'execute'),
+  'authenticated CANNOT execute upload_queue_llm_update (service-role only)'
 );
 
 select * from finish();

@@ -22,6 +22,15 @@ describe('hasRole', () => {
     expect(hasRole('editor', 'pm')).toBe(false);
   });
 
+  it('slots clerk between viewer and editor', () => {
+    expect(hasRole('clerk', 'viewer')).toBe(true);
+    expect(hasRole('clerk', 'clerk')).toBe(true);
+    expect(hasRole('clerk', 'editor')).toBe(false);
+    expect(hasRole('clerk', 'pm')).toBe(false);
+    expect(hasRole('viewer', 'clerk')).toBe(false);
+    expect(hasRole('editor', 'clerk')).toBe(true);
+  });
+
   it('lets PM pass PC reviewer gate', () => {
     expect(hasRole('pm', 'pc_reviewer')).toBe(true);
     expect(hasRole('pm', 'editor')).toBe(true);

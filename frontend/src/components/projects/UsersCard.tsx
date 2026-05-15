@@ -23,6 +23,7 @@ const ROLE_LABEL: Record<UserRole, string> = {
   pm: 'PM',
   pc_reviewer: 'PC Reviewer',
   editor: 'Editor',
+  clerk: 'Clerk',
   viewer: 'Viewer',
 };
 

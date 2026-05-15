@@ -2,7 +2,14 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from './supabase';
 import { useAuth } from './auth';
 
-export type UserRole = 'super_admin' | 'admin' | 'pm' | 'pc_reviewer' | 'editor' | 'viewer';
+export type UserRole =
+  | 'super_admin'
+  | 'admin'
+  | 'pm'
+  | 'pc_reviewer'
+  | 'editor'
+  | 'clerk'
+  | 'viewer';
 
 export type AppUser = {
   id: string;
@@ -34,13 +41,18 @@ export function useCurrentUser() {
   });
 }
 
+// Rank order MUST match the PG assert_role ladder
+// (supabase/migrations/20260515000001_assert_role_v3.sql). Clerks sit
+// between viewer and editor — they have read access plus a narrow INSERT
+// right on upload_queue via SECURITY DEFINER RPC, but no live-table writes.
 const roleRank: Record<UserRole, number> = {
   viewer: 1,
-  editor: 2,
-  pc_reviewer: 3,
-  pm: 4,
-  admin: 5,
-  super_admin: 6,
+  clerk: 2,
+  editor: 3,
+  pc_reviewer: 4,
+  pm: 5,
+  admin: 6,
+  super_admin: 7,
 };
 
 export function hasRole(current: UserRole | undefined | null, min: UserRole): boolean {
