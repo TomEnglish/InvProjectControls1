@@ -53,15 +53,17 @@ select is(
 -- A20 Wave 1 — clerk must be absent from every direct WRITE policy's role
 -- check across the projectcontrols schema. Clerk's only write surface is
 -- a single SECURITY DEFINER RPC (upload_queue_submit). Any clerk listed
--- inside a direct INSERT/UPDATE/DELETE policy is a privilege-escalation
+-- inside a direct INSERT/UPDATE/DELETE/ALL policy is a privilege-escalation
 -- hazard. We scan both `qual` (the USING clause) and `with_check` since
 -- write policies use the latter — current_user_role() = 'clerk' or
--- current_user_role() in (...'clerk'...) would match either way.
+-- current_user_role() in (...'clerk'...) would match either way. The 'ALL'
+-- cmd kind covers `for all` policies, which compile to insert+update+delete
+-- semantics and would otherwise slip past a narrower in-list.
 select is(
   (select count(*)::int
      from pg_policies
     where schemaname = 'projectcontrols'
-      and cmd in ('INSERT', 'UPDATE', 'DELETE')
+      and cmd in ('INSERT', 'UPDATE', 'DELETE', 'ALL')
       and (coalesce(qual, '') like '%''clerk''%'
         or coalesce(with_check, '') like '%''clerk''%')),
   0,

@@ -221,11 +221,18 @@ begin
       using errcode = '22023';
   end if;
 
-  -- Map the app_users.id for the reviewer (auth.uid() may not have an
-  -- app_users row in obscure edge cases; reviewed_by FKs to app_users).
+  -- Map the app_users.id for the reviewer. reviewed_by FKs to app_users,
+  -- so a caller without a tenant-matching app_users row must be rejected
+  -- explicitly — otherwise we'd silently lose the reviewer identity in
+  -- the audit trail.
   select id into reviewer_id
   from projectcontrols.app_users
   where id = auth.uid() and tenant_id = tid;
+
+  if reviewer_id is null then
+    raise exception 'reviewer % not bound to a tenant app_users row', auth.uid()
+      using errcode = '42501';
+  end if;
 
   if p_action = 'approved' then
     update projectcontrols.upload_queue
@@ -278,6 +285,8 @@ language plpgsql
 security definer
 set search_path = projectcontrols, auth
 as $$
+declare
+  q_tenant_id uuid;
 begin
   if p_state not in ('done', 'failed') then
     raise exception 'invalid llm_scan_state: %', p_state using errcode = 'P0001';
@@ -288,7 +297,8 @@ begin
          llm_scan_state = p_state,
          updated_at     = now()
    where id = p_queue_id
-     and llm_scan_state = 'pending';
+     and llm_scan_state = 'pending'
+  returning tenant_id into q_tenant_id;
 
   if not found then
     -- Either the row doesn't exist or it's already been written to. Don't
@@ -297,11 +307,19 @@ begin
     return;
   end if;
 
-  perform projectcontrols.write_audit_log(
-    'upload_queue', p_queue_id, 'llm_scan',
-    null,
-    jsonb_build_object('llm_scan_state', p_state, 'llm_warnings', p_warnings)
-  );
+  -- Write audit_log directly rather than via write_audit_log: the helper
+  -- sources tenant_id from current_tenant_id() and actor from auth.uid(),
+  -- both of which return null when this RPC is invoked via the service_role
+  -- JWT (the only authorized caller — see grant below). Sourcing tenant_id
+  -- from the queue row keeps the audit row insertable in that path.
+  -- actor_id is intentionally null: the LLM scan is an automated event,
+  -- not a human action.
+  insert into projectcontrols.audit_log
+    (tenant_id, entity, entity_id, action, actor_id, before_json, after_json)
+  values
+    (q_tenant_id, 'upload_queue', p_queue_id, 'llm_scan', null,
+     null,
+     jsonb_build_object('llm_scan_state', p_state, 'llm_warnings', p_warnings));
 end
 $$;
 
