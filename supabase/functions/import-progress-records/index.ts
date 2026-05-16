@@ -1,8 +1,9 @@
 // import-progress-records
 //
+// Direct-import path used by editor+ callers on the /progress/upload page.
 // Accepts the parsed-row payload produced by frontend/src/lib/progressParser.ts
-// and writes progress_records + progress_record_milestones, then creates a
-// weekly progress_snapshots + progress_snapshot_items capture.
+// and writes progress_records + progress_record_milestones + a weekly
+// progress_snapshots capture via the shared importProgressRecords body.
 //
 // Body shape:
 //   { projectId, weekEnding?, label?, sourceFilename?, items: ParsedRow[] }
@@ -13,56 +14,17 @@
 // dedupe on re-upload.
 
 import { createClient } from 'jsr:@supabase/supabase-js@2';
+import {
+  importProgressRecords,
+  type ImportedItem,
+} from '../_shared/importProgressRecords.ts';
 
-type Milestone = { name: string; pct: number };
-type Item = {
-  dwg?: string;
-  rev?: string;
-  code?: string;
-  name?: string;
-  tag_no?: string;
-  spool_fr?: string;
-  budget_hrs?: number;
-  actual_hrs?: number;
-  percent_complete?: number;
-  unit?: string;
-  budget_qty?: number;
-  actual_qty?: number;
-  earned_qty_imported?: number;
-  earn_whrs_imported?: number;
-  foreman_name?: string;
-  gen_foreman_name?: string;
-  iwp_name?: string;
-  attr_type?: string;
-  attr_size?: string;
-  attr_spec?: string;
-  line_area?: string;
-  system?: string;
-  carea?: string;
-  var_area?: string;
-  sched_id?: string;
-  test_pkg?: string;
-  cwp?: string;
-  spl_cnt?: number;
-  source_row?: number;
-  paint_spec?: string;
-  insu_spec?: string;
-  heat_trace_spec?: string;
-  service?: string;
-  ta_bank?: string;
-  ta_bay?: string;
-  ta_level?: string;
-  pslip?: string;
-  work_type?: string;
-  discipline_label?: string;
-  milestones?: Milestone[];
-};
 type Payload = {
   projectId: string;
   weekEnding?: string;
   label?: string;
   sourceFilename?: string;
-  items: Item[];
+  items: ImportedItem[];
 };
 
 const corsHeaders = {
@@ -144,173 +106,20 @@ Deno.serve(async (req) => {
     return json({ error: 'project not in your tenant' }, 404);
   }
 
-  const [iwpsRes, aliasesRes, workTypesRes, maxRowRes] = await Promise.all([
-    admin.from('iwps').select('id, name').eq('project_id', body.projectId),
-    admin.from('foreman_aliases').select('name, user_id').eq('tenant_id', caller.tenant_id),
-    admin
-      .from('work_types')
-      .select('id, work_type_code')
-      .eq('tenant_id', caller.tenant_id),
-    admin
-      .from('progress_records')
-      .select('record_no')
-      .eq('project_id', body.projectId)
-      .order('record_no', { ascending: false })
-      .limit(1)
-      .maybeSingle(),
-  ]);
-
-  const iwpMap = new Map(((iwpsRes.data ?? []) as { id: string; name: string }[]).map((i) => [i.name.toLowerCase(), i.id]));
-  const aliasMap = new Map(
-    ((aliasesRes.data ?? []) as { name: string; user_id: string }[]).map((a) => [a.name.toLowerCase(), a.user_id]),
-  );
-  // WORK_TYPE codes are case-insensitive on lookup (Sandra's audit files
-  // sometimes lowercase). Unrecognised codes leave work_type_id null and
-  // fall back to the discipline default via the EV view's coalesce.
-  const workTypeMap = new Map(
-    ((workTypesRes.data ?? []) as { id: string; work_type_code: string }[]).map((w) => [
-      w.work_type_code.toLowerCase(),
-      w.id,
-    ]),
-  );
-  let nextRecordNo = ((maxRowRes.data?.record_no as number | null) ?? 0) + 1;
-
-  const insertRows = body.items.map((item) => {
-    // Description column accepts DESC_, falling back to TAG_NO or SPOOL_FR
-    // if DESC_ is missing — the unified workbook treats these as discipline-
-    // specific name variants, but downstream UI needs one resolved label.
-    const description = item.name ?? item.tag_no ?? item.spool_fr ?? '(unnamed)';
-    const workTypeId = item.work_type
-      ? (workTypeMap.get(item.work_type.toLowerCase()) ?? null)
-      : null;
-    return {
-      tenant_id: caller.tenant_id,
-      project_id: body.projectId,
-      iwp_id: item.iwp_name ? (iwpMap.get(item.iwp_name.toLowerCase()) ?? null) : null,
-      record_no: nextRecordNo++,
-      source_row: item.source_row ?? null,
-      source_type: 'import',
-      source_filename: body.sourceFilename ?? null,
-      dwg: item.dwg ?? null,
-      rev: item.rev ?? null,
-      code: item.code ?? null,
-      description,
-      tag_no: item.tag_no ?? null,
-      spool_fr: item.spool_fr ?? null,
-      uom: (item.unit ?? 'EA').toUpperCase(),
-      budget_qty: item.budget_qty ?? null,
-      actual_qty: item.actual_qty ?? null,
-      earned_qty_imported: item.earned_qty_imported ?? null,
-      earn_whrs_imported: item.earn_whrs_imported ?? null,
-      budget_hrs: item.budget_hrs ?? 0,
-      actual_hrs: item.actual_hrs ?? 0,
-      percent_complete: item.percent_complete ?? 0,
-      status: 'active',
-      foreman_name: item.foreman_name ?? null,
-      foreman_user_id: item.foreman_name ? (aliasMap.get(item.foreman_name.toLowerCase()) ?? null) : null,
-      gen_foreman_name: item.gen_foreman_name ?? null,
-      attr_type: item.attr_type ?? null,
-      attr_size: item.attr_size ?? null,
-      attr_spec: item.attr_spec ?? null,
-      line_area: item.line_area ?? null,
-      system: item.system ?? null,
-      carea: item.carea ?? null,
-      var_area: item.var_area ?? null,
-      sched_id: item.sched_id ?? null,
-      test_pkg: item.test_pkg ?? null,
-      cwp: item.cwp ?? null,
-      spl_cnt: item.spl_cnt ?? null,
-      paint_spec: item.paint_spec ?? null,
-      insu_spec: item.insu_spec ?? null,
-      heat_trace_spec: item.heat_trace_spec ?? null,
-      service: item.service ?? null,
-      ta_bank: item.ta_bank ?? null,
-      ta_bay: item.ta_bay ?? null,
-      ta_level: item.ta_level ?? null,
-      pslip: item.pslip ?? null,
-      work_type_id: workTypeId,
-      discipline_label: item.discipline_label ?? null,
-    };
+  const result = await importProgressRecords({
+    admin,
+    tenantId: caller.tenant_id,
+    projectId: body.projectId,
+    callerId,
+    weekEnding: body.weekEnding ?? null,
+    label: body.label ?? null,
+    sourceFilename: body.sourceFilename ?? null,
+    items: body.items,
   });
-
-  const { data: inserted, error: insertErr } = await admin
-    .from('progress_records')
-    .insert(insertRows)
-    .select('id');
-  if (insertErr) return json({ error: 'records: ' + insertErr.message }, 400);
-
-  const milestoneRows: Record<string, unknown>[] = [];
-  for (let i = 0; i < body.items.length; i++) {
-    const item = body.items[i]!;
-    const recordId = inserted![i]!.id;
-    (item.milestones ?? []).forEach((m, idx) => {
-      milestoneRows.push({
-        tenant_id: caller.tenant_id,
-        progress_record_id: recordId,
-        seq: idx + 1,
-        label: m.name,
-        value: m.pct,
-      });
-    });
-  }
-  if (milestoneRows.length > 0) {
-    const { error: msErr } = await admin
-      .from('progress_record_milestones')
-      .upsert(milestoneRows, { onConflict: 'progress_record_id,seq' });
-    if (msErr) return json({ error: 'milestones: ' + msErr.message }, 400);
-  }
-
-  const totalBudgetHrs = insertRows.reduce((acc, r) => acc + (r.budget_hrs ?? 0), 0);
-  const totalActualHrs = insertRows.reduce((acc, r) => acc + (r.actual_hrs ?? 0), 0);
-  const totalEarnedHrs = insertRows.reduce(
-    (acc, r) => acc + (r.budget_hrs ?? 0) * ((r.percent_complete ?? 0) / 100),
-    0,
-  );
-
-  const { data: snapshot, error: snapErr } = await admin
-    .from('progress_snapshots')
-    .insert({
-      tenant_id: caller.tenant_id,
-      project_id: body.projectId,
-      kind: 'weekly',
-      week_ending: body.weekEnding ?? null,
-      label: body.label ?? `Import ${new Date().toISOString().slice(0, 10)}`,
-      total_budget_hrs: totalBudgetHrs,
-      total_earned_hrs: totalEarnedHrs,
-      total_actual_hrs: totalActualHrs,
-      cpi: totalActualHrs > 0 ? totalEarnedHrs / totalActualHrs : null,
-      spi: totalBudgetHrs > 0 ? totalEarnedHrs / totalBudgetHrs : null,
-      source_filename: body.sourceFilename ?? null,
-      uploaded_by: callerId,
-    })
-    .select('id')
-    .single();
-  if (snapErr) return json({ error: 'snapshot: ' + snapErr.message }, 400);
-
-  const snapItems = inserted!.map((rec, i) => {
-    const r = insertRows[i]!;
-    const pctFrac = (r.percent_complete ?? 0) / 100;
-    return {
-      snapshot_id: snapshot.id,
-      progress_record_id: rec.id,
-      tenant_id: caller.tenant_id,
-      project_id: body.projectId,
-      percent_complete: r.percent_complete ?? 0,
-      earned_hrs: (r.budget_hrs ?? 0) * pctFrac,
-      earned_qty: r.budget_qty != null ? r.budget_qty * pctFrac : null,
-      actual_hrs: r.actual_hrs ?? 0,
-      actual_qty: r.actual_qty,
-    };
-  });
-  if (snapItems.length > 0) {
-    const { error: snapItemErr } = await admin
-      .from('progress_snapshot_items')
-      .insert(snapItems);
-    if (snapItemErr) return json({ error: 'snapshot_items: ' + snapItemErr.message }, 400);
-  }
+  if (!result.ok) return json({ error: result.error }, 400);
 
   return json({
-    inserted: insertRows.length,
-    snapshot_id: snapshot.id,
+    inserted: result.inserted,
+    snapshot_id: result.snapshotId,
   });
 });

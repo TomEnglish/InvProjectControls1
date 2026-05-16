@@ -23,7 +23,11 @@ begin;
 --   mutating: clerk_crafts_set, upload_queue_submit,
 --             upload_queue_state_transition, upload_queue_llm_update
 --   user_role enum gains 'clerk' (rank 2, between viewer and editor)
-select plan(48);
+--
+-- A20 Wave 2 additions:
+--   table: llm_invocation_log (rate-limit + cost tracking for the async
+--          LLM consistency scan). No RPCs — scan logic lives in app code.
+select plan(54);
 
 -- ─────────────────────────────────────────────────────────────────────
 -- 1. Existence checks for every RPC the frontend depends on.
@@ -212,6 +216,20 @@ select ok(
   not has_function_privilege('authenticated', 'projectcontrols.upload_queue_llm_update(uuid, jsonb, text)', 'execute'),
   'authenticated CANNOT execute upload_queue_llm_update (service-role only)'
 );
+
+-- ─────────────────────────────────────────────────────────────────────
+-- 7. A20 Wave 2 — llm_invocation_log table shape.
+--    The async LLM scan pre-INSERTs a row before calling Anthropic so
+--    concurrent submissions are counted toward the per-user rate limit.
+--    The shape feeds (a) the rate-limit count query, (b) admin cost
+--    audits. Any column drift here breaks the queue-llm-check edge fn.
+-- ─────────────────────────────────────────────────────────────────────
+select has_table('projectcontrols', 'llm_invocation_log', 'llm_invocation_log table exists');
+select has_column('projectcontrols', 'llm_invocation_log', 'tenant_id', 'llm_invocation_log has tenant_id');
+select has_column('projectcontrols', 'llm_invocation_log', 'user_id', 'llm_invocation_log has user_id');
+select has_column('projectcontrols', 'llm_invocation_log', 'queue_id', 'llm_invocation_log has queue_id');
+select has_column('projectcontrols', 'llm_invocation_log', 'invoked_at', 'llm_invocation_log has invoked_at');
+select has_column('projectcontrols', 'llm_invocation_log', 'ok', 'llm_invocation_log has ok');
 
 select * from finish();
 
