@@ -298,9 +298,9 @@ Deno.serve(async (req) => {
       upsert: false,
     });
   if (parsedUpload.error) {
-    // Best-effort cleanup of the file so the next submit attempt can
-    // reuse the same queueId-derived path. Errors here are non-fatal —
-    // the row didn't get inserted, so the orphan is harmless.
+    // Best-effort cleanup of the original file so we don't leak an
+    // orphan storage object. The row didn't get inserted, so the
+    // orphan would be harmless but storage costs aren't free.
     await admin.storage.from('upload-queue').remove([filePath]);
     return json({ error: `storage (parsed): ${parsedUpload.error.message}` }, 500);
   }

@@ -129,6 +129,15 @@ Deno.serve(async (req) => {
 
   // Approve path: download parsed.json, run shared import, then flip
   // status with the resulting snapshot id.
+  //
+  // KNOWN CONCURRENCY LIMITATION: two auditors approving the same
+  // queue row simultaneously will both pass the status='queued' check
+  // here, both run importProgressRecords (creating two snapshots +
+  // duplicate progress_records), and only one wins the
+  // state-transition RPC. Mitigation deferred: single-auditor reality
+  // makes this exceedingly unlikely. A future migration could add a
+  // 'processing' status + CAS claim before the import — track as
+  // Wave 2 follow-up if this becomes a real-world issue.
   const parsedDl = await admin.storage.from('upload-queue').download(row.parsed_path);
   if (parsedDl.error || !parsedDl.data) {
     return json(

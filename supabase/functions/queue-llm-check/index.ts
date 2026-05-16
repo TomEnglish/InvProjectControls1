@@ -154,9 +154,13 @@ Deno.serve(async (req) => {
     return json({ error: 'rate-limit count failed', detail: countErr.message }, 500);
   }
   if ((recent ?? 0) >= limitPerHour) {
+    // Don't fabricate a verdict — the scan didn't actually run. Store
+    // null warnings + state='failed' so the auditor UI shows "scan
+    // didn't complete" rather than a misleading "consistent" tag.
+    // The reason lives in llm_invocation_log for admin visibility.
     await admin.rpc('upload_queue_llm_update', {
       p_queue_id: row.id,
-      p_warnings: { verdict: 'consistent', concerns: ['rate limit — scan skipped'] },
+      p_warnings: null,
       p_state: 'failed',
     });
     return json({ ok: true, rateLimited: true });
