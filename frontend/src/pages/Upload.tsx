@@ -13,6 +13,8 @@ import {
   recentSundayISO,
   type ParsedRow,
 } from '@/lib/progressParser';
+import { ClerkUploadPanel } from '@/components/upload-queue/ClerkUploadPanel';
+import { MySubmissionsCard } from '@/components/upload-queue/MySubmissionsCard';
 
 function NoProject() {
   return (
@@ -36,6 +38,23 @@ type WorkTypeWeightWarning = {
 };
 
 export function UploadPage() {
+  const { data: me } = useCurrentUser();
+  // Clerks go through the auditor-queue path: file is parsed server-side,
+  // stored in queue + Storage, an LLM scan runs async, then an auditor
+  // approves before any progress_records get written. Editor+ keeps the
+  // direct-import behaviour below — they're the audit gate themselves.
+  if (me?.role === 'clerk') {
+    return (
+      <div className="space-y-4">
+        <ClerkUploadPanel />
+        <MySubmissionsCard />
+      </div>
+    );
+  }
+  return <EditorDirectUploadPage />;
+}
+
+function EditorDirectUploadPage() {
   const projectId = useProjectStore((s) => s.currentProjectId);
   const qc = useQueryClient();
   const { data: me } = useCurrentUser();

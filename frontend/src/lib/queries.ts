@@ -1,4 +1,5 @@
-import { useQuery } from '@tanstack/react-query';
+import { useEffect } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from './supabase';
 import { useAuth } from './auth';
 
@@ -914,4 +915,348 @@ export function useProjectCoaCodes(projectId: string | null) {
       return new Set((data ?? []).map((r) => r.coa_code_id as string));
     },
   });
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// A20 — Upload queue (clerk submission → auditor review)
+// ─────────────────────────────────────────────────────────────────────
+
+export type UploadQueueStatus = 'queued' | 'approved' | 'rejected';
+export type LlmScanState = 'pending' | 'done' | 'failed';
+
+export type HeuristicWarnings = {
+  disciplineMismatch: Array<{ rowIndex: number; declared: string; rowValue: string }>;
+  workTypeMismatch: Array<{
+    rowIndex: number;
+    declared: string;
+    code: string;
+    codeCraft: string;
+  }>;
+};
+
+export type LlmWarnings = {
+  verdict: 'consistent' | 'maybe_mismatch' | 'likely_mismatch';
+  concerns: string[];
+};
+
+export type UploadQueueRow = {
+  id: string;
+  tenant_id: string;
+  project_id: string;
+  project_code: string | null;
+  project_name: string | null;
+  declared_craft: string;
+  uploaded_by: string;
+  uploader_display_name: string | null;
+  uploader_email: string | null;
+  file_path: string;
+  parsed_path: string;
+  original_filename: string;
+  file_size_bytes: number;
+  status: UploadQueueStatus;
+  parse_summary: { row_count?: number; unmapped_headers?: string[] } & Record<string, unknown>;
+  heuristic_warnings: HeuristicWarnings | null;
+  llm_warnings: LlmWarnings | null;
+  llm_scan_state: LlmScanState;
+  override_warnings: boolean;
+  week_ending: string | null;
+  label: string | null;
+  reviewed_by: string | null;
+  reviewer_display_name: string | null;
+  reviewed_at: string | null;
+  rejection_reason: string | null;
+  snapshot_id: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type RawQueueRow = Omit<
+  UploadQueueRow,
+  | 'project_code'
+  | 'project_name'
+  | 'uploader_display_name'
+  | 'uploader_email'
+  | 'reviewer_display_name'
+> & {
+  projects: { project_code: string; name: string } | null;
+};
+
+// FK join on projects is safe (single FK to projects table) but the
+// uploaded_by / reviewed_by joins to app_users would need disambiguation
+// (two FKs to the same table). Instead we hydrate uploader + reviewer
+// in a second query so the SELECT stays simple and the relationship
+// resolution doesn't depend on PG's auto-generated constraint names.
+const QUEUE_SELECT =
+  'id, tenant_id, project_id, declared_craft, uploaded_by, file_path, parsed_path, original_filename, file_size_bytes, status, parse_summary, heuristic_warnings, llm_warnings, llm_scan_state, override_warnings, week_ending, label, reviewed_by, reviewed_at, rejection_reason, snapshot_id, created_at, updated_at, ' +
+  'projects(project_code, name)';
+
+async function hydrateUsers(
+  rows: RawQueueRow[],
+): Promise<{
+  uploaders: Map<string, { display_name: string | null; email: string }>;
+  reviewers: Map<string, { display_name: string | null }>;
+}> {
+  const ids = new Set<string>();
+  for (const r of rows) {
+    if (r.uploaded_by) ids.add(r.uploaded_by);
+    if (r.reviewed_by) ids.add(r.reviewed_by);
+  }
+  if (ids.size === 0) return { uploaders: new Map(), reviewers: new Map() };
+  const { data } = await supabase
+    .from('app_users')
+    .select('id, display_name, email')
+    .in('id', Array.from(ids));
+  const byId = new Map<string, { display_name: string | null; email: string }>();
+  for (const u of (data ?? []) as { id: string; display_name: string | null; email: string }[]) {
+    byId.set(u.id, { display_name: u.display_name, email: u.email });
+  }
+  return { uploaders: byId, reviewers: byId };
+}
+
+function mapQueueRow(
+  r: RawQueueRow,
+  uploaders: Map<string, { display_name: string | null; email: string }>,
+  reviewers: Map<string, { display_name: string | null }>,
+): UploadQueueRow {
+  const up = uploaders.get(r.uploaded_by);
+  const rv = r.reviewed_by ? reviewers.get(r.reviewed_by) : null;
+  return {
+    id: r.id,
+    tenant_id: r.tenant_id,
+    project_id: r.project_id,
+    project_code: r.projects?.project_code ?? null,
+    project_name: r.projects?.name ?? null,
+    declared_craft: r.declared_craft,
+    uploaded_by: r.uploaded_by,
+    uploader_display_name: up?.display_name ?? null,
+    uploader_email: up?.email ?? null,
+    file_path: r.file_path,
+    parsed_path: r.parsed_path,
+    original_filename: r.original_filename,
+    file_size_bytes: r.file_size_bytes,
+    status: r.status,
+    parse_summary: r.parse_summary,
+    heuristic_warnings: r.heuristic_warnings,
+    llm_warnings: r.llm_warnings,
+    llm_scan_state: r.llm_scan_state,
+    override_warnings: r.override_warnings,
+    week_ending: r.week_ending,
+    label: r.label,
+    reviewed_by: r.reviewed_by,
+    reviewer_display_name: rv?.display_name ?? null,
+    reviewed_at: r.reviewed_at,
+    rejection_reason: r.rejection_reason,
+    snapshot_id: r.snapshot_id,
+    created_at: r.created_at,
+    updated_at: r.updated_at,
+  };
+}
+
+/**
+ * Auditor inbox: every queue row in the tenant. Subscribed to realtime
+ * updates so the LLM-scan chip materializes without a manual refresh
+ * after a submission. The status filter is enforced client-side because
+ * the row mutations land via state-transition RPC, not refetch on tab
+ * switch.
+ */
+export function useUploadQueue() {
+  const qc = useQueryClient();
+  const query = useQuery({
+    queryKey: ['upload-queue'] as const,
+    queryFn: async (): Promise<UploadQueueRow[]> => {
+      const { data, error } = await supabase
+        .from('upload_queue')
+        .select(QUEUE_SELECT)
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      const rows = (data ?? []) as unknown as RawQueueRow[];
+      const { uploaders, reviewers } = await hydrateUsers(rows);
+      return rows.map((r) => mapQueueRow(r, uploaders, reviewers));
+    },
+  });
+
+  useEffect(() => {
+    const channel = supabase
+      .channel('upload-queue-realtime')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'projectcontrols', table: 'upload_queue' },
+        () => {
+          qc.invalidateQueries({ queryKey: ['upload-queue'] });
+          qc.invalidateQueries({ queryKey: ['my-submissions'] });
+        },
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [qc]);
+
+  return query;
+}
+
+/**
+ * Clerk-side: this user's own submissions, last 10, regardless of
+ * status. Used by the My Submissions card on /progress/upload.
+ */
+export function useMySubmissions() {
+  const { user } = useAuth();
+  const qc = useQueryClient();
+  const query = useQuery({
+    queryKey: ['my-submissions', user?.id] as const,
+    enabled: !!user?.id,
+    queryFn: async (): Promise<UploadQueueRow[]> => {
+      if (!user?.id) return [];
+      const { data, error } = await supabase
+        .from('upload_queue')
+        .select(QUEUE_SELECT)
+        .eq('uploaded_by', user.id)
+        .order('created_at', { ascending: false })
+        .limit(10);
+      if (error) throw error;
+      const rows = (data ?? []) as unknown as RawQueueRow[];
+      const { uploaders, reviewers } = await hydrateUsers(rows);
+      return rows.map((r) => mapQueueRow(r, uploaders, reviewers));
+    },
+  });
+
+  useEffect(() => {
+    if (!user?.id) return;
+    const channel = supabase
+      .channel(`my-submissions-${user.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'projectcontrols',
+          table: 'upload_queue',
+          filter: `uploaded_by=eq.${user.id}`,
+        },
+        () => qc.invalidateQueries({ queryKey: ['my-submissions', user.id] }),
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user?.id, qc]);
+
+  return query;
+}
+
+/**
+ * Crafts the current user is permitted to submit for on a given project.
+ * For clerks this scopes the declared-craft dropdown; for editor+ it
+ * returns the full project_disciplines list since they have no
+ * per-craft restriction.
+ */
+export function useProjectClerkCrafts(projectId: string | null) {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ['project-clerk-crafts', projectId, user?.id] as const,
+    enabled: !!projectId && !!user?.id,
+    queryFn: async (): Promise<string[]> => {
+      if (!projectId || !user?.id) return [];
+      const { data, error } = await supabase
+        .from('project_clerk_crafts')
+        .select('craft')
+        .eq('project_id', projectId)
+        .eq('user_id', user.id);
+      if (error) throw error;
+      return ((data ?? []) as { craft: string }[]).map((r) => r.craft).sort();
+    },
+  });
+}
+
+/**
+ * Signed URL for a Storage object on the upload-queue bucket. Used by
+ * the auditor review modal to fetch parsed.json for the preview table
+ * and to expose a download link for the original file.
+ */
+export async function signedUploadQueueUrl(
+  path: string,
+  expiresIn = 60,
+): Promise<string> {
+  const { data, error } = await supabase.storage
+    .from('upload-queue')
+    .createSignedUrl(path, expiresIn);
+  if (error || !data) throw error ?? new Error('signed url failed');
+  return data.signedUrl;
+}
+
+export type SubmitToQueueResult = {
+  queueId: string;
+  parseSummary: Record<string, unknown>;
+  heuristicWarnings: HeuristicWarnings | null;
+  llmScanState: LlmScanState;
+};
+
+/**
+ * Multipart POST to queue-progress-upload. supabase.functions.invoke
+ * goes through fetch with JSON encoding by default, so for multipart we
+ * build the request ourselves.
+ *
+ * Returns a 409 + warnings shape when heuristic mismatches are
+ * present and overrideWarnings is not set — caller is expected to
+ * surface the warnings and re-call with overrideWarnings=true to confirm.
+ */
+export async function submitToUploadQueue(opts: {
+  projectId: string;
+  declaredCraft: string;
+  file: File;
+  weekEnding?: string;
+  label?: string;
+  overrideWarnings?: boolean;
+}): Promise<
+  | { ok: true; result: SubmitToQueueResult }
+  | {
+      ok: false;
+      status: number;
+      error: string;
+      heuristicWarnings?: HeuristicWarnings | null;
+      parseSummary?: Record<string, unknown>;
+    }
+> {
+  const { data: sessionData } = await supabase.auth.getSession();
+  const token = sessionData?.session?.access_token;
+  if (!token) return { ok: false, status: 401, error: 'no session' };
+
+  const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/queue-progress-upload`;
+  const form = new FormData();
+  form.set('projectId', opts.projectId);
+  form.set('declaredCraft', opts.declaredCraft);
+  form.set('file', opts.file);
+  if (opts.weekEnding) form.set('weekEnding', opts.weekEnding);
+  if (opts.label) form.set('label', opts.label);
+  if (opts.overrideWarnings) form.set('overrideWarnings', 'true');
+
+  const resp = await fetch(url, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: form,
+  });
+  const body = (await resp.json().catch(() => ({}))) as {
+    error?: string;
+    heuristicWarnings?: HeuristicWarnings | null;
+    parseSummary?: Record<string, unknown>;
+    queueId?: string;
+    llmScanState?: LlmScanState;
+  };
+  if (!resp.ok) {
+    return {
+      ok: false,
+      status: resp.status,
+      error: body.error ?? `submit failed (${resp.status})`,
+      heuristicWarnings: body.heuristicWarnings ?? null,
+      parseSummary: body.parseSummary,
+    };
+  }
+  return {
+    ok: true,
+    result: {
+      queueId: body.queueId!,
+      parseSummary: body.parseSummary ?? {},
+      heuristicWarnings: body.heuristicWarnings ?? null,
+      llmScanState: body.llmScanState ?? 'pending',
+    },
+  };
 }

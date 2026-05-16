@@ -13,10 +13,24 @@ import {
   PieChart,
   ClipboardList,
   Upload as UploadIcon,
+  Inbox,
   type LucideIcon,
 } from 'lucide-react';
+import { useCurrentUser, hasRole, type UserRole } from '@/lib/queries';
 
-type NavItem = { to: string; label: string; icon: LucideIcon; end?: boolean };
+type NavItem = {
+  to: string;
+  label: string;
+  icon: LucideIcon;
+  end?: boolean;
+  /**
+   * Minimum tenant role required to see this nav item. Items with no
+   * minRole are visible to every authenticated user (any role >= viewer).
+   * Server-side RLS + assert_role enforces the real authorization; this
+   * just hides UI that won't function for under-privileged users.
+   */
+  minRole?: UserRole;
+};
 type NavSection = { label: string; items: NavItem[] };
 
 const sections: NavSection[] = [
@@ -38,6 +52,10 @@ const sections: NavSection[] = [
       { to: '/budget', label: 'Budget & Baseline', icon: Lock },
       { to: '/progress', label: 'Progress', icon: Play },
       { to: '/progress/upload', label: 'Upload', icon: UploadIcon },
+      // Auditor inbox — review queued clerk submissions. Hidden from
+      // viewer/clerk; clerks see their own submissions inline on the
+      // /progress/upload page instead.
+      { to: '/upload-queue', label: 'Upload Queue', icon: Inbox, minRole: 'editor' },
       { to: '/snapshots', label: 'Snapshots', icon: Camera },
       { to: '/changes', label: 'Change Mgmt', icon: ArrowLeftRight },
     ],
@@ -54,6 +72,7 @@ const sections: NavSection[] = [
 ];
 
 export function Sidebar() {
+  const { data: me } = useCurrentUser();
   return (
     <aside
       className="fixed top-0 left-0 h-screen flex flex-col overflow-y-auto z-50 bg-[color:var(--color-surface)] border-r border-[color:var(--color-line)]"
@@ -75,12 +94,17 @@ export function Sidebar() {
       </div>
 
       <nav className="flex-1 py-2">
-        {sections.map((section) => (
+        {sections.map((section) => {
+          const items = section.items.filter(
+            (i) => !i.minRole || hasRole(me?.role, i.minRole),
+          );
+          if (items.length === 0) return null;
+          return (
           <div key={section.label} className="mb-1">
             <div className="px-4 pt-3 pb-1.5 text-[10px] uppercase tracking-widest text-[color:var(--color-text-subtle)] font-bold">
               {section.label}
             </div>
-            {section.items.map(({ to, label, icon: Icon, end }) => (
+            {items.map(({ to, label, icon: Icon, end }) => (
               <NavLink
                 key={to}
                 to={to}
@@ -99,7 +123,8 @@ export function Sidebar() {
               </NavLink>
             ))}
           </div>
-        ))}
+          );
+        })}
       </nav>
 
       <div className="px-4 py-3 border-t border-[color:var(--color-line)] text-[11px] text-[color:var(--color-text-subtle)]">

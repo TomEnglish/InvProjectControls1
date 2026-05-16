@@ -38,6 +38,9 @@ const DisciplineProgressPage = lazy(() =>
   import('./pages/DisciplineProgress').then((m) => ({ default: m.DisciplineProgressPage })),
 );
 const UploadPage = lazy(() => import('./pages/Upload').then((m) => ({ default: m.UploadPage })));
+const UploadQueuePage = lazy(() =>
+  import('./pages/UploadQueue').then((m) => ({ default: m.UploadQueuePage })),
+);
 const QmrPage = lazy(() => import('./pages/Qmr').then((m) => ({ default: m.QmrPage })));
 
 export const router = createBrowserRouter([
@@ -129,6 +132,14 @@ export const router = createBrowserRouter([
           </ProjectScopeGuard>
         ),
         handle: { title: 'Upload Progress Data' },
+      },
+      {
+        // Tenant-scoped (no ProjectScopeGuard) — auditors review every
+        // queued submission across their tenant, not just the
+        // currently-selected project.
+        path: '/upload-queue',
+        element: <UploadQueuePage />,
+        handle: { title: 'Upload Queue' },
       },
       {
         path: '/qmr',
