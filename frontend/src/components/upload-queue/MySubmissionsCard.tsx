@@ -1,4 +1,4 @@
-import { useMySubmissions, type UploadQueueRow } from '@/lib/queries';
+import { useMySubmissions } from '@/lib/queries';
 import { Card, CardHeader } from '@/components/ui/Card';
 import { StatusChip } from '@/components/ui/StatusChip';
 
@@ -12,12 +12,6 @@ function fmtAgo(iso: string): string {
   if (hours < 24) return `${hours}h ago`;
   const days = Math.round(hours / 24);
   return `${days}d ago`;
-}
-
-function statusKind(s: UploadQueueRow['status']) {
-  if (s === 'approved') return 'active';
-  if (s === 'rejected') return 'closed';
-  return 'draft';
 }
 
 /**
@@ -74,7 +68,7 @@ export function MySubmissionsCard() {
                   {fmtAgo(r.created_at)}
                 </td>
                 <td>
-                  <StatusChip kind={statusKind(r.status)} />
+                  <StatusChip kind={r.status} />
                 </td>
                 <td className="text-xs">
                   {r.status === 'rejected' && r.rejection_reason ? (

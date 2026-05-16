@@ -88,6 +88,10 @@ export function ClerkUploadPanel() {
     setSubmitting(true);
     setError(null);
     setSuccess(null);
+    // Drop any prior warnings — if the override re-POST itself fails
+    // with a different error we don't want the stale warning panel
+    // hanging around alongside the new error toast.
+    setPendingWarnings(null);
     const resp = await submitToUploadQueue({
       projectId,
       declaredCraft,
@@ -105,7 +109,6 @@ export function ClerkUploadPanel() {
       setError(resp.error);
       return;
     }
-    setPendingWarnings(null);
     setSuccess(`Submitted for auditor review — queue id ${resp.result.queueId.slice(0, 8)}…`);
     setFile(null);
     setLabel('');

@@ -1058,11 +1058,18 @@ function mapQueueRow(
  * after a submission. The status filter is enforced client-side because
  * the row mutations land via state-transition RPC, not refetch on tab
  * switch.
+ *
+ * Gated on role >= editor: clerks who URL-navigate to /upload-queue
+ * hit a render-level bounce, but we also skip the query + realtime
+ * channel so they don't burn server resources on a page they can't use.
  */
 export function useUploadQueue() {
   const qc = useQueryClient();
+  const { data: me } = useCurrentUser();
+  const isEditorPlus = hasRole(me?.role, 'editor');
   const query = useQuery({
     queryKey: ['upload-queue'] as const,
+    enabled: isEditorPlus,
     queryFn: async (): Promise<UploadQueueRow[]> => {
       const { data, error } = await supabase
         .from('upload_queue')
@@ -1076,6 +1083,7 @@ export function useUploadQueue() {
   });
 
   useEffect(() => {
+    if (!isEditorPlus) return;
     const channel = supabase
       .channel('upload-queue-realtime')
       .on(
@@ -1090,7 +1098,7 @@ export function useUploadQueue() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [qc]);
+  }, [qc, isEditorPlus]);
 
   return query;
 }

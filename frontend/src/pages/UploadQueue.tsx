@@ -32,12 +32,6 @@ function fmtSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function statusKind(s: UploadQueueStatus) {
-  if (s === 'approved') return 'active';
-  if (s === 'rejected') return 'closed';
-  return 'draft';
-}
-
 function WarningChips({ row }: { row: UploadQueueRow }) {
   const heuristicCount =
     (row.heuristic_warnings?.disciplineMismatch.length ?? 0) +
@@ -254,7 +248,7 @@ export function UploadQueuePage() {
                     <WarningChips row={r} />
                   </td>
                   <td>
-                    <StatusChip kind={statusKind(r.status)} />
+                    <StatusChip kind={r.status} />
                   </td>
                   <td className="text-right">
                     {tab === 'queued' ? (

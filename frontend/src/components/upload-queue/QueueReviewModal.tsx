@@ -27,14 +27,16 @@ export function QueueReviewModal({ row, onClose }: Props) {
   const [rejectionReason, setRejectionReason] = useState('');
 
   useEffect(() => {
-    if (!row) {
-      setPreview(null);
-      setDownloadUrl(null);
-      setPreviewErr(null);
-      setRejecting(false);
-      setRejectionReason('');
-      return;
-    }
+    // Reset every per-row state on each row change — including row-swap
+    // without going through null first — so Row1's preview / download URL /
+    // rejection draft don't bleed into Row2's view while the new fetch
+    // resolves.
+    setPreview(null);
+    setDownloadUrl(null);
+    setPreviewErr(null);
+    setRejecting(false);
+    setRejectionReason('');
+    if (!row) return;
     let cancelled = false;
     (async () => {
       try {
