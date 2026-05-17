@@ -1152,6 +1152,122 @@ export function useMySubmissions() {
 }
 
 /**
+ * Tenant-wide list of every clerk-role user + their (project, craft)
+ * assignments. Drives the User Admin clerk-management panel. Returns
+ * the full clerk list even when they have no assignments yet so the
+ * admin sees who still needs setup.
+ */
+export type ClerkWithCrafts = {
+  user_id: string;
+  email: string;
+  display_name: string | null;
+  assignments: Array<{
+    project_id: string;
+    project_code: string | null;
+    project_name: string | null;
+    crafts: string[];
+  }>;
+};
+
+export function useClerksWithCrafts() {
+  return useQuery({
+    queryKey: ['clerks-with-crafts'] as const,
+    queryFn: async (): Promise<ClerkWithCrafts[]> => {
+      const { data: clerks, error: clerksErr } = await supabase
+        .from('app_users')
+        .select('id, email, display_name')
+        .eq('role', 'clerk')
+        .order('email');
+      if (clerksErr) throw clerksErr;
+      if (!clerks || clerks.length === 0) return [];
+      const ids = clerks.map((c) => c.id);
+      const { data: pcc, error: pccErr } = await supabase
+        .from('project_clerk_crafts')
+        .select('user_id, project_id, craft, projects(project_code, name)')
+        .in('user_id', ids);
+      if (pccErr) throw pccErr;
+      type Row = {
+        user_id: string;
+        project_id: string;
+        craft: string;
+        projects: { project_code: string; name: string } | null;
+      };
+      const byUser = new Map<string, Map<string, ClerkWithCrafts['assignments'][number]>>();
+      for (const r of (pcc ?? []) as unknown as Row[]) {
+        let perProject = byUser.get(r.user_id);
+        if (!perProject) {
+          perProject = new Map();
+          byUser.set(r.user_id, perProject);
+        }
+        let entry = perProject.get(r.project_id);
+        if (!entry) {
+          entry = {
+            project_id: r.project_id,
+            project_code: r.projects?.project_code ?? null,
+            project_name: r.projects?.name ?? null,
+            crafts: [],
+          };
+          perProject.set(r.project_id, entry);
+        }
+        entry.crafts.push(r.craft);
+      }
+      return (clerks as { id: string; email: string; display_name: string | null }[]).map(
+        (c) => ({
+          user_id: c.id,
+          email: c.email,
+          display_name: c.display_name,
+          assignments: Array.from(byUser.get(c.id)?.values() ?? []).map((a) => ({
+            ...a,
+            crafts: a.crafts.sort(),
+          })),
+        }),
+      );
+    },
+  });
+}
+
+/**
+ * Projects the current user can grant clerk-craft permissions on.
+ * Admin / PM: restricted to projects they're members of (matches the
+ * clerk_crafts_set RPC's check). Super_admin sees every tenant project.
+ */
+export function useAssignableProjects() {
+  const { data: me } = useCurrentUser();
+  return useQuery({
+    queryKey: ['assignable-projects', me?.id, me?.role] as const,
+    enabled: !!me?.id,
+    queryFn: async (): Promise<Array<{ id: string; project_code: string; name: string }>> => {
+      if (!me) return [];
+      if (me.role === 'super_admin') {
+        const { data, error } = await supabase
+          .from('projects')
+          .select('id, project_code, name')
+          .order('project_code');
+        if (error) throw error;
+        return (data ?? []) as { id: string; project_code: string; name: string }[];
+      }
+      const { data, error } = await supabase
+        .from('project_members')
+        .select('project_id, projects(project_code, name)')
+        .eq('user_id', me.id);
+      if (error) throw error;
+      type Row = {
+        project_id: string;
+        projects: { project_code: string; name: string } | null;
+      };
+      return ((data ?? []) as unknown as Row[])
+        .filter((r) => r.projects)
+        .map((r) => ({
+          id: r.project_id,
+          project_code: r.projects!.project_code,
+          name: r.projects!.name,
+        }))
+        .sort((a, b) => a.project_code.localeCompare(b.project_code));
+    },
+  });
+}
+
+/**
  * Crafts the current user is permitted to submit for on a given project.
  * For clerks this scopes the declared-craft dropdown; for editor+ it
  * returns the full project_disciplines list since they have no

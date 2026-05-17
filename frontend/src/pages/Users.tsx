@@ -2,6 +2,7 @@ import { useCurrentUser, hasRole } from '@/lib/queries';
 import { Card } from '@/components/ui/Card';
 import { UsersCard } from '@/components/projects/UsersCard';
 import { ForemanAliasesCard } from '@/components/projects/ForemanAliasesCard';
+import { ClerkCraftsCard } from '@/components/projects/ClerkCraftsCard';
 
 /**
  * Tenant-wide user administration (A15). Consolidates users, invites,
@@ -37,6 +38,7 @@ export function UsersPage() {
   return (
     <div className="space-y-4">
       <UsersCard />
+      <ClerkCraftsCard />
       <ForemanAliasesCard />
     </div>
   );

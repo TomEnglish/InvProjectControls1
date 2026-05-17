@@ -12,6 +12,12 @@ const ROLES: { value: UserRole; label: string; hint: string }[] = [
   { value: 'pm', label: 'PM', hint: 'Approves change orders, closes periods, and manages project execution.' },
   { value: 'pc_reviewer', label: 'PC Reviewer', hint: 'Forwards or rejects change orders at the PC stage.' },
   { value: 'editor', label: 'Editor', hint: 'Updates progress records and submits change orders.' },
+  {
+    value: 'clerk',
+    label: 'Clerk',
+    hint:
+      'Uploads weekly progress files for auditor review. Assign per-project crafts on the User Admin page after the invite is sent.',
+  },
   { value: 'viewer', label: 'Viewer', hint: 'Read-only project access.' },
 ];
 
