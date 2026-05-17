@@ -9,8 +9,6 @@ import { Field, inputClass } from '@/components/ui/FormField';
 import { StatusChip } from '@/components/ui/StatusChip';
 import { fmt } from '@/lib/format';
 import { AddDisciplineModal } from '@/components/projects/AddDisciplineModal';
-import { UsersCard } from '@/components/projects/UsersCard';
-import { ForemanAliasesCard } from '@/components/projects/ForemanAliasesCard';
 import { RollupModeCard } from '@/components/projects/RollupModeCard';
 import { ProjectCoaPickerCard } from '@/components/projects/ProjectCoaPickerCard';
 import { BaselineUploadCard } from '@/components/projects/BaselineUploadCard';
@@ -258,10 +256,6 @@ export function ProjectSetupPage() {
       <RollupModeCard projectId={projectId} />
 
       <ProjectCoaPickerCard projectId={projectId} />
-
-      <UsersCard />
-
-      <ForemanAliasesCard />
 
       <AddDisciplineModal
         open={addDisciplineOpen}

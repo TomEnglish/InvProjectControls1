@@ -151,9 +151,17 @@ export function ForemanAliasesCard() {
 
         <div>
           <div className="px-6 py-2 text-[10px] uppercase tracking-widest text-[color:var(--color-text-subtle)] font-bold border-b border-[color:var(--color-line)]">
-            Unmatched in this project ({unmatched.length})
+            {projectId
+              ? `Unmatched in this project (${unmatched.length})`
+              : 'Unmatched names'}
           </div>
-          {unmatched.length === 0 && (
+          {!projectId && (
+            <div className="px-6 py-6 text-sm text-[color:var(--color-text-muted)]">
+              Pick a project in the top bar to see which imported foreman
+              names aren't yet linked to a tenant user.
+            </div>
+          )}
+          {projectId && unmatched.length === 0 && (
             <div className="px-6 py-6 text-sm text-[color:var(--color-text-muted)]">
               Every foreman name in records is linked.
             </div>

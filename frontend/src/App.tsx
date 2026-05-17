@@ -41,6 +41,7 @@ const UploadPage = lazy(() => import('./pages/Upload').then((m) => ({ default: m
 const UploadQueuePage = lazy(() =>
   import('./pages/UploadQueue').then((m) => ({ default: m.UploadQueuePage })),
 );
+const UsersPage = lazy(() => import('./pages/Users').then((m) => ({ default: m.UsersPage })));
 const QmrPage = lazy(() => import('./pages/Qmr').then((m) => ({ default: m.QmrPage })));
 
 export const router = createBrowserRouter([
@@ -140,6 +141,14 @@ export const router = createBrowserRouter([
         path: '/upload-queue',
         element: <UploadQueuePage />,
         handle: { title: 'Upload Queue' },
+      },
+      {
+        // Tenant-scoped User Admin (A15) — users, invites, foreman
+        // aliases. Moved off Project Setup so PMs don't have to scroll
+        // past tenant-wide knobs they don't own.
+        path: '/users',
+        element: <UsersPage />,
+        handle: { title: 'User Admin' },
       },
       {
         path: '/qmr',
