@@ -76,10 +76,14 @@ begin
     raise exception 'pf_adj must be >= 0 (got %)', p_pf_adj using errcode = '22023';
   end if;
 
-  -- Snapshot the row's previous override for audit.
+  -- Snapshot the row's previous override for audit. FOR UPDATE locks
+  -- the row so two concurrent admin calls can't both read the same
+  -- before-state and emit conflicting audit_log entries. Sandra's
+  -- "old → new" trail needs to be linearizable.
   select to_jsonb(pcc) into before
   from projectcontrols.project_coa_codes pcc
-  where pcc.project_id = p_project_id and pcc.coa_code_id = p_coa_code_id;
+  where pcc.project_id = p_project_id and pcc.coa_code_id = p_coa_code_id
+  for update;
 
   if before is null then
     raise exception 'code is not in this project''s scope — pick it first'

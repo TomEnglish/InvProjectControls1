@@ -188,8 +188,8 @@ export function ProjectCoaPickerCard({ projectId }: Props) {
                 <th>Description</th>
                 <th>Prime</th>
                 <th>UOM</th>
-                <th className="text-right">PF rate</th>
-                <th className="text-right">Project PF</th>
+                <th className="text-right">Tenant PF rate</th>
+                <th className="text-right">Project PF rate</th>
               </tr>
             </thead>
             <tbody>
@@ -234,7 +234,7 @@ export function ProjectCoaPickerCard({ projectId }: Props) {
                             }
                             className={
                               override != null
-                                ? 'text-[color:var(--color-primary)] font-semibold'
+                                ? 'text-[color:var(--color-primary)] font-bold'
                                 : 'text-[color:var(--color-text-muted)]'
                             }
                           >
