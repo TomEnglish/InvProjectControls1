@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Download, FileBarChart, Calendar, X } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
@@ -230,9 +230,26 @@ export function QmrPage() {
   // selection means "show all" so the default view is unfiltered; the
   // moment the user ticks anything the table narrows to that set. Both
   // axes compose: unchecking Civil hides the whole craft group; unchecking
-  // a specific description hides that code row across every craft.
+  // a specific code row hides it across every craft.
+  //
+  // descriptionFilter keys on the COA *code* (which the schema enforces
+  // unique per tenant) rather than the description string. COA does NOT
+  // enforce unique descriptions, so two codes that share a description
+  // (e.g. "General" appearing under multiple primes) would otherwise
+  // collapse in the dropdown and silently affect both rows. The dropdown
+  // labels still surface the description so the user can scan by name.
   const [craftFilter, setCraftFilter] = useState<Set<string>>(() => new Set());
   const [descriptionFilter, setDescriptionFilter] = useState<Set<string>>(() => new Set());
+
+  // Reset filters when the user switches projects — the previous project's
+  // craft codes don't match the new one's, so leaving filters set would
+  // either zero the table out or surface a "no rows match" dead-end the
+  // user can't recover from if the filter UI is hidden (which happens
+  // when the new project has no data yet).
+  useEffect(() => {
+    setCraftFilter(new Set());
+    setDescriptionFilter(new Set());
+  }, [projectId]);
 
   const baselineItems = useQuery({
     queryKey: ['qmr-baseline-items', baselineSnapshotId] as const,
@@ -295,13 +312,16 @@ export function QmrPage() {
     [allCrafts],
   );
   const descriptionOptions = useMemo(() => {
+    // Key on code (unique per tenant) so two codes that happen to share
+    // a description don't collapse into a single filter entry. Label
+    // keeps the description so the user can scan by name.
     const seen = new Set<string>();
     const out: { value: string; label: string }[] = [];
     for (const craft of allCrafts) {
       for (const leaf of craft.leaves) {
-        if (seen.has(leaf.description)) continue;
-        seen.add(leaf.description);
-        out.push({ value: leaf.description, label: `${leaf.code} — ${leaf.description}` });
+        if (seen.has(leaf.code)) continue;
+        seen.add(leaf.code);
+        out.push({ value: leaf.code, label: `${leaf.code} — ${leaf.description}` });
       }
     }
     return out.sort((a, b) => a.label.localeCompare(b.label));
@@ -318,7 +338,7 @@ export function QmrPage() {
       const leaves =
         descriptionFilter.size === 0
           ? craft.leaves
-          : craft.leaves.filter((l) => descriptionFilter.has(l.description));
+          : craft.leaves.filter((l) => descriptionFilter.has(l.code));
       if (leaves.length === 0) continue;
       const totals = leaves.reduce(
         (acc, l) => ({
