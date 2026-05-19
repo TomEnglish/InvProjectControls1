@@ -6,9 +6,11 @@ import { Button } from '@/components/ui/Button';
 import { Field, inputClass, selectClass } from '@/components/ui/FormField';
 import { hasRole, useCurrentUser, type UserRole } from '@/lib/queries';
 
+// "Controller" replaces "Admin" everywhere user-facing per Sandra's UAT
+// (app_review_todo #17). Internal enum values stay 'admin' / 'super_admin'.
 const ROLES: { value: UserRole; label: string; hint: string }[] = [
-  { value: 'super_admin', label: 'Super Admin', hint: 'Tenant-wide governance and admin delegation.' },
-  { value: 'admin', label: 'Admin', hint: 'Project admin when assigned to project membership.' },
+  { value: 'super_admin', label: 'Super Controller', hint: 'Tenant-wide governance and controller delegation.' },
+  { value: 'admin', label: 'Controller', hint: 'Project controller when assigned to project membership.' },
   { value: 'pm', label: 'PM', hint: 'Approves change orders, closes periods, and manages project execution.' },
   { value: 'pc_reviewer', label: 'PC Reviewer', hint: 'Forwards or rejects change orders at the PC stage.' },
   { value: 'editor', label: 'Editor', hint: 'Updates progress records and submits change orders.' },

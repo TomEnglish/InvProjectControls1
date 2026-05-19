@@ -17,9 +17,13 @@ type TenantUser = {
   created_at: string;
 };
 
+// Sandra's UAT (app_review_todo #17): "Sandra dislikes the word 'Admin'
+// — prefers 'Controller.'" The enum value stays 'admin' (DB-level
+// rename would cascade through migrations + RLS policies). We surface
+// "Controller" everywhere the user sees a role name.
 const ROLE_LABEL: Record<UserRole, string> = {
-  super_admin: 'Super Admin',
-  admin: 'Admin',
+  super_admin: 'Super Controller',
+  admin: 'Controller',
   pm: 'PM',
   pc_reviewer: 'PC Reviewer',
   editor: 'Editor',

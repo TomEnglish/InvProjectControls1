@@ -122,7 +122,7 @@ export function AddDisciplineModal({ open, onClose, projectId, existingCodes }: 
             readOnly
             value={
               defaultWorkType?.work_type_code ??
-              (code ? 'No default work type — contact admin.' : '')
+              (code ? 'No default work type — contact a Controller.' : '')
             }
           />
         </Field>

@@ -3,6 +3,7 @@ import { Card } from '@/components/ui/Card';
 import { UsersCard } from '@/components/projects/UsersCard';
 import { ForemanAliasesCard } from '@/components/projects/ForemanAliasesCard';
 import { ClerkCraftsCard } from '@/components/projects/ClerkCraftsCard';
+import { RoleMatrixCard } from '@/components/projects/RoleMatrixCard';
 
 /**
  * Tenant-wide user administration (A15). Consolidates users, invites,
@@ -28,8 +29,8 @@ export function UsersPage() {
     return (
       <Card>
         <p className="text-sm text-[color:var(--color-text-muted)]">
-          User administration — restricted to admins. Ask a tenant admin to
-          manage users on your behalf.
+          User administration — restricted to Controllers. Ask a tenant
+          Controller to manage users on your behalf.
         </p>
       </Card>
     );
@@ -40,6 +41,7 @@ export function UsersPage() {
       <UsersCard />
       <ClerkCraftsCard />
       <ForemanAliasesCard />
+      <RoleMatrixCard />
     </div>
   );
 }

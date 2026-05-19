@@ -232,7 +232,7 @@ function UnmatchedRow({
           </Button>
         </>
       ) : (
-        <span className="text-xs text-[color:var(--color-text-muted)]">Admin only</span>
+        <span className="text-xs text-[color:var(--color-text-muted)]">Controller only</span>
       )}
     </div>
   );
