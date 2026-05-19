@@ -1,6 +1,8 @@
 import '@/lib/charts';
 import { useEffect, useMemo, useState } from 'react';
-import { FileBarChart, Download, Calendar, Info } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { FileBarChart, Download, Calendar, Info, Printer } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
 import { useProjectStore } from '@/stores/project';
 import {
   useDashboardSummary,
@@ -44,6 +46,23 @@ export function ReportsPage() {
   const liveSummary = useDashboardSummary(projectId);
   const periods = useProgressPeriods(projectId);
   const snapshots = useSnapshots(projectId);
+
+  // A4 — current project info for the print-only header. Without this the
+  // PDF reads as a styled-but-anonymous dump; clients need to know which
+  // job the variance table represents at a glance.
+  const project = useQuery({
+    queryKey: ['project-meta', projectId] as const,
+    enabled: !!projectId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('projects')
+        .select('project_code, name, client')
+        .eq('id', projectId!)
+        .maybeSingle();
+      if (error) throw error;
+      return data as { project_code: string; name: string; client: string | null } | null;
+    },
+  });
 
   const [snapshotId, setSnapshotId] = useState<string | null>(null);
   const [dateRange, setDateRange] = useState<DateRange>(ALL_TIME_RANGE);
@@ -148,13 +167,44 @@ export function ReportsPage() {
 
   return (
     <div className="space-y-4">
-      <SnapshotSelector
-        snapshots={sortedSnapshots}
-        snapshotId={snapshotId}
-        onChange={setSnapshotId}
-        dateRange={dateRange}
-        onDateRangeChange={setDateRange}
-      />
+      {/* A4 — print-only header so the PDF carries its own context
+          (project + report date) without the on-screen chrome.
+          `is-print-only` toggles via @media print. */}
+      <div className="is-print-only is-print-header">
+        <div className="is-print-title">{project.data?.name ?? '—'}</div>
+        <div className="is-print-subtitle">
+          {project.data?.project_code ?? ''}
+          {project.data?.client ? ` · ${project.data.client}` : ''}
+          {' · Variance & earned-value report · '}
+          {new Date().toLocaleDateString()}
+          {selectedSnapshot
+            ? ` · Snapshot ${selectedSnapshot.snapshot_date} (${selectedSnapshot.label})`
+            : ' · Live data'}
+        </div>
+      </div>
+
+      {/* Hide the snapshot selector + the Export-PDF button row from the
+          printed output. They live above the report content but aren't
+          part of the report itself. */}
+      <div className="is-no-print">
+        <SnapshotSelector
+          snapshots={sortedSnapshots}
+          snapshotId={snapshotId}
+          onChange={setSnapshotId}
+          dateRange={dateRange}
+          onDateRangeChange={setDateRange}
+        />
+      </div>
+      <div className="is-no-print flex justify-end">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => window.print()}
+          title="Opens the browser print dialog. Pick 'Save as PDF' as the destination to get a downloadable client-facing report."
+        >
+          <Printer size={14} /> Export PDF
+        </Button>
+      </div>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <SummaryTile
           label="Cost Variance (CV)"
@@ -207,7 +257,9 @@ export function ReportsPage() {
             <CpiSpiTrendChart periods={ps} />
           </ChartCard>
         </div>
-        <PeriodCloseCard projectId={projectId} periods={ps} />
+        <div className="is-no-print">
+          <PeriodCloseCard projectId={projectId} periods={ps} />
+        </div>
       </div>
 
       <div className="is-surface overflow-hidden">
@@ -221,6 +273,7 @@ export function ReportsPage() {
           <Button
             variant="outline"
             size="sm"
+            className="is-no-print"
             disabled={s.disciplines.length === 0}
             onClick={() => {
               const date = new Date().toISOString().slice(0, 10);

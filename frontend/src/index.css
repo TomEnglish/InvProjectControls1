@@ -502,6 +502,10 @@ a:hover { color: var(--color-primary-hover); }
   }
 }
 
+/* Print-only header — visible on the printed page only. Used by the
+   Reports A4 PDF export to anchor the document with project + date. */
+.is-print-only { display: none; }
+
 /* Print stylesheet — strip chrome, force black-on-white */
 @media print {
   body { background: #fff; color: #000; font-size: 11pt; }
@@ -517,4 +521,52 @@ a:hover { color: var(--color-primary-hover); }
     -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   .is-table tbody td { border-bottom: 1px solid #000 !important; padding: 6px 10px !important; }
   .is-chip { border: 1px solid currentColor; }
+
+  /* Reports A4 — print-only header surfaces here */
+  .is-print-only { display: block !important; }
+  .is-print-header {
+    border-bottom: 2px solid #000;
+    padding-bottom: 8pt;
+    margin-bottom: 12pt;
+  }
+  .is-print-title {
+    font-size: 18pt;
+    font-weight: 700;
+    line-height: 1.2;
+  }
+  .is-print-subtitle {
+    font-size: 10pt;
+    color: #444;
+    margin-top: 4pt;
+  }
+
+  /* Layout adjustments so the bar chart + variance table flow as
+     "chart on top, table below" per Sandra's spec, instead of the
+     on-screen 3-column grid that crowds them sideways at A4 width. */
+  .grid.grid-cols-1.sm\:grid-cols-3 { display: grid !important;
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important; gap: 8pt !important; }
+  .grid.grid-cols-1.lg\:grid-cols-3 { display: block !important; }
+  .lg\:col-span-2 { display: block !important; }
+  /* Chart cards need a fixed aspect for print since canvas children
+     can't reflow to a print size automatically. Constrain the chart's
+     wrapper (Tailwind's h-[300px]) and the canvas inside so the
+     bar+trend charts don't overrun the page. */
+  .is-surface canvas { max-height: 220pt !important; height: auto !important; width: 100% !important; }
+  /* Force the variance table onto its own page if it would otherwise
+     split badly across the charts page. */
+  .is-table { page-break-inside: auto; }
+  .is-table tr { page-break-inside: avoid; }
+
+  /* Color the favourable/unfavourable variance numbers via prints'
+     supported palette so they don't render as pure black and lose
+     meaning. The print-color-adjust hint keeps the browser from
+     stripping them. */
+  [style*='color: var(--color-variance-favourable)'] {
+    color: #006400 !important;
+    -webkit-print-color-adjust: exact; print-color-adjust: exact;
+  }
+  [style*='color: var(--color-variance-unfavourable)'] {
+    color: #8b0000 !important;
+    -webkit-print-color-adjust: exact; print-color-adjust: exact;
+  }
 }
