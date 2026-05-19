@@ -91,7 +91,7 @@ export function SnapshotsPage() {
       <Card padded={false}>
         <div className="px-6 pt-5 pb-3">
           <CardHeader
-            eyebrow="Period snapshots"
+            eyebrow="Weekly snapshots"
             title="History"
             caption="Frozen captures of project state. Pick two to compare."
           />

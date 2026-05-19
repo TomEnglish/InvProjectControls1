@@ -112,11 +112,16 @@ export function BudgetPage() {
   // earned-bar in the discipline chart and the export CSV should match
   // the snapshot the user picked or the filter would feel inert.
   const rangeIsFiltered = dateRange.label !== ALL_TIME_RANGE.label;
+  const useSnapshotPath = rangeIsFiltered && !!earnedSnapshot;
   const snapshotSummary = useDashboardSummaryAtSnapshot(
-    rangeIsFiltered ? earnedSnapshot : null,
+    useSnapshotPath ? earnedSnapshot : null,
     projectId,
   );
-  const activeSummary = rangeIsFiltered && snapshotSummary.data ? snapshotSummary : summary;
+  // While the snapshot fetch is in flight or has errored, route through
+  // it so the page surfaces that state instead of silently rendering live
+  // data. Only when the user has NOT narrowed the range, or there's no
+  // snapshot to fetch for the range, do we use the live summary.
+  const activeSummary = useSnapshotPath ? snapshotSummary : summary;
 
   if (!projectId || !project) {
     return (

@@ -21,7 +21,7 @@ export function SCurveChart({ periods, summary }: Props) {
   if (periods.length === 0) {
     return (
       <div className="h-full flex items-center justify-center text-sm text-[color:var(--color-text-muted)]">
-        No periods yet — create one via Period Close.
+        No weeks yet — close the first week ending to start the trend.
       </div>
     );
   }

@@ -24,7 +24,7 @@ export function PeriodCloseCard({ projectId, periods }: Props) {
 
   const close = useMutation({
     mutationFn: async () => {
-      if (!open) throw new Error('no open period');
+      if (!open) throw new Error('no open week');
       const { data, error } = await supabase.rpc('period_close', {
         p_project_id: projectId,
         p_period_id: open.id,
