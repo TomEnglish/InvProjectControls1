@@ -179,34 +179,16 @@ export function CoaPage() {
             />
           </div>
           {projectId && (projectCoa.data?.size ?? 0) > 0 && (
-            <div
-              role="group"
-              aria-label="Scope toggle"
-              className="inline-flex rounded-md border border-[color:var(--color-line-strong)] overflow-hidden"
-            >
-              <button
-                type="button"
-                onClick={() => setScopeFilter('all')}
-                className="px-3 py-1.5 text-xs font-semibold transition-colors"
-                style={{
-                  background: scopeFilter === 'all' ? 'var(--color-primary)' : 'transparent',
-                  color: scopeFilter === 'all' ? 'var(--color-text-inverse)' : 'var(--color-text-muted)',
-                }}
-              >
-                All
-              </button>
-              <button
-                type="button"
-                onClick={() => setScopeFilter('in_scope')}
-                className="px-3 py-1.5 text-xs font-semibold transition-colors"
-                style={{
-                  background: scopeFilter === 'in_scope' ? 'var(--color-primary)' : 'transparent',
-                  color: scopeFilter === 'in_scope' ? 'var(--color-text-inverse)' : 'var(--color-text-muted)',
-                }}
-              >
-                In scope ({projectCoa.data?.size ?? 0})
-              </button>
-            </div>
+            // A14 — single-checkbox toggle replaces the All/In-scope button
+            // pair so the COA header stays on one line on narrower viewports.
+            <label className="inline-flex items-center gap-1.5 text-xs font-semibold cursor-pointer text-[color:var(--color-text-muted)] hover:text-[color:var(--color-text)] whitespace-nowrap">
+              <input
+                type="checkbox"
+                checked={scopeFilter === 'in_scope'}
+                onChange={(e) => setScopeFilter(e.target.checked ? 'in_scope' : 'all')}
+              />
+              <span>In scope only ({projectCoa.data?.size ?? 0})</span>
+            </label>
           )}
         </div>
         {canEdit && (

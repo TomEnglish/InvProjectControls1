@@ -7,6 +7,7 @@ import { useProjectStore } from '@/stores/project';
 import {
   useBudgetRollup,
   useDashboardSummary,
+  useDashboardSummaryAtSnapshot,
   useCurrentUser,
   useSnapshots,
   hasRole,
@@ -69,7 +70,10 @@ function ThreeBudgetPrimer() {
 export function BudgetPage() {
   const projectId = useProjectStore((s) => s.currentProjectId);
   const { data: me } = useCurrentUser();
-  const canLock = hasRole(me?.role, 'admin');
+  // A11 — matches the relaxed assert_role('pm') gate inside
+  // project_lock_baseline v3. PMs run the project lifecycle and need to
+  // lock the baseline without an admin in the loop.
+  const canLock = hasRole(me?.role, 'pm');
   const [lockModalOpen, setLockModalOpen] = useState(false);
 
   const { data: project } = useQuery({
@@ -101,6 +105,19 @@ export function BudgetPage() {
     return list.find((s) => isInRange(s.snapshot_date, dateRange)) ?? null;
   }, [snapshots.data, dateRange]);
 
+  // A10 — when an in-range snapshot exists and the user has narrowed the
+  // range (i.e. they're explicitly asking for a historical view), pull
+  // the chart + per-discipline figures from that snapshot. Budget tiles
+  // stay live because they represent the current commitment, but the
+  // earned-bar in the discipline chart and the export CSV should match
+  // the snapshot the user picked or the filter would feel inert.
+  const rangeIsFiltered = dateRange.label !== ALL_TIME_RANGE.label;
+  const snapshotSummary = useDashboardSummaryAtSnapshot(
+    rangeIsFiltered ? earnedSnapshot : null,
+    projectId,
+  );
+  const activeSummary = rangeIsFiltered && snapshotSummary.data ? snapshotSummary : summary;
+
   if (!projectId || !project) {
     return (
       <div className="is-surface p-8 text-center">
@@ -111,7 +128,7 @@ export function BudgetPage() {
     );
   }
 
-  if (rollup.isLoading || summary.isLoading) {
+  if (rollup.isLoading || activeSummary.isLoading) {
     return (
       <div className="space-y-4">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -128,16 +145,16 @@ export function BudgetPage() {
     );
   }
 
-  if (rollup.error || summary.error) {
+  if (rollup.error || activeSummary.error) {
     return (
       <div className="is-toast is-toast-danger">
-        Failed to load budget: {(rollup.error ?? summary.error)!.message}
+        Failed to load budget: {(rollup.error ?? activeSummary.error)!.message}
       </div>
     );
   }
 
   const r = rollup.data!;
-  const s = summary.data!;
+  const s = activeSummary.data!;
   const isDraft = project.status === 'draft';
   const recordCount = s.disciplines.reduce((acc, d) => acc + d.records, 0);
 
@@ -176,17 +193,23 @@ export function BudgetPage() {
         <div className="flex items-center gap-2 flex-wrap">
           <span className="is-eyebrow">Reporting period</span>
           <DateRangeFilter value={dateRange} onChange={setDateRange} />
-          {earnedSnapshot && (
+          {rangeIsFiltered && earnedSnapshot && (
             <span className="text-xs text-[color:var(--color-text-muted)]">
-              Earned hrs from snapshot{' '}
+              Chart + disciplines from snapshot{' '}
               <span className="font-mono">{earnedSnapshot.snapshot_date}</span>
               {' — '}
               {earnedSnapshot.label}
             </span>
           )}
-          {!earnedSnapshot && (snapshots.data ?? []).length > 0 && (
+          {!rangeIsFiltered && earnedSnapshot && (
+            <span className="text-xs text-[color:var(--color-text-muted)]">
+              Showing live data — pick a date range to switch to a historical snapshot.
+            </span>
+          )}
+          {rangeIsFiltered && !earnedSnapshot && (snapshots.data ?? []).length > 0 && (
             <span className="text-xs text-[color:var(--color-warn)]">
-              No snapshot in this range — earned hrs reflect the latest available data.
+              No snapshot in this range — chart falls back to live data. Pick a
+              wider range or upload a weekly snapshot inside the selected window.
             </span>
           )}
         </div>
@@ -344,7 +367,7 @@ function BaselineControlsCard({
         )}
         {!canLock && isDraft && (
           <p className="text-xs text-[color:var(--color-text-muted)] text-center">
-            Admin role required to lock baseline.
+            PM role or above required to lock baseline.
           </p>
         )}
       </div>

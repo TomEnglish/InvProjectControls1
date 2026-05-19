@@ -13,7 +13,7 @@ export function CpiSpiTrendChart({ periods }: { periods: ProgressPeriod[] }) {
   if (locked.length === 0) {
     return (
       <div className="h-full flex items-center justify-center text-sm text-[color:var(--color-text-muted)]">
-        No locked periods yet — CPI/SPI trend appears after the first period close.
+        No locked weeks yet — CPI/SPI trend appears after the first week close.
       </div>
     );
   }

@@ -105,7 +105,7 @@ export const router = createBrowserRouter([
             <SnapshotsPage />
           </ProjectScopeGuard>
         ),
-        handle: { title: 'Period Snapshots' },
+        handle: { title: 'Weekly Snapshots' },
       },
       {
         path: '/progress/earned-value',
