@@ -199,6 +199,11 @@ export function ReportsPage() {
         <Button
           variant="outline"
           size="sm"
+          // Gate on the project meta query: clicking before the header
+          // data resolves would render a PDF with a blank "—" title.
+          // summary.isLoading already short-circuits the page render,
+          // but the meta query is independent and could lag.
+          disabled={project.isLoading}
           onClick={() => window.print()}
           title="Opens the browser print dialog. Pick 'Save as PDF' as the destination to get a downloadable client-facing report."
         >
