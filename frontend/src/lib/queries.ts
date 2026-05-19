@@ -922,8 +922,10 @@ export function useProjectCoaCodes(projectId: string | null) {
  * progress_records (source_type='baseline') grouped by their assigned
  * discipline's discipline_code. Drives the per-discipline upload zone
  * status indicators on Project Setup. Records with a null discipline_id
- * are reported under the synthetic key '' so the UI can show
- * "N unassigned" if anything slipped past the per-row prime mapping.
+ * are NOT folded into the byDiscipline map (the !inner join drops them);
+ * they're surfaced separately via unassignedCount so the UI can warn if
+ * any legacy unified-upload records slipped past the per-row prime
+ * mapping.
  */
 export type BaselineDisciplineStatus = {
   byDiscipline: Map<string, { count: number; lastAt: string | null }>;

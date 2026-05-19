@@ -202,7 +202,11 @@ function DisciplineSlot({
         accept=".csv,.xlsx,.xls"
         onFile={onFile}
         selected={file}
-        hint={loaded ? 'Re-uploading replaces matching rows by source_row.' : undefined}
+        hint={
+          loaded
+            ? 'Re-uploading appends a fresh batch — duplicates are not deduped.'
+            : undefined
+        }
       />
 
       {parseErr && <div className="is-toast is-toast-danger text-xs">{parseErr}</div>}

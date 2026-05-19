@@ -274,6 +274,14 @@ Deno.serve(async (req) => {
   // construction. Otherwise fall back to sampling the first record's code
   // — best-effort; admin can re-assign later from the Progress page if
   // the heuristic guesses wrong.
+  //
+  // Known limitation: existing IWPs (same name, previously created under a
+  // different declaredDiscipline) are NOT re-attributed here. A FOUNDATIONS
+  // upload that reuses an IWP name first seen under a CIVIL upload will
+  // attach its records to the CIVIL-discipline IWP, producing a
+  // record-vs-IWP discipline mismatch. Acceptable for v1 — auditors are
+  // expected to name IWPs uniquely per craft per Sandra's spec. Re-attribution
+  // would require either a confirmation prompt or a strict rejection here.
   const iwpDisciplineGuess = new Map<string, string | null>();
   for (const item of body.items) {
     if (!item.iwp_name) continue;
