@@ -326,13 +326,18 @@ export function QmrPage() {
 
   const exportCsv = () => {
     const date = new Date().toISOString().slice(0, 10);
+    // A21 — the QMR CSV is the client-facing export. Per Sandra's UAT
+    // ("anything that says U/R needs to be deleted… all they're going
+    // to do is beat us up over it"), the productivity-factor unit rate
+    // column is stripped here. The on-screen QMR table keeps U/R for
+    // internal review; only the export drops it. If we ever add an
+    // internal-only QMR export, branch the header list on that.
     const headers = [
       'Craft',
       'Code',
       'Description',
       'UOM',
       '% Complete',
-      'U/R (PF)',
       'Budget Qty',
       'JTD Installed Qty',
       ...(showPeriod ? ['Period Installed Qty'] : []),
@@ -350,7 +355,6 @@ export function QmrPage() {
           leaf.description,
           leaf.uom,
           leaf.percent_complete.toFixed(2),
-          leaf.pf_rate.toFixed(4),
           leaf.budget_qty.toFixed(2),
           leaf.jtd_installed_qty.toFixed(2),
           ...(showPeriod ? [leaf.period_installed_qty.toFixed(2)] : []),
@@ -366,7 +370,6 @@ export function QmrPage() {
         '',
         '',
         craft.totals.percent_complete.toFixed(2),
-        '',
         craft.totals.budget_qty.toFixed(2),
         craft.totals.jtd_installed_qty.toFixed(2),
         ...(showPeriod ? [craft.totals.period_installed_qty.toFixed(2)] : []),
@@ -382,7 +385,6 @@ export function QmrPage() {
       '',
       '',
       grandPct.toFixed(2),
-      '',
       grandTotals.budget_qty.toFixed(2),
       grandTotals.jtd_installed_qty.toFixed(2),
       ...(showPeriod ? [grandTotals.period_installed_qty.toFixed(2)] : []),

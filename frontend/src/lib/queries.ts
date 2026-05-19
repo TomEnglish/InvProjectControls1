@@ -917,6 +917,31 @@ export function useProjectCoaCodes(projectId: string | null) {
   });
 }
 
+/**
+ * Per-project PF override map (A2): coa_code_id → pf_adj_override.
+ * Null override means the project uses the tenant default pf_adj.
+ * Only rows present in project_coa_codes show up here — out-of-scope
+ * codes never have an override.
+ */
+export function useProjectCoaPfOverrides(projectId: string | null) {
+  return useQuery({
+    queryKey: ['project-coa-pf-overrides', projectId] as const,
+    enabled: !!projectId,
+    queryFn: async (): Promise<Map<string, number | null>> => {
+      const { data, error } = await supabase
+        .from('project_coa_codes')
+        .select('coa_code_id, pf_adj_override')
+        .eq('project_id', projectId!);
+      if (error) throw error;
+      const map = new Map<string, number | null>();
+      for (const r of (data ?? []) as { coa_code_id: string; pf_adj_override: number | null }[]) {
+        map.set(r.coa_code_id, r.pf_adj_override);
+      }
+      return map;
+    },
+  });
+}
+
 // ─────────────────────────────────────────────────────────────────────
 // A20 — Upload queue (clerk submission → auditor review)
 // ─────────────────────────────────────────────────────────────────────

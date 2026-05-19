@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Search } from 'lucide-react';
+import { Search, Pencil } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { Card, CardHeader } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -9,21 +9,33 @@ import {
   useCurrentUser,
   useCoaCodes,
   useProjectCoaCodes,
+  useProjectCoaPfOverrides,
   hasRole,
+  type CoaCodeRow,
 } from '@/lib/queries';
+import { ProjectCoaPfModal } from './ProjectCoaPfModal';
 
 type Props = { projectId: string };
 
 export function ProjectCoaPickerCard({ projectId }: Props) {
   const qc = useQueryClient();
   const { data: me } = useCurrentUser();
-  const canEdit = hasRole(me?.role, 'admin');
+  // A18 — auditors (pm role in our model) need to pick which COA codes are
+  // in scope for the project they own. This was admin-only before; the
+  // role matrix (app_review_todo item 17) explicitly admits auditors here.
+  const canEdit = hasRole(me?.role, 'pm');
+  // A2 — per-project U/R (PF adjustment) editing is admin-only per
+  // Sandra's tight scoping. The pencil button shows only for admins;
+  // the RPC re-asserts on the server.
+  const canEditPf = hasRole(me?.role, 'admin');
 
   const codes = useCoaCodes();
   const selected = useProjectCoaCodes(projectId);
+  const pfOverrides = useProjectCoaPfOverrides(projectId);
 
   const [search, setSearch] = useState('');
   const [showOnlySelected, setShowOnlySelected] = useState(false);
+  const [pfEditTarget, setPfEditTarget] = useState<CoaCodeRow | null>(null);
 
   const filtered = useMemo(() => {
     const all = codes.data ?? [];
@@ -177,18 +189,22 @@ export function ProjectCoaPickerCard({ projectId }: Props) {
                 <th>Prime</th>
                 <th>UOM</th>
                 <th className="text-right">PF rate</th>
+                <th className="text-right">Project PF</th>
               </tr>
             </thead>
             <tbody>
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="text-center text-[color:var(--color-text-muted)] py-8">
+                  <td colSpan={7} className="text-center text-[color:var(--color-text-muted)] py-8">
                     {totalCount === 0 ? 'No COA codes in this tenant yet.' : 'No codes match your filter.'}
                   </td>
                 </tr>
               )}
               {filtered.map((c) => {
                 const isSelected = selected.data?.has(c.id) ?? false;
+                const override = pfOverrides.data?.get(c.id) ?? null;
+                const effectivePfAdj = override ?? c.pf_adj;
+                const effectivePfRate = c.base_rate * effectivePfAdj;
                 return (
                   <tr key={c.id}>
                     <td>
@@ -207,12 +223,58 @@ export function ProjectCoaPickerCard({ projectId }: Props) {
                     <td className="font-mono">{c.prime}</td>
                     <td>{c.uom}</td>
                     <td className="text-right font-mono">{c.pf_rate.toFixed(4)}</td>
+                    <td className="text-right font-mono">
+                      {isSelected ? (
+                        <div className="inline-flex items-center gap-2 justify-end">
+                          <span
+                            title={
+                              override != null
+                                ? `Override of tenant default ${c.pf_adj.toFixed(4)}`
+                                : 'Using tenant default'
+                            }
+                            className={
+                              override != null
+                                ? 'text-[color:var(--color-primary)] font-semibold'
+                                : 'text-[color:var(--color-text-muted)]'
+                            }
+                          >
+                            {effectivePfRate.toFixed(4)}
+                          </span>
+                          {canEditPf && (
+                            <button
+                              type="button"
+                              aria-label={`Edit project PF for ${c.code}`}
+                              onClick={() => setPfEditTarget(c)}
+                              className="text-[color:var(--color-text-muted)] hover:text-[color:var(--color-primary)] transition-colors"
+                            >
+                              <Pencil size={12} />
+                            </button>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-[color:var(--color-text-subtle)]">—</span>
+                      )}
+                    </td>
                   </tr>
                 );
               })}
             </tbody>
           </table>
         </div>
+      )}
+
+      {pfEditTarget && (
+        <ProjectCoaPfModal
+          open
+          onClose={() => setPfEditTarget(null)}
+          projectId={projectId}
+          coaCodeId={pfEditTarget.id}
+          code={pfEditTarget.code}
+          description={pfEditTarget.description}
+          baseRate={pfEditTarget.base_rate}
+          defaultPfAdj={pfEditTarget.pf_adj}
+          currentOverride={pfOverrides.data?.get(pfEditTarget.id) ?? null}
+        />
       )}
 
       {(toggle.error || selectAllVisible.error || clearAll.error) && (

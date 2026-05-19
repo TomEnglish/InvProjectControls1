@@ -27,7 +27,13 @@ begin;
 -- A20 Wave 2 additions:
 --   table: llm_invocation_log (rate-limit + cost tracking for the async
 --          LLM consistency scan). No RPCs — scan logic lives in app code.
-select plan(54);
+--
+-- Wave A (A2/A18/A21) additions:
+--   mutating: project_coa_pf_set (admin-only per-project PF override
+--             with audit log; the picker-card RPC adds an "admin can
+--             change U/R per job" capability Sandra called out in UAT
+--             item 2).
+select plan(57);
 
 -- ─────────────────────────────────────────────────────────────────────
 -- 1. Existence checks for every RPC the frontend depends on.
@@ -215,6 +221,27 @@ select ok(
 select ok(
   not has_function_privilege('authenticated', 'projectcontrols.upload_queue_llm_update(uuid, jsonb, text)', 'execute'),
   'authenticated CANNOT execute upload_queue_llm_update (service-role only)'
+);
+
+-- ─────────────────────────────────────────────────────────────────────
+-- 6b. Wave A — project_coa_pf_set RPC existence + SECURITY DEFINER +
+--     grant. Admin-only per Sandra's tight scoping; the function's own
+--     assert_role('admin') is the actual gate, but the grant + secdef
+--     shape is checked here so accidental SECURITY INVOKER / public
+--     execute drift can't slip through.
+-- ─────────────────────────────────────────────────────────────────────
+select has_function('projectcontrols', 'project_coa_pf_set',
+  array['uuid', 'uuid', 'numeric'],
+  'project_coa_pf_set exists');
+select is(
+  (select prosecdef from pg_proc
+     where oid = 'projectcontrols.project_coa_pf_set(uuid, uuid, numeric)'::regprocedure),
+  true,
+  'project_coa_pf_set is SECURITY DEFINER'
+);
+select ok(
+  has_function_privilege('authenticated', 'projectcontrols.project_coa_pf_set(uuid, uuid, numeric)', 'execute'),
+  'authenticated can execute project_coa_pf_set (admin gate inside the body)'
 );
 
 -- ─────────────────────────────────────────────────────────────────────
