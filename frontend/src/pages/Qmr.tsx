@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Download, FileBarChart, Calendar } from 'lucide-react';
+import { Download, FileBarChart, Calendar, X } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useProjectStore } from '@/stores/project';
 import {
@@ -16,6 +16,7 @@ import { Card } from '@/components/ui/Card';
 import { selectClass } from '@/components/ui/FormField';
 import { fmt } from '@/lib/format';
 import { downloadCsv } from '@/lib/export';
+import { FilterDropdown } from '@/components/progress/FilterDropdown';
 
 // Per-craft, per-code rollup mirroring the format of Sandra's
 // QMR Report.xlsx (ProgressDocs/NewPage/). Auto-calculated from the
@@ -225,6 +226,14 @@ export function QmrPage() {
   // the period columns hide.
   const [baselineSnapshotId, setBaselineSnapshotId] = useState<string | null>(null);
 
+  // A8 — craft + description checkbox filters per Sandra's UAT. An empty
+  // selection means "show all" so the default view is unfiltered; the
+  // moment the user ticks anything the table narrows to that set. Both
+  // axes compose: unchecking Civil hides the whole craft group; unchecking
+  // a specific description hides that code row across every craft.
+  const [craftFilter, setCraftFilter] = useState<Set<string>>(() => new Set());
+  const [descriptionFilter, setDescriptionFilter] = useState<Set<string>>(() => new Set());
+
   const baselineItems = useQuery({
     queryKey: ['qmr-baseline-items', baselineSnapshotId] as const,
     enabled: !!baselineSnapshotId,
@@ -271,12 +280,88 @@ export function QmrPage() {
       .sort((a, b) => b.snapshot_date.localeCompare(a.snapshot_date));
   }, [snapshots.data]);
 
-  const crafts = useMemo(() => {
+  const allCrafts = useMemo(() => {
     if (!codes.data || !rows.data) return [];
     const inScope = projectCoa.data && projectCoa.data.size > 0 ? projectCoa.data : null;
     const baseline = showPeriod ? (baselineItems.data ?? null) : null;
     return rollUp(rows.data, codes.data, inScope, baseline);
   }, [codes.data, rows.data, projectCoa.data, baselineItems.data, showPeriod]);
+
+  // Filter options come from the unfiltered rollup so the dropdowns
+  // always list every craft + description, even when a filter is active.
+  // (Otherwise the filter would erase its own options once applied.)
+  const craftOptions = useMemo(
+    () => allCrafts.map((c) => ({ value: c.prime, label: c.display_name })),
+    [allCrafts],
+  );
+  const descriptionOptions = useMemo(() => {
+    const seen = new Set<string>();
+    const out: { value: string; label: string }[] = [];
+    for (const craft of allCrafts) {
+      for (const leaf of craft.leaves) {
+        if (seen.has(leaf.description)) continue;
+        seen.add(leaf.description);
+        out.push({ value: leaf.description, label: `${leaf.code} — ${leaf.description}` });
+      }
+    }
+    return out.sort((a, b) => a.label.localeCompare(b.label));
+  }, [allCrafts]);
+
+  // Apply the two filter axes + recompute craft totals from the surviving
+  // leaves. Crafts with zero leaves after filtering disappear entirely so
+  // the rendered table stays readable.
+  const crafts = useMemo(() => {
+    if (craftFilter.size === 0 && descriptionFilter.size === 0) return allCrafts;
+    const filtered: QmrCraft[] = [];
+    for (const craft of allCrafts) {
+      if (craftFilter.size > 0 && !craftFilter.has(craft.prime)) continue;
+      const leaves =
+        descriptionFilter.size === 0
+          ? craft.leaves
+          : craft.leaves.filter((l) => descriptionFilter.has(l.description));
+      if (leaves.length === 0) continue;
+      const totals = leaves.reduce(
+        (acc, l) => ({
+          budget_qty: acc.budget_qty + l.budget_qty,
+          jtd_installed_qty: acc.jtd_installed_qty + l.jtd_installed_qty,
+          period_installed_qty: acc.period_installed_qty + l.period_installed_qty,
+          budget_hrs: acc.budget_hrs + l.budget_hrs,
+          jtd_earned_hrs: acc.jtd_earned_hrs + l.jtd_earned_hrs,
+          period_earned_hrs: acc.period_earned_hrs + l.period_earned_hrs,
+          // Recompute % complete from the filtered hours so the subtotal
+          // reflects only the rows the user kept; a fresh roll-up rather
+          // than re-using craft.totals.percent_complete from the unfiltered set.
+          percent_complete: 0,
+          record_count: acc.record_count + l.record_count,
+        }),
+        {
+          budget_qty: 0,
+          jtd_installed_qty: 0,
+          period_installed_qty: 0,
+          budget_hrs: 0,
+          jtd_earned_hrs: 0,
+          period_earned_hrs: 0,
+          percent_complete: 0,
+          record_count: 0,
+        },
+      );
+      totals.percent_complete =
+        totals.budget_hrs > 0 ? (totals.jtd_earned_hrs / totals.budget_hrs) * 100 : 0;
+      filtered.push({
+        prime: craft.prime,
+        display_name: craft.display_name,
+        leaves,
+        totals,
+      });
+    }
+    return filtered;
+  }, [allCrafts, craftFilter, descriptionFilter]);
+
+  const filtersActive = craftFilter.size > 0 || descriptionFilter.size > 0;
+  const clearFilters = () => {
+    setCraftFilter(new Set());
+    setDescriptionFilter(new Set());
+  };
 
   if (!projectId) return <NoProject />;
 
@@ -442,6 +527,36 @@ export function QmrPage() {
             </span>
           )}
         </div>
+
+        {/* A8 — craft + description filters. Empty selection = show all. */}
+        {allCrafts.length > 0 && (
+          <div className="mt-3 flex items-center gap-2 flex-wrap">
+            <span className="is-eyebrow">Filters</span>
+            <FilterDropdown
+              label="Craft"
+              options={craftOptions}
+              selected={craftFilter}
+              onChange={setCraftFilter}
+            />
+            <FilterDropdown
+              label="Description"
+              options={descriptionOptions}
+              selected={descriptionFilter}
+              onChange={setDescriptionFilter}
+            />
+            {filtersActive && (
+              <Button variant="ghost" size="sm" onClick={clearFilters}>
+                <X size={14} /> Clear filters
+              </Button>
+            )}
+            {filtersActive && (
+              <span className="text-xs text-[color:var(--color-text-muted)]">
+                Showing {crafts.length} of {allCrafts.length} craft
+                {allCrafts.length === 1 ? '' : 's'}
+              </span>
+            )}
+          </div>
+        )}
       </Card>
 
       {crafts.length === 0 ? (
@@ -449,12 +564,13 @@ export function QmrPage() {
           <div className="is-empty-icon">
             <FileBarChart size={28} />
           </div>
-          <div className="is-empty-title">No QMR data yet</div>
+          <div className="is-empty-title">
+            {filtersActive ? 'No rows match the current filters' : 'No QMR data yet'}
+          </div>
           <p className="is-empty-caption">
-            Once progress records are tagged with COA codes (via upload or the
-            New Record modal) they'll roll up here automatically. Records with
-            unrecognised codes are dropped — fix the code or add it on the
-            COA page to include them.
+            {filtersActive
+              ? 'Loosen the craft or description filter above, or clear them entirely to see every code.'
+              : 'Once progress records are tagged with COA codes (via upload or the New Record modal) they\'ll roll up here automatically. Records with unrecognised codes are dropped — fix the code or add it on the COA page to include them.'}
           </p>
         </div>
       ) : (
