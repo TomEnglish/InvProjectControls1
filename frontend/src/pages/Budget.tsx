@@ -47,18 +47,22 @@ function ThreeBudgetPrimer() {
           <h3 className="text-sm font-semibold mb-1">The three-budget model</h3>
           <ul className="text-sm text-[color:var(--color-text-muted)] space-y-1.5 leading-relaxed">
             <li>
-              <span className="font-semibold text-[color:var(--color-text)]">Original Budget</span> —
+              <span className="font-semibold text-[color:var(--color-text)]">Baseline Budget</span> —
               the discipline budgets at the moment the baseline was locked. Immutable thereafter.
             </li>
             <li>
               <span className="font-semibold text-[color:var(--color-text)]">Current Budget</span> —
-              Original + approved Change Orders. The figure all execution metrics (CPI, EAC) measure
+              Baseline + approved Change Orders. The figure all execution metrics (CPI, EAC) measure
               against.
             </li>
             <li>
               <span className="font-semibold text-[color:var(--color-text)]">Forecast Budget</span> —
               Current + pending and PC-reviewed Change Orders. Projected end-state if everything
               currently in flight gets approved.
+            </li>
+            <li>
+              <span className="font-semibold text-[color:var(--color-text)]">Baseline Drift</span> —
+              the cumulative hours added to the project via approved Change Orders. Computes as Current Budget − Baseline Budget.
             </li>
           </ul>
         </div>
@@ -223,10 +227,10 @@ export function BudgetPage() {
         </Button>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <BudgetTile
           tone="primary"
-          label="Original Budget"
+          label="Baseline Budget"
           hrs={r.original_budget}
           caption="Locked at baseline"
         />
@@ -250,6 +254,21 @@ export function BudgetPage() {
               : `CB ${r.pending_changes_hrs > 0 ? '+' : ''}${fmt.int(r.pending_changes_hrs)} pending`
           }
         />
+        {(() => {
+          const drift = r.current_budget - r.original_budget;
+          return (
+            <BudgetTile
+              tone="info"
+              label="Baseline Drift"
+              hrs={drift}
+              caption={
+                drift === 0
+                  ? 'No drift from baseline'
+                  : `${drift > 0 ? '+' : ''}${fmt.int(drift)} hrs added via COs`
+              }
+            />
+          );
+        })()}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -294,11 +313,14 @@ export function BudgetPage() {
   );
 }
 
-type Tone = 'primary' | 'accent' | 'warn';
+type Tone = 'primary' | 'accent' | 'warn' | 'success' | 'danger' | 'info';
 const toneBorder: Record<Tone, string> = {
   primary: 'var(--color-primary)',
   accent: 'var(--color-accent)',
   warn: 'var(--color-warn)',
+  success: 'var(--color-success)',
+  danger: 'var(--color-danger)',
+  info: 'var(--color-info)',
 };
 
 function BudgetTile({

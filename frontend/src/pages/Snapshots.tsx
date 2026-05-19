@@ -21,13 +21,12 @@ function HowToCard() {
           <h3 className="font-semibold mb-1">How comparison works</h3>
           <p className="text-[color:var(--color-text-muted)] leading-relaxed">
             Each row in the history below has two radio buttons — column{' '}
-            <span className="is-chip is-chip-primary" style={{ padding: '1px 6px', fontSize: 11 }}>A</span>{' '}
+            <span className="is-chip is-chip-primary" style={{ padding: '1px 6px', fontSize: 11 }}>A (Earlier)</span>{' '}
             and column{' '}
-            <span className="is-chip is-chip-primary" style={{ padding: '1px 6px', fontSize: 11 }}>B</span>.
-            Pick the earlier snapshot as A and the later one as B. They're mutually exclusive — one
-            snapshot can't be both. Once both are set, a comparison card appears showing per-record
-            drift in earned percent and earned hours between the two captures. Green deltas mean
-            forward progress; red means regression.
+            <span className="is-chip is-chip-primary" style={{ padding: '1px 6px', fontSize: 11 }}>B (Later)</span>.
+            Selections will automatically swap if chosen out of chronological order to ensure A is always the earlier snapshot and B is the later snapshot.
+            Once both are set, a comparison card appears showing per-record drift in earned percent and earned hours between the two captures.
+            Green deltas mean forward progress; red means regression.
           </p>
         </div>
       </div>
@@ -100,8 +99,8 @@ export function SnapshotsPage() {
           <table className="is-table">
             <thead>
               <tr>
-                <th />
-                <th />
+                <th style={{ width: 85 }} className="text-center text-xs">A (Earlier)</th>
+                <th style={{ width: 85 }} className="text-center text-xs">B (Later)</th>
                 <th>Date</th>
                 <th>Kind</th>
                 <th>Week ending</th>
@@ -127,25 +126,49 @@ export function SnapshotsPage() {
               )}
               {rows.map((s) => (
                 <tr key={s.id}>
-                  <td style={{ width: 30 }}>
+                  <td style={{ width: 85 }} className="text-center">
                     <input
                       type="radio"
                       name="snap-a"
                       checked={a === s.id}
                       onChange={() => {
-                        if (b === s.id) setB(null);
+                        if (b === s.id) {
+                          setB(null);
+                          setA(s.id);
+                          return;
+                        }
+                        if (b) {
+                          const snapB = rows.find((x) => x.id === b);
+                          if (snapB && s.snapshot_date > snapB.snapshot_date) {
+                            setA(b);
+                            setB(s.id);
+                            return;
+                          }
+                        }
                         setA(s.id);
                       }}
                       aria-label={`Mark ${s.label} as A`}
                     />
                   </td>
-                  <td style={{ width: 30 }}>
+                  <td style={{ width: 85 }} className="text-center">
                     <input
                       type="radio"
                       name="snap-b"
                       checked={b === s.id}
                       onChange={() => {
-                        if (a === s.id) setA(null);
+                        if (a === s.id) {
+                          setA(null);
+                          setB(s.id);
+                          return;
+                        }
+                        if (a) {
+                          const snapA = rows.find((x) => x.id === a);
+                          if (snapA && s.snapshot_date < snapA.snapshot_date) {
+                            setB(a);
+                            setA(s.id);
+                            return;
+                          }
+                        }
                         setB(s.id);
                       }}
                       aria-label={`Mark ${s.label} as B`}

@@ -52,7 +52,7 @@ export function WorkTypesPage() {
   if (error) {
     return (
       <div className="is-toast is-toast-danger">
-        Failed to load work types: {(error as Error).message}
+        Failed to load Rules of Credit (ROC): {(error as Error).message}
       </div>
     );
   }
@@ -63,9 +63,9 @@ export function WorkTypesPage() {
         <div className="is-empty-icon">
           <SlidersHorizontal size={28} />
         </div>
-        <div className="is-empty-title">No work types yet</div>
+        <div className="is-empty-title">No Rules of Credit (ROC) yet</div>
         <p className="is-empty-caption">
-          Work types are seeded from the senior SME's Unified Audit Workbook on
+          Rules of Credit (ROC) are seeded from the senior SME's Unified Audit Workbook on
           first migration. If you're seeing this, the seed ran on a tenant that
           didn't exist when migration 20260511000001 was applied — run{' '}
           <span className="font-mono">npm run seed:demo</span> or re-apply the
@@ -149,7 +149,7 @@ function WorkTypeCard({
           <button
             type="button"
             onClick={() => printWorkType(workType)}
-            aria-label="Print work type"
+            aria-label="Print Rule of Credit (ROC)"
             title="Print or save as PDF"
             className="inline-flex items-center justify-center w-8 h-8 rounded-md text-[color:var(--color-text-muted)] hover:text-[color:var(--color-primary)] hover:bg-[color:var(--color-primary-soft)] transition-colors"
           >
@@ -159,7 +159,7 @@ function WorkTypeCard({
             <button
               type="button"
               onClick={onEdit}
-              aria-label="Edit work type"
+              aria-label="Edit Rule of Credit (ROC)"
               className="inline-flex items-center justify-center w-8 h-8 rounded-md text-[color:var(--color-text-muted)] hover:text-[color:var(--color-primary)] hover:bg-[color:var(--color-primary-soft)] transition-colors"
             >
               <Pencil size={14} />

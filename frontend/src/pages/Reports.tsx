@@ -211,18 +211,49 @@ export function ReportsPage() {
         </Button>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <SummaryTile
-          label="Cost Variance (CV)"
-          help="Earned hours minus actual hours. Positive = under budget on the work done. CV = BCWP − ACWP."
-          value={`${cv >= 0 ? '+' : ''}${fmt.int(cv)}`}
-          caption="BCWP − ACWP"
-          tone={cv >= 0 ? 'favourable' : 'unfavourable'}
-        />
+        {(() => {
+          const buffer = Math.max(0, cv);
+          const pctRemaining = s.total_budget_hrs > 0 ? (cv / s.total_budget_hrs) * 100 : 0;
+          let bufferTone: 'favourable' | 'unfavourable' | 'warn' = 'favourable';
+          let chip: { text: string; status: 'success' | 'warn' | 'danger' } = {
+            text: 'Comfortable',
+            status: 'success',
+          };
+
+          if (cv <= 0) {
+            bufferTone = 'unfavourable';
+            chip = { text: 'CO required', status: 'danger' };
+          } else if (pctRemaining <= 10) {
+            bufferTone = 'warn';
+            chip = { text: 'CO recommended', status: 'warn' };
+          }
+
+          return (
+            <SummaryTile
+              label="Buffer Remaining"
+              help="Comfortable buffer if >10% of budget. Yellow warn if <=10% ('CO recommended'). Red danger if negative ('CO required'). Formula: max(0, BCWP − ACWP)."
+              value={fmt.int(buffer)}
+              caption={
+                cv >= 0
+                  ? `${pctRemaining.toFixed(1)}% of budget remaining`
+                  : `Over budget by ${fmt.int(Math.abs(cv))} hrs`
+              }
+              tone={bufferTone}
+              chip={chip}
+            />
+          );
+        })()}
         <SummaryTile
           label="Schedule Variance (SV)"
           help="Earned hours minus planned hours. Positive = ahead of schedule. SV = BCWP − BCWS."
-          value={projectBcws > 0 ? `${sv >= 0 ? '+' : ''}${fmt.int(sv)}` : '—'}
-          caption={projectBcws > 0 ? 'BCWP − BCWS' : 'No locked period yet'}
+          value={projectBcws > 0 ? fmt.int(Math.abs(sv)) : '—'}
+          caption={
+            projectBcws > 0
+              ? sv >= 0
+                ? `${fmt.int(sv)} hrs ahead of schedule`
+                : `${fmt.int(Math.abs(sv))} hrs behind schedule`
+              : 'No locked period yet'
+          }
           tone={projectBcws === 0 ? 'neutral' : sv >= 0 ? 'favourable' : 'unfavourable'}
         />
         <SummaryTile
@@ -438,27 +469,47 @@ function SummaryTile({
   caption,
   tone,
   help,
+  chip,
 }: {
   label: string;
   value: string;
   caption: string;
-  tone: 'favourable' | 'unfavourable' | 'neutral';
+  tone: 'favourable' | 'unfavourable' | 'neutral' | 'warn';
   help?: string;
+  chip?: { text: string; status: 'success' | 'warn' | 'danger' };
 }) {
   const colour =
     tone === 'favourable'
       ? 'var(--color-variance-favourable)'
       : tone === 'unfavourable'
         ? 'var(--color-variance-unfavourable)'
-        : 'var(--color-text)';
+        : tone === 'warn'
+          ? 'var(--color-warn)'
+          : 'var(--color-text)';
   return (
     <div className="is-surface is-stat-card">
       <div
-        className={`is-stat-label flex items-center gap-1.5 ${help ? 'cursor-help is-tip' : ''}`}
+        className={`is-stat-label flex items-center justify-between gap-1.5 ${help ? 'cursor-help is-tip' : ''}`}
         data-tip={help}
       >
-        <span>{label}</span>
-        {help && <Info size={12} className="text-[color:var(--color-text-subtle)]" />}
+        <span className="flex items-center gap-1.5">
+          <span>{label}</span>
+          {help && <Info size={12} className="text-[color:var(--color-text-subtle)]" />}
+        </span>
+        {chip && (
+          <span
+            className={`is-chip ${
+              chip.status === 'success'
+                ? 'is-chip-success'
+                : chip.status === 'warn'
+                  ? 'is-chip-warn'
+                  : 'is-chip-danger'
+            }`}
+            style={{ padding: '1px 6px', fontSize: '10px', height: '18px', display: 'inline-flex', alignItems: 'center' }}
+          >
+            {chip.text}
+          </span>
+        )}
       </div>
       <div className="is-stat-value font-mono" style={{ color: colour }}>
         {value}
@@ -467,3 +518,4 @@ function SummaryTile({
     </div>
   );
 }
+

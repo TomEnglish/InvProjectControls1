@@ -44,7 +44,7 @@ const sections: NavSection[] = [
     items: [
       { to: '/projects', label: 'Project Setup', icon: FolderCog },
       { to: '/coa', label: 'COA & Unit Rates', icon: ListTree },
-      { to: '/work-types', label: 'Work Types', icon: SlidersHorizontal },
+      { to: '/work-types', label: 'Rules of Credit (ROC)', icon: SlidersHorizontal },
       // A15: tenant-wide user / invite / alias admin lives here so it
       // doesn't crowd the per-project setup page.
       { to: '/users', label: 'User Admin', icon: Users, minRole: 'admin' },

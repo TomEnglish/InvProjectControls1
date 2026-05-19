@@ -158,7 +158,7 @@ export function WorkTypeModal({ open, onClose, workType }: Props) {
     <Modal
       open={open}
       onClose={onClose}
-      title={`Edit work type — ${workType.work_type_code}`}
+      title={`Edit Rule of Credit (ROC) — ${workType.work_type_code}`}
       caption={`${workType.description} (${workType.discipline_code}). 1–8 milestones, weights must total 100%.`}
       width={680}
     >
@@ -249,7 +249,7 @@ export function WorkTypeModal({ open, onClose, workType }: Props) {
         {confirming && (
           <div className="is-toast is-toast-warn">
             <strong>
-              {usageCount} record{usageCount === 1 ? '' : 's'} use this work type.
+              {usageCount} record{usageCount === 1 ? '' : 's'} use this Rule of Credit (ROC).
             </strong>
             <div className="mt-1 text-xs">
               Saving recomputes earned percentage on every one of those records
@@ -293,7 +293,7 @@ export function WorkTypeModal({ open, onClose, workType }: Props) {
               ? 'Saving…'
               : confirming
                 ? `Confirm — rewrite ${usageCount} record${usageCount === 1 ? '' : 's'}`
-                : 'Save work type'}
+                : 'Save Rule of Credit (ROC)'}
           </Button>
         </div>
       </form>

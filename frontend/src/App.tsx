@@ -61,7 +61,7 @@ export const router = createBrowserRouter([
       { index: true, element: <DashboardPage />, handle: { title: 'Executive Dashboard' } },
       { path: '/projects', element: <ProjectSetupPage />, handle: { title: 'Project Setup' } },
       { path: '/coa', element: <CoaPage />, handle: { title: 'COA & Unit Rates' } },
-      { path: '/work-types', element: <WorkTypesPage />, handle: { title: 'Work Types' } },
+      { path: '/work-types', element: <WorkTypesPage />, handle: { title: 'Rules of Credit (ROC)' } },
       {
         path: '/budget',
         element: (
