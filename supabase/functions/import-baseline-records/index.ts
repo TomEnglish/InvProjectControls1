@@ -59,6 +59,17 @@ type Item = {
 type Payload = {
   projectId: string;
   sourceFilename?: string;
+  /**
+   * A9 — when the auditor drops a file into a specific per-discipline
+   * zone on Project Setup, this carries the zone's discipline_code.
+   * If set, every imported record is assigned to that discipline,
+   * ignoring the per-row prime-derived guess. Foundations is the
+   * motivating case: its codes start with '04' (same as Civil) so the
+   * prime map can't tell them apart on its own.
+   * If omitted (unified-workbook path), the existing per-row
+   * PRIME_TO_DISCIPLINE logic runs unchanged.
+   */
+  declaredDiscipline?: string;
   items: Item[];
 };
 
@@ -76,6 +87,7 @@ const PRIME_TO_DISCIPLINE: Record<string, string> = {
 
 const DISCIPLINE_DISPLAY: Record<string, string> = {
   CIVIL: 'Civil',
+  FOUNDATIONS: 'Foundations',
   PIPE: 'Pipe',
   STEEL: 'Steel',
   ELEC: 'Electrical',
@@ -83,6 +95,8 @@ const DISCIPLINE_DISPLAY: Record<string, string> = {
   INST: 'Instrumentation',
   SITE: 'Site Work',
 };
+
+const VALID_DISCIPLINES = new Set(Object.keys(DISCIPLINE_DISPLAY));
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -148,6 +162,14 @@ Deno.serve(async (req) => {
   if (!body.projectId || !Array.isArray(body.items) || body.items.length === 0) {
     return json({ error: 'projectId and non-empty items[] required' }, 400);
   }
+  if (body.declaredDiscipline && !VALID_DISCIPLINES.has(body.declaredDiscipline)) {
+    return json(
+      {
+        error: `invalid declaredDiscipline "${body.declaredDiscipline}" — must be one of ${[...VALID_DISCIPLINES].join(', ')}`,
+      },
+      400,
+    );
+  }
 
   const admin = createClient(SUPABASE_URL, SERVICE_KEY, {
     auth: { persistSession: false, autoRefreshToken: false },
@@ -174,14 +196,21 @@ Deno.serve(async (req) => {
   }
 
   // ── Step 1: collect distinct disciplines + IWPs implied by the file ─────
+  // When declaredDiscipline is set (per-zone upload), all rows go to that
+  // discipline — skip the prime-derived discovery entirely.
   const disciplinesNeeded = new Set<string>();
   const iwpsNeeded = new Set<string>();
+  if (body.declaredDiscipline) {
+    disciplinesNeeded.add(body.declaredDiscipline);
+  }
   for (const item of body.items) {
-    const code = (item.code ?? '').trim();
-    if (code) {
-      const prime = code.slice(0, 2);
-      const disc = PRIME_TO_DISCIPLINE[prime];
-      if (disc) disciplinesNeeded.add(disc);
+    if (!body.declaredDiscipline) {
+      const code = (item.code ?? '').trim();
+      if (code) {
+        const prime = code.slice(0, 2);
+        const disc = PRIME_TO_DISCIPLINE[prime];
+        if (disc) disciplinesNeeded.add(disc);
+      }
     }
     if (item.iwp_name && item.iwp_name.trim()) iwpsNeeded.add(item.iwp_name.trim());
   }
@@ -240,14 +269,20 @@ Deno.serve(async (req) => {
     ]),
   );
 
-  // For each new IWP, attribute it to a discipline by sampling the first
-  // record that mentions it — best-effort; admin can re-assign later from
-  // the Progress page if the heuristic guesses wrong.
+  // For each new IWP, attribute it to a discipline. When declaredDiscipline
+  // is set every IWP in this batch belongs to the declared discipline by
+  // construction. Otherwise fall back to sampling the first record's code
+  // — best-effort; admin can re-assign later from the Progress page if
+  // the heuristic guesses wrong.
   const iwpDisciplineGuess = new Map<string, string | null>();
   for (const item of body.items) {
     if (!item.iwp_name) continue;
     const name = item.iwp_name.trim();
     if (iwpDisciplineGuess.has(name)) continue;
+    if (body.declaredDiscipline) {
+      iwpDisciplineGuess.set(name, body.declaredDiscipline);
+      continue;
+    }
     const code = (item.code ?? '').trim();
     const disc = code ? PRIME_TO_DISCIPLINE[code.slice(0, 2)] : null;
     iwpDisciplineGuess.set(name, disc ?? null);
@@ -310,8 +345,14 @@ Deno.serve(async (req) => {
 
   const insertRows = body.items.map((item) => {
     const code = (item.code ?? '').trim() || null;
-    const prime = code ? code.slice(0, 2) : null;
-    const discCode = prime ? PRIME_TO_DISCIPLINE[prime] ?? null : null;
+    // A9 — declaredDiscipline overrides the per-row prime guess so every
+    // record in a "drop into the Foundations zone" upload lands under
+    // FOUNDATIONS even though the codes share Civil's '04' prime.
+    let discCode: string | null = body.declaredDiscipline ?? null;
+    if (!discCode) {
+      const prime = code ? code.slice(0, 2) : null;
+      discCode = prime ? PRIME_TO_DISCIPLINE[prime] ?? null : null;
+    }
     const discId = discCode ? discIdByCode.get(discCode) ?? null : null;
     const iwpId = item.iwp_name
       ? iwpIdByName.get(item.iwp_name.toLowerCase()) ?? null

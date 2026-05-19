@@ -918,6 +918,64 @@ export function useProjectCoaCodes(projectId: string | null) {
 }
 
 /**
+ * A9 — baseline upload status per discipline_code. Counts of
+ * progress_records (source_type='baseline') grouped by their assigned
+ * discipline's discipline_code. Drives the per-discipline upload zone
+ * status indicators on Project Setup. Records with a null discipline_id
+ * are reported under the synthetic key '' so the UI can show
+ * "N unassigned" if anything slipped past the per-row prime mapping.
+ */
+export type BaselineDisciplineStatus = {
+  byDiscipline: Map<string, { count: number; lastAt: string | null }>;
+  unassignedCount: number;
+};
+
+export function useBaselineByDiscipline(projectId: string | null) {
+  return useQuery({
+    queryKey: ['baseline-by-discipline', projectId] as const,
+    enabled: !!projectId,
+    queryFn: async (): Promise<BaselineDisciplineStatus> => {
+      const { data, error } = await supabase
+        .from('progress_records')
+        .select(
+          'created_at, discipline_id, project_disciplines!inner(discipline_code)',
+        )
+        .eq('project_id', projectId!)
+        .eq('source_type', 'baseline');
+      // PostgREST returns `project_disciplines` as the inner-joined
+      // related object; the !inner makes it a hard join so any row
+      // without a discipline gets excluded. We separately query for
+      // unassigned counts so the UI can warn about them.
+      if (error) throw error;
+      type Row = {
+        created_at: string;
+        discipline_id: string | null;
+        project_disciplines: { discipline_code: string } | null;
+      };
+      const map = new Map<string, { count: number; lastAt: string | null }>();
+      for (const r of (data ?? []) as unknown as Row[]) {
+        const code = r.project_disciplines?.discipline_code;
+        if (!code) continue;
+        const entry = map.get(code) ?? { count: 0, lastAt: null };
+        entry.count += 1;
+        if (!entry.lastAt || r.created_at > entry.lastAt) entry.lastAt = r.created_at;
+        map.set(code, entry);
+      }
+      // Separate count for null-discipline rows (defensive; should be rare
+      // post-A9 because declaredDiscipline removes the only path where
+      // null-discipline baseline rows could land).
+      const { count: unassigned } = await supabase
+        .from('progress_records')
+        .select('id', { count: 'exact', head: true })
+        .eq('project_id', projectId!)
+        .eq('source_type', 'baseline')
+        .is('discipline_id', null);
+      return { byDiscipline: map, unassignedCount: unassigned ?? 0 };
+    },
+  });
+}
+
+/**
  * Per-project PF override map (A2): coa_code_id → pf_adj_override.
  * Null override means the project uses the tenant default pf_adj.
  * Only rows present in project_coa_codes show up here — out-of-scope

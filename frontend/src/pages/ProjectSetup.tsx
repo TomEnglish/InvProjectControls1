@@ -11,7 +11,7 @@ import { fmt } from '@/lib/format';
 import { AddDisciplineModal } from '@/components/projects/AddDisciplineModal';
 import { RollupModeCard } from '@/components/projects/RollupModeCard';
 import { ProjectCoaPickerCard } from '@/components/projects/ProjectCoaPickerCard';
-import { BaselineUploadCard } from '@/components/projects/BaselineUploadCard';
+import { PerDisciplineBaselineCard } from '@/components/projects/PerDisciplineBaselineCard';
 
 type Project = {
   id: string;
@@ -251,7 +251,7 @@ export function ProjectSetupPage() {
         </div>
       </Card>
 
-      {!locked && canEdit && <BaselineUploadCard projectId={projectId} />}
+      {!locked && canEdit && <PerDisciplineBaselineCard projectId={projectId} />}
 
       <RollupModeCard projectId={projectId} />
 
