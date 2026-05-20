@@ -71,7 +71,7 @@ const CAPABILITIES: { section: string; rows: Capability[] }[] = [
         byRole: { super_admin: F, admin: F, pm: R, pc_reviewer: R, editor: R, clerk: R, viewer: R },
       },
       {
-        label: 'Work Types library — edit milestones',
+        label: 'Rules of Credit (ROC) library — edit milestones',
         description: 'Variable 1–8 milestone weights per work type. Read-only for everyone below Controller.',
         byRole: { super_admin: F, admin: F, pm: R, pc_reviewer: R, editor: R, clerk: R, viewer: R },
       },

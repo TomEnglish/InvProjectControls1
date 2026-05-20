@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Download, FileBarChart, Calendar, X } from 'lucide-react';
+import { Download, FileBarChart, X } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useProjectStore } from '@/stores/project';
 import {
@@ -13,26 +13,51 @@ import {
 } from '@/lib/queries';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
-import { selectClass } from '@/components/ui/FormField';
 import { fmt } from '@/lib/format';
 import { downloadCsv } from '@/lib/export';
 import { FilterDropdown } from '@/components/progress/FilterDropdown';
 
-// Per-craft, per-code rollup mirroring the format of Sandra's
-// QMR Report.xlsx (ProgressDocs/NewPage/). Auto-calculated from the
-// project's progress_records — as new milestones tick the rows refresh.
+// Per-craft, per-code rollup matching the column layout of Sandra's
+// 9999.pdf QMR (Quantity Work-Hour Summary Report). Auto-calculated
+// from the project's progress_records — as milestones tick, rows
+// refresh.
+//
+// Wave E replaces the previous "JTD + period delta" layout with the
+// industry-standard QMR columns: Curr Est Qty / Earned Qty / Installed
+// Qty / Rem Qty, and Curr Est Hrs / Spent Hrs / Earned Hrs / Rem Hrs,
+// plus two productivity ratios (Cur U/R and Act/Ern U/R). The period
+// delta machinery is removed; it can come back as a separate report
+// if needed.
 
 type QmrLeaf = {
   code: string;
   description: string;
   uom: string;
+  /** Tenant pf_rate for the "Cur U/R" column. */
   pf_rate: number;
+  /** Budget quantity (Curr Est Qty in Sandra's column language). */
   budget_qty: number;
-  jtd_installed_qty: number;
-  period_installed_qty: number;
+  /** Earned quantity = Σ budget_qty × percent_complete (BCWP qty). */
+  earned_qty: number;
+  /** Installed quantity = Σ actual_qty (what's physically in place). */
+  installed_qty: number;
+  /** Budget hours (Curr Est Hrs). */
   budget_hrs: number;
-  jtd_earned_hrs: number;
-  period_earned_hrs: number;
+  /** Spent hours = Σ actual_hrs (timesheet). */
+  spent_hrs: number;
+  /** Earned hours = Σ budget_hrs × percent_complete (BCWP). */
+  earned_hrs: number;
+  percent_complete: number;
+  record_count: number;
+};
+
+type QmrTotals = {
+  budget_qty: number;
+  earned_qty: number;
+  installed_qty: number;
+  budget_hrs: number;
+  spent_hrs: number;
+  earned_hrs: number;
   percent_complete: number;
   record_count: number;
 };
@@ -41,16 +66,7 @@ type QmrCraft = {
   prime: string;
   display_name: string;
   leaves: QmrLeaf[];
-  totals: {
-    budget_qty: number;
-    jtd_installed_qty: number;
-    period_installed_qty: number;
-    budget_hrs: number;
-    jtd_earned_hrs: number;
-    period_earned_hrs: number;
-    percent_complete: number;
-    record_count: number;
-  };
+  totals: QmrTotals;
 };
 
 const PRIME_DISPLAY: Record<string, string> = {
@@ -63,13 +79,10 @@ const PRIME_DISPLAY: Record<string, string> = {
   '10': 'Instrumentation',
 };
 
-type BaselineMap = Map<string, { earned_hrs: number; earned_qty: number; actual_qty: number }>;
-
 function rollUp(
   rows: ProgressRow[],
   codes: CoaCodeRow[],
   inScope: Set<string> | null,
-  baseline: BaselineMap | null,
 ): QmrCraft[] {
   // Index COA codes by code string so we can pick up description + pf_rate
   // for the leaf rows. Skip level-1 prime rows; they're craft headers.
@@ -78,9 +91,6 @@ function rollUp(
     if (c.level === 2) codeMap.set(c.code, c);
   }
 
-  // Lookup-or-create helper so the JTD pass and the baseline subtraction
-  // pass share the same leaf shape. Returns null if the row's code is
-  // missing / unknown / out of the project's COA scope.
   function getLeaf(r: ProgressRow): QmrLeaf | null {
     const code = (r.code ?? '').trim();
     if (!code) return null;
@@ -95,11 +105,11 @@ function rollUp(
         uom: coa.uom,
         pf_rate: coa.pf_rate,
         budget_qty: 0,
-        jtd_installed_qty: 0,
-        period_installed_qty: 0,
+        earned_qty: 0,
+        installed_qty: 0,
         budget_hrs: 0,
-        jtd_earned_hrs: 0,
-        period_earned_hrs: 0,
+        spent_hrs: 0,
+        earned_hrs: 0,
         percent_complete: 0,
         record_count: 0,
       };
@@ -110,47 +120,24 @@ function rollUp(
 
   const leafByCode = new Map<string, QmrLeaf>();
 
-  // Pass 1: JTD totals. Only active records contribute — inactive ones
-  // (deleted / retired) shouldn't inflate Σ jtd_earned_hrs.
+  // Single-pass JTD aggregation. Only active records contribute; inactive
+  // (deleted / retired) shouldn't inflate the totals.
   for (const r of rows) {
     if (r.status !== 'active') continue;
     const leaf = getLeaf(r);
     if (!leaf) continue;
     leaf.budget_qty += r.budget_qty ?? 0;
-    leaf.jtd_installed_qty += r.actual_qty ?? 0;
+    leaf.earned_qty += r.earned_qty ?? 0;
+    leaf.installed_qty += r.actual_qty ?? 0;
     leaf.budget_hrs += r.budget_hrs;
-    leaf.jtd_earned_hrs += r.earned_hrs;
+    leaf.spent_hrs += r.actual_hrs;
+    leaf.earned_hrs += r.earned_hrs;
     leaf.record_count += 1;
-    leaf.period_earned_hrs += r.earned_hrs;
-    leaf.period_installed_qty += r.actual_qty ?? 0;
-  }
-
-  // Pass 2: subtract baseline. Iterate every record that has a baseline
-  // entry — active OR inactive. This is the fix for the previous version's
-  // bug: records that were active at baseline but are now inactive used to
-  // be skipped entirely, leaving their baseline contribution un-subtracted
-  // and overstating the period delta. With this pass, an inactive record
-  // with 80 baseline hrs contributes -80 to the leaf's period_earned_hrs.
-  //
-  // Caveat: this attributes baseline values to the record's CURRENT code.
-  // If a record was reassigned between codes since baseline, the math nets
-  // against the wrong leaf. Tracking historical code per snapshot would
-  // require schema changes; for now we accept this limitation since
-  // post-baseline code changes are rare in normal operation.
-  if (baseline) {
-    for (const r of rows) {
-      const base = baseline.get(r.id);
-      if (!base) continue;
-      const leaf = getLeaf(r);
-      if (!leaf) continue;
-      leaf.period_earned_hrs -= base.earned_hrs;
-      leaf.period_installed_qty -= base.actual_qty;
-    }
   }
 
   for (const leaf of leafByCode.values()) {
     leaf.percent_complete =
-      leaf.budget_hrs > 0 ? (leaf.jtd_earned_hrs / leaf.budget_hrs) * 100 : 0;
+      leaf.budget_hrs > 0 ? (leaf.earned_hrs / leaf.budget_hrs) * 100 : 0;
   }
 
   // Group leaves by prime (first 2 characters of the code).
@@ -165,30 +152,30 @@ function rollUp(
   const crafts: QmrCraft[] = [];
   for (const [prime, leaves] of byPrime) {
     leaves.sort((a, b) => a.code.localeCompare(b.code));
-    const totals = leaves.reduce(
+    const totals = leaves.reduce<QmrTotals>(
       (acc, l) => ({
         budget_qty: acc.budget_qty + l.budget_qty,
-        jtd_installed_qty: acc.jtd_installed_qty + l.jtd_installed_qty,
-        period_installed_qty: acc.period_installed_qty + l.period_installed_qty,
+        earned_qty: acc.earned_qty + l.earned_qty,
+        installed_qty: acc.installed_qty + l.installed_qty,
         budget_hrs: acc.budget_hrs + l.budget_hrs,
-        jtd_earned_hrs: acc.jtd_earned_hrs + l.jtd_earned_hrs,
-        period_earned_hrs: acc.period_earned_hrs + l.period_earned_hrs,
+        spent_hrs: acc.spent_hrs + l.spent_hrs,
+        earned_hrs: acc.earned_hrs + l.earned_hrs,
         record_count: acc.record_count + l.record_count,
         percent_complete: 0,
       }),
       {
         budget_qty: 0,
-        jtd_installed_qty: 0,
-        period_installed_qty: 0,
+        earned_qty: 0,
+        installed_qty: 0,
         budget_hrs: 0,
-        jtd_earned_hrs: 0,
-        period_earned_hrs: 0,
+        spent_hrs: 0,
+        earned_hrs: 0,
         percent_complete: 0,
         record_count: 0,
       },
     );
     totals.percent_complete =
-      totals.budget_hrs > 0 ? (totals.jtd_earned_hrs / totals.budget_hrs) * 100 : 0;
+      totals.budget_hrs > 0 ? (totals.earned_hrs / totals.budget_hrs) * 100 : 0;
     crafts.push({
       prime,
       display_name: PRIME_DISPLAY[prime] ?? `Prime ${prime}`,
@@ -221,11 +208,6 @@ export function QmrPage() {
   const projectCoa = useProjectCoaCodes(projectId);
   const snapshots = useSnapshots(projectId);
 
-  // Baseline snapshot for period-over-period math (Sandra's QMR has "Period
-  // Installed" / "Period Earned" columns = current - baseline). When null,
-  // the period columns hide.
-  const [baselineSnapshotId, setBaselineSnapshotId] = useState<string | null>(null);
-
   // A8 — craft + description checkbox filters per Sandra's UAT. An empty
   // selection means "show all" so the default view is unfiltered; the
   // moment the user ticks anything the table narrows to that set. Both
@@ -251,58 +233,43 @@ export function QmrPage() {
     setDescriptionFilter(new Set());
   }, [projectId]);
 
-  const baselineItems = useQuery({
-    queryKey: ['qmr-baseline-items', baselineSnapshotId] as const,
-    enabled: !!baselineSnapshotId,
-    queryFn: async (): Promise<BaselineMap> => {
+  // Wave E — project meta drives the print-only header that anchors the
+  // PDF. Without this the export reads as a styled-but-anonymous dump
+  // and a client receiving it doesn't know which job it represents.
+  const project = useQuery({
+    queryKey: ['project-meta', projectId] as const,
+    enabled: !!projectId,
+    queryFn: async () => {
       const { data, error } = await supabase
-        .from('progress_snapshot_items')
-        .select('progress_record_id, earned_hrs, earned_qty, actual_qty')
-        .eq('snapshot_id', baselineSnapshotId!);
+        .from('projects')
+        .select('project_code, name, client')
+        .eq('id', projectId!)
+        .maybeSingle();
       if (error) throw error;
-      const map: BaselineMap = new Map();
-      for (const row of (data ?? []) as {
-        progress_record_id: string;
-        earned_hrs: number | string | null;
-        earned_qty: number | string | null;
-        actual_qty: number | string | null;
-      }[]) {
-        map.set(row.progress_record_id, {
-          earned_hrs: row.earned_hrs != null ? Number(row.earned_hrs) : 0,
-          earned_qty: row.earned_qty != null ? Number(row.earned_qty) : 0,
-          actual_qty: row.actual_qty != null ? Number(row.actual_qty) : 0,
-        });
-      }
-      return map;
+      return data as { project_code: string; name: string; client: string | null } | null;
     },
   });
 
-  const showPeriod = baselineSnapshotId !== null;
   const isLoading =
     codes.isLoading ||
     rows.isLoading ||
     projectCoa.isLoading ||
-    snapshots.isLoading ||
-    (showPeriod && baselineItems.isLoading);
-  const error =
-    codes.error ||
-    rows.error ||
-    projectCoa.error ||
-    snapshots.error ||
-    baselineItems.error;
+    snapshots.isLoading;
+  const error = codes.error || rows.error || projectCoa.error || snapshots.error;
 
-  const sortedSnapshots = useMemo(() => {
-    return (snapshots.data ?? [])
-      .slice()
-      .sort((a, b) => b.snapshot_date.localeCompare(a.snapshot_date));
+  // Latest snapshot drives the W/E date stamped on the printed header.
+  // Falls back to today's date if there are no snapshots yet.
+  const latestSnapshot = useMemo(() => {
+    const list = (snapshots.data ?? []).slice();
+    list.sort((a, b) => b.snapshot_date.localeCompare(a.snapshot_date));
+    return list[0] ?? null;
   }, [snapshots.data]);
 
   const allCrafts = useMemo(() => {
     if (!codes.data || !rows.data) return [];
     const inScope = projectCoa.data && projectCoa.data.size > 0 ? projectCoa.data : null;
-    const baseline = showPeriod ? (baselineItems.data ?? null) : null;
-    return rollUp(rows.data, codes.data, inScope, baseline);
-  }, [codes.data, rows.data, projectCoa.data, baselineItems.data, showPeriod]);
+    return rollUp(rows.data, codes.data, inScope);
+  }, [codes.data, rows.data, projectCoa.data]);
 
   // Filter options come from the unfiltered rollup so the dropdowns
   // always list every craft + description, even when a filter is active.
@@ -340,14 +307,14 @@ export function QmrPage() {
           ? craft.leaves
           : craft.leaves.filter((l) => descriptionFilter.has(l.code));
       if (leaves.length === 0) continue;
-      const totals = leaves.reduce(
+      const totals = leaves.reduce<QmrTotals>(
         (acc, l) => ({
           budget_qty: acc.budget_qty + l.budget_qty,
-          jtd_installed_qty: acc.jtd_installed_qty + l.jtd_installed_qty,
-          period_installed_qty: acc.period_installed_qty + l.period_installed_qty,
+          earned_qty: acc.earned_qty + l.earned_qty,
+          installed_qty: acc.installed_qty + l.installed_qty,
           budget_hrs: acc.budget_hrs + l.budget_hrs,
-          jtd_earned_hrs: acc.jtd_earned_hrs + l.jtd_earned_hrs,
-          period_earned_hrs: acc.period_earned_hrs + l.period_earned_hrs,
+          spent_hrs: acc.spent_hrs + l.spent_hrs,
+          earned_hrs: acc.earned_hrs + l.earned_hrs,
           // Recompute % complete from the filtered hours so the subtotal
           // reflects only the rows the user kept; a fresh roll-up rather
           // than re-using craft.totals.percent_complete from the unfiltered set.
@@ -356,17 +323,17 @@ export function QmrPage() {
         }),
         {
           budget_qty: 0,
-          jtd_installed_qty: 0,
-          period_installed_qty: 0,
+          earned_qty: 0,
+          installed_qty: 0,
           budget_hrs: 0,
-          jtd_earned_hrs: 0,
-          period_earned_hrs: 0,
+          spent_hrs: 0,
+          earned_hrs: 0,
           percent_complete: 0,
           record_count: 0,
         },
       );
       totals.percent_complete =
-        totals.budget_hrs > 0 ? (totals.jtd_earned_hrs / totals.budget_hrs) * 100 : 0;
+        totals.budget_hrs > 0 ? (totals.earned_hrs / totals.budget_hrs) * 100 : 0;
       filtered.push({
         prime: craft.prime,
         display_name: craft.display_name,
@@ -404,29 +371,31 @@ export function QmrPage() {
     );
   }
 
-  const grandTotals = crafts.reduce(
+  const grandTotals = crafts.reduce<QmrTotals>(
     (acc, c) => ({
       budget_qty: acc.budget_qty + c.totals.budget_qty,
-      jtd_installed_qty: acc.jtd_installed_qty + c.totals.jtd_installed_qty,
-      period_installed_qty: acc.period_installed_qty + c.totals.period_installed_qty,
+      earned_qty: acc.earned_qty + c.totals.earned_qty,
+      installed_qty: acc.installed_qty + c.totals.installed_qty,
       budget_hrs: acc.budget_hrs + c.totals.budget_hrs,
-      jtd_earned_hrs: acc.jtd_earned_hrs + c.totals.jtd_earned_hrs,
-      period_earned_hrs: acc.period_earned_hrs + c.totals.period_earned_hrs,
+      spent_hrs: acc.spent_hrs + c.totals.spent_hrs,
+      earned_hrs: acc.earned_hrs + c.totals.earned_hrs,
+      percent_complete: 0,
       record_count: acc.record_count + c.totals.record_count,
     }),
     {
       budget_qty: 0,
-      jtd_installed_qty: 0,
-      period_installed_qty: 0,
+      earned_qty: 0,
+      installed_qty: 0,
       budget_hrs: 0,
-      jtd_earned_hrs: 0,
-      period_earned_hrs: 0,
+      spent_hrs: 0,
+      earned_hrs: 0,
+      percent_complete: 0,
       record_count: 0,
     },
   );
   const grandPct =
     grandTotals.budget_hrs > 0
-      ? (grandTotals.jtd_earned_hrs / grandTotals.budget_hrs) * 100
+      ? (grandTotals.earned_hrs / grandTotals.budget_hrs) * 100
       : 0;
 
   const exportCsv = () => {
@@ -441,16 +410,20 @@ export function QmrPage() {
       'Craft',
       'Code',
       'Description',
-      'UOM',
+      'UM',
       '% Complete',
       'Budget Qty',
-      'JTD Installed Qty',
-      ...(showPeriod ? ['Period Installed Qty'] : []),
+      'Earned Qty',
+      'Installed Qty',
+      'Remaining Qty',
       'Budget Hrs',
-      'JTD Earned Hrs',
-      ...(showPeriod ? ['Period Earned Hrs'] : []),
+      'Spent Hrs',
+      'Earned Hrs',
+      'Remaining Hrs',
       'Records',
     ];
+    const remQty = (budget: number, earned: number) => Math.max(0, budget - earned);
+    const remHrs = (budget: number, earned: number) => Math.max(0, budget - earned);
     const data: string[][] = [];
     for (const craft of crafts) {
       for (const leaf of craft.leaves) {
@@ -461,11 +434,13 @@ export function QmrPage() {
           leaf.uom,
           leaf.percent_complete.toFixed(2),
           leaf.budget_qty.toFixed(2),
-          leaf.jtd_installed_qty.toFixed(2),
-          ...(showPeriod ? [leaf.period_installed_qty.toFixed(2)] : []),
+          leaf.earned_qty.toFixed(2),
+          leaf.installed_qty.toFixed(2),
+          remQty(leaf.budget_qty, leaf.earned_qty).toFixed(2),
           leaf.budget_hrs.toFixed(0),
-          leaf.jtd_earned_hrs.toFixed(0),
-          ...(showPeriod ? [leaf.period_earned_hrs.toFixed(0)] : []),
+          leaf.spent_hrs.toFixed(0),
+          leaf.earned_hrs.toFixed(0),
+          remHrs(leaf.budget_hrs, leaf.earned_hrs).toFixed(0),
           String(leaf.record_count),
         ]);
       }
@@ -476,11 +451,13 @@ export function QmrPage() {
         '',
         craft.totals.percent_complete.toFixed(2),
         craft.totals.budget_qty.toFixed(2),
-        craft.totals.jtd_installed_qty.toFixed(2),
-        ...(showPeriod ? [craft.totals.period_installed_qty.toFixed(2)] : []),
+        craft.totals.earned_qty.toFixed(2),
+        craft.totals.installed_qty.toFixed(2),
+        remQty(craft.totals.budget_qty, craft.totals.earned_qty).toFixed(2),
         craft.totals.budget_hrs.toFixed(0),
-        craft.totals.jtd_earned_hrs.toFixed(0),
-        ...(showPeriod ? [craft.totals.period_earned_hrs.toFixed(0)] : []),
+        craft.totals.spent_hrs.toFixed(0),
+        craft.totals.earned_hrs.toFixed(0),
+        remHrs(craft.totals.budget_hrs, craft.totals.earned_hrs).toFixed(0),
         String(craft.totals.record_count),
       ]);
     }
@@ -491,66 +468,77 @@ export function QmrPage() {
       '',
       grandPct.toFixed(2),
       grandTotals.budget_qty.toFixed(2),
-      grandTotals.jtd_installed_qty.toFixed(2),
-      ...(showPeriod ? [grandTotals.period_installed_qty.toFixed(2)] : []),
+      grandTotals.earned_qty.toFixed(2),
+      grandTotals.installed_qty.toFixed(2),
+      remQty(grandTotals.budget_qty, grandTotals.earned_qty).toFixed(2),
       grandTotals.budget_hrs.toFixed(0),
-      grandTotals.jtd_earned_hrs.toFixed(0),
-      ...(showPeriod ? [grandTotals.period_earned_hrs.toFixed(0)] : []),
+      grandTotals.spent_hrs.toFixed(0),
+      grandTotals.earned_hrs.toFixed(0),
+      remHrs(grandTotals.budget_hrs, grandTotals.earned_hrs).toFixed(0),
       String(grandTotals.record_count),
     ]);
     downloadCsv(`qmr-report-${date}.csv`, headers, data);
   };
 
+  const weekEndingLabel = latestSnapshot?.week_ending
+    ? new Date(latestSnapshot.week_ending).toLocaleDateString()
+    : latestSnapshot?.snapshot_date
+      ? new Date(latestSnapshot.snapshot_date).toLocaleDateString()
+      : new Date().toLocaleDateString();
+
   return (
     <div className="space-y-4">
-      <Card>
+      {/* Wave E — print-only header so the PDF carries its own context
+          (Sandra's 9999.pdf style). Hidden on screen. */}
+      <div className="is-print-only is-print-header">
+        <div className="is-print-title">QUANTITY WORK-HOUR SUMMARY REPORT</div>
+        <div className="is-print-subtitle">
+          Project: <strong>{project.data?.name ?? '—'}</strong>
+          {project.data?.project_code ? ` · ${project.data.project_code}` : ''}
+          {project.data?.client ? ` · Client: ${project.data.client}` : ''}
+          {' · W/E '}
+          {weekEndingLabel}
+          {' · Generated '}
+          {new Date().toLocaleString()}
+        </div>
+        <div className="is-print-subtitle mt-1">
+          Subcontract spent hours are not included. Numbers reflect approved
+          change orders only — pending COs not included.
+        </div>
+      </div>
+
+      <Card className="is-no-print">
         <div className="flex items-baseline justify-between gap-3 flex-wrap">
           <div>
-            <div className="is-eyebrow mb-1">Quarterly Management Review</div>
+            <div className="is-eyebrow mb-1">Quantity Work-Hour Summary Report</div>
             <h2 className="text-base font-semibold">Per-craft progress rollup</h2>
             <p className="text-xs text-[color:var(--color-text-muted)] mt-1 max-w-2xl">
-              Auto-calculated from active progress records grouped by COA code. % Complete
-              is hours-weighted (Σearned hrs ÷ Σbudget hrs); U/R is the productivity-factor-adjusted
-              rate from the COA library. Pick a baseline snapshot to fill in the
-              Period columns (current − snapshot).
+              Auto-calculated from active progress records grouped by COA code.
+              % Complete is hours-weighted (Σ Earned ÷ Σ Budget). Cur U/R is
+              the planning rate from the COA library; Act/Ern U/R is the
+              productivity rate (Spent ÷ Earned). Subcontract spent hours
+              are not included.
             </p>
           </div>
-          <Button variant="outline" size="sm" onClick={exportCsv}>
-            <Download size={14} /> Export CSV
-          </Button>
-        </div>
-
-        <div className="mt-4 flex items-center gap-2 flex-wrap">
-          <Calendar size={14} className="text-[color:var(--color-text-muted)]" />
-          <span className="is-eyebrow">Baseline snapshot</span>
-          <select
-            aria-label="Baseline snapshot for period delta"
-            className={selectClass}
-            value={baselineSnapshotId ?? ''}
-            onChange={(e) => setBaselineSnapshotId(e.target.value || null)}
-          >
-            <option value="">— none (JTD only) —</option>
-            {sortedSnapshots.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.snapshot_date} — {s.label}
-              </option>
-            ))}
-          </select>
-          {baselineSnapshotId && (
-            <Button variant="ghost" size="sm" onClick={() => setBaselineSnapshotId(null)}>
-              Clear baseline
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={project.isLoading}
+              onClick={() => window.print()}
+              title="Opens the browser print dialog. Pick 'Save as PDF' to get the client-facing report."
+            >
+              <Download size={14} /> Export PDF
             </Button>
-          )}
-          {sortedSnapshots.length === 0 && (
-            <span className="text-xs text-[color:var(--color-text-muted)]">
-              No snapshots yet — upload progress data to create one.
-            </span>
-          )}
+            <Button variant="outline" size="sm" onClick={exportCsv}>
+              <Download size={14} /> Export CSV
+            </Button>
+          </div>
         </div>
 
         {/* A8 — craft + description filters. Empty selection = show all. */}
         {allCrafts.length > 0 && (
-          <div className="mt-3 flex items-center gap-2 flex-wrap">
+          <div className="mt-4 flex items-center gap-2 flex-wrap">
             <span className="is-eyebrow">Filters</span>
             <FilterDropdown
               label="Craft"
@@ -595,136 +583,174 @@ export function QmrPage() {
         </div>
       ) : (
         <div className="is-surface overflow-hidden">
-          <div style={{ overflow: 'visible' }}>
-            <table className="is-table" style={{ width: '100%' }}>
+          <div style={{ overflow: 'auto' }} className="is-qmr-scroll">
+            <table className="is-table is-qmr-table" style={{ width: '100%' }}>
               <thead>
                 <tr>
                   <th style={{ minWidth: 80 }}>Code</th>
                   <th>Description</th>
-                  <th>UOM</th>
-                  <th style={{ textAlign: 'right' }}>% Complete</th>
-                  <th style={{ textAlign: 'right' }}>U/R</th>
+                  <th>UM</th>
+                  <th style={{ textAlign: 'right' }}>% Cmp</th>
                   <th style={{ textAlign: 'right' }}>Budget Qty</th>
-                  <th style={{ textAlign: 'right' }}>JTD Installed</th>
-                  {showPeriod && (
-                    <th style={{ textAlign: 'right' }}>Period Installed</th>
-                  )}
+                  <th style={{ textAlign: 'right' }}>Earned Qty</th>
+                  <th style={{ textAlign: 'right' }}>Installed Qty</th>
+                  <th style={{ textAlign: 'right' }}>Rem Qty</th>
                   <th style={{ textAlign: 'right' }}>Budget Hrs</th>
-                  <th style={{ textAlign: 'right' }}>JTD Earned Hrs</th>
-                  {showPeriod && (
-                    <th style={{ textAlign: 'right' }}>Period Earned Hrs</th>
-                  )}
-                  <th style={{ textAlign: 'right' }}>Records</th>
+                  <th style={{ textAlign: 'right' }}>Spent Hrs</th>
+                  <th style={{ textAlign: 'right' }}>Earned Hrs</th>
+                  <th style={{ textAlign: 'right' }}>Rem Hrs</th>
+                  <th style={{ textAlign: 'right' }}>Cur U/R</th>
+                  <th style={{ textAlign: 'right' }}>Act/Ern U/R</th>
                 </tr>
               </thead>
               <tbody>
                 {crafts.map((craft) => (
-                  <CraftBlock key={craft.prime} craft={craft} showPeriod={showPeriod} />
+                  <CraftBlock key={craft.prime} craft={craft} />
                 ))}
                 <tr style={{ background: 'var(--color-primary-soft)' }}>
                   <td className="font-bold" colSpan={3}>
                     PROJECT TOTAL
                   </td>
-                  <td className="text-right font-mono font-bold">{grandPct.toFixed(2)}%</td>
-                  <td></td>
+                  <td className="text-right font-mono font-bold">{grandPct.toFixed(1)}%</td>
                   <td className="text-right font-mono font-bold">
                     {fmt.int(grandTotals.budget_qty)}
                   </td>
                   <td className="text-right font-mono font-bold">
-                    {fmt.int(grandTotals.jtd_installed_qty)}
+                    {fmt.int(grandTotals.earned_qty)}
                   </td>
-                  {showPeriod && (
-                    <td className="text-right font-mono font-bold">
-                      {fmt.int(grandTotals.period_installed_qty)}
-                    </td>
-                  )}
+                  <td className="text-right font-mono font-bold">
+                    {fmt.int(grandTotals.installed_qty)}
+                  </td>
+                  <td className="text-right font-mono font-bold">
+                    {fmt.int(Math.max(0, grandTotals.budget_qty - grandTotals.earned_qty))}
+                  </td>
                   <td className="text-right font-mono font-bold">
                     {fmt.int(grandTotals.budget_hrs)}
                   </td>
                   <td className="text-right font-mono font-bold">
-                    {fmt.int(grandTotals.jtd_earned_hrs)}
+                    {fmt.int(grandTotals.spent_hrs)}
                   </td>
-                  {showPeriod && (
-                    <td className="text-right font-mono font-bold">
-                      {fmt.int(grandTotals.period_earned_hrs)}
-                    </td>
-                  )}
-                  <td className="text-right font-mono font-bold">{grandTotals.record_count}</td>
+                  <td className="text-right font-mono font-bold">
+                    {fmt.int(grandTotals.earned_hrs)}
+                  </td>
+                  <td className="text-right font-mono font-bold">
+                    {fmt.int(Math.max(0, grandTotals.budget_hrs - grandTotals.earned_hrs))}
+                  </td>
+                  <td className="text-right font-mono font-bold">
+                    {grandTotals.budget_qty > 0
+                      ? (grandTotals.budget_hrs / grandTotals.budget_qty).toFixed(2)
+                      : '—'}
+                  </td>
+                  <td className="text-right font-mono font-bold">
+                    {grandTotals.earned_hrs > 0
+                      ? (grandTotals.spent_hrs / grandTotals.earned_hrs).toFixed(2)
+                      : '—'}
+                  </td>
                 </tr>
               </tbody>
             </table>
           </div>
         </div>
       )}
+
+      {/* Print-only footer note — mirrors Sandra's 9999.pdf "Notes" block. */}
+      <div className="is-print-only is-print-footer">
+        <strong>Notes:</strong> 1) All quantities are job-to-date (JTD).
+        2) Quantities do not reflect forecast or pending change orders.
+        3) Subcontract spent hours are not included on this report.
+      </div>
     </div>
   );
 }
 
-function CraftBlock({ craft, showPeriod }: { craft: QmrCraft; showPeriod: boolean }) {
-  const headerColspan = showPeriod ? 12 : 10;
+function CraftBlock({ craft }: { craft: QmrCraft }) {
+  const COL_COUNT = 14;
   return (
     <>
       <tr style={{ background: 'var(--color-raised)' }}>
-        <td className="font-bold uppercase tracking-wide text-[11px]" colSpan={headerColspan}>
-          {craft.display_name} ({craft.prime})
+        <td
+          className="font-bold uppercase tracking-wide text-[11px]"
+          colSpan={COL_COUNT}
+        >
+          {craft.prime} {craft.display_name}
         </td>
       </tr>
-      {craft.leaves.map((leaf) => (
-        <tr key={leaf.code}>
-          <td className="font-mono">{leaf.code}</td>
-          <td>{leaf.description}</td>
-          <td>{leaf.uom}</td>
-          <td className="text-right font-mono">{leaf.percent_complete.toFixed(1)}%</td>
-          <td className="text-right font-mono">{leaf.pf_rate.toFixed(4)}</td>
-          <td className="text-right font-mono">{fmt.int(leaf.budget_qty)}</td>
-          <td className="text-right font-mono">{fmt.int(leaf.jtd_installed_qty)}</td>
-          {showPeriod && (
+      {craft.leaves.map((leaf) => {
+        const remQty = Math.max(0, leaf.budget_qty - leaf.earned_qty);
+        const remHrs = Math.max(0, leaf.budget_hrs - leaf.earned_hrs);
+        const curUr = leaf.budget_qty > 0 ? leaf.budget_hrs / leaf.budget_qty : null;
+        const actErnUr = leaf.earned_hrs > 0 ? leaf.spent_hrs / leaf.earned_hrs : null;
+        return (
+          <tr key={leaf.code}>
+            <td className="font-mono">{leaf.code}</td>
+            <td>{leaf.description}</td>
+            <td>{leaf.uom}</td>
+            <td className="text-right font-mono">{leaf.percent_complete.toFixed(1)}%</td>
+            <td className="text-right font-mono">{fmt.int(leaf.budget_qty)}</td>
+            <td className="text-right font-mono">{fmt.int(leaf.earned_qty)}</td>
+            <td className="text-right font-mono">{fmt.int(leaf.installed_qty)}</td>
+            <td className="text-right font-mono">{fmt.int(remQty)}</td>
+            <td className="text-right font-mono">{fmt.int(leaf.budget_hrs)}</td>
+            <td className="text-right font-mono">{fmt.int(leaf.spent_hrs)}</td>
+            <td className="text-right font-mono">{fmt.int(leaf.earned_hrs)}</td>
+            <td className="text-right font-mono">{fmt.int(remHrs)}</td>
             <td className="text-right font-mono">
-              {leaf.period_installed_qty > 0 ? '+' : ''}
-              {fmt.int(leaf.period_installed_qty)}
+              {curUr != null ? curUr.toFixed(2) : '—'}
             </td>
-          )}
-          <td className="text-right font-mono">{fmt.int(leaf.budget_hrs)}</td>
-          <td className="text-right font-mono">{fmt.int(leaf.jtd_earned_hrs)}</td>
-          {showPeriod && (
             <td className="text-right font-mono">
-              {leaf.period_earned_hrs > 0 ? '+' : ''}
-              {fmt.int(leaf.period_earned_hrs)}
+              {actErnUr != null ? actErnUr.toFixed(2) : '—'}
             </td>
-          )}
-          <td className="text-right font-mono">{leaf.record_count}</td>
-        </tr>
-      ))}
-      <tr style={{ background: 'var(--color-surface)' }}>
-        <td className="font-semibold" colSpan={3}>
-          {craft.display_name} subtotal
-        </td>
-        <td className="text-right font-mono font-semibold">
-          {craft.totals.percent_complete.toFixed(1)}%
-        </td>
-        <td></td>
-        <td className="text-right font-mono font-semibold">{fmt.int(craft.totals.budget_qty)}</td>
-        <td className="text-right font-mono font-semibold">
-          {fmt.int(craft.totals.jtd_installed_qty)}
-        </td>
-        {showPeriod && (
-          <td className="text-right font-mono font-semibold">
-            {craft.totals.period_installed_qty > 0 ? '+' : ''}
-            {fmt.int(craft.totals.period_installed_qty)}
-          </td>
-        )}
-        <td className="text-right font-mono font-semibold">{fmt.int(craft.totals.budget_hrs)}</td>
-        <td className="text-right font-mono font-semibold">
-          {fmt.int(craft.totals.jtd_earned_hrs)}
-        </td>
-        {showPeriod && (
-          <td className="text-right font-mono font-semibold">
-            {craft.totals.period_earned_hrs > 0 ? '+' : ''}
-            {fmt.int(craft.totals.period_earned_hrs)}
-          </td>
-        )}
-        <td className="text-right font-mono font-semibold">{craft.totals.record_count}</td>
-      </tr>
+          </tr>
+        );
+      })}
+      {(() => {
+        const remQty = Math.max(0, craft.totals.budget_qty - craft.totals.earned_qty);
+        const remHrs = Math.max(0, craft.totals.budget_hrs - craft.totals.earned_hrs);
+        const curUr =
+          craft.totals.budget_qty > 0
+            ? craft.totals.budget_hrs / craft.totals.budget_qty
+            : null;
+        const actErnUr =
+          craft.totals.earned_hrs > 0
+            ? craft.totals.spent_hrs / craft.totals.earned_hrs
+            : null;
+        return (
+          <tr style={{ background: 'var(--color-surface)' }}>
+            <td className="font-semibold" colSpan={3}>
+              {craft.display_name} subtotal
+            </td>
+            <td className="text-right font-mono font-semibold">
+              {craft.totals.percent_complete.toFixed(1)}%
+            </td>
+            <td className="text-right font-mono font-semibold">
+              {fmt.int(craft.totals.budget_qty)}
+            </td>
+            <td className="text-right font-mono font-semibold">
+              {fmt.int(craft.totals.earned_qty)}
+            </td>
+            <td className="text-right font-mono font-semibold">
+              {fmt.int(craft.totals.installed_qty)}
+            </td>
+            <td className="text-right font-mono font-semibold">{fmt.int(remQty)}</td>
+            <td className="text-right font-mono font-semibold">
+              {fmt.int(craft.totals.budget_hrs)}
+            </td>
+            <td className="text-right font-mono font-semibold">
+              {fmt.int(craft.totals.spent_hrs)}
+            </td>
+            <td className="text-right font-mono font-semibold">
+              {fmt.int(craft.totals.earned_hrs)}
+            </td>
+            <td className="text-right font-mono font-semibold">{fmt.int(remHrs)}</td>
+            <td className="text-right font-mono font-semibold">
+              {curUr != null ? curUr.toFixed(2) : '—'}
+            </td>
+            <td className="text-right font-mono font-semibold">
+              {actErnUr != null ? actErnUr.toFixed(2) : '—'}
+            </td>
+          </tr>
+        );
+      })()}
     </>
   );
 }

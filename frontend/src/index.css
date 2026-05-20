@@ -569,4 +569,26 @@ a:hover { color: var(--color-primary-hover); }
     color: #8b0000 !important;
     -webkit-print-color-adjust: exact; print-color-adjust: exact;
   }
+
+  /* Wave E — QMR print layout. Sandra's 9999.pdf is landscape with a
+     dense 14-column table; force landscape and shrink the type so the
+     table fits without horizontal scroll on a single sheet. */
+  @page { size: landscape; margin: 0.4in; }
+  .is-qmr-table { font-size: 8pt !important; }
+  .is-qmr-table th, .is-qmr-table td {
+    padding: 2pt 4pt !important;
+  }
+  /* The on-screen container forces horizontal scrolling at typical
+     screen widths; in print we let the table breathe across the full
+     landscape sheet. */
+  .is-qmr-scroll { overflow: visible !important; }
+  /* Print footer "Notes" block — matches the layout of Sandra's
+     reference PDF. */
+  .is-print-footer {
+    margin-top: 8pt;
+    padding-top: 6pt;
+    border-top: 1px solid #000;
+    font-size: 8pt;
+    color: #444;
+  }
 }
