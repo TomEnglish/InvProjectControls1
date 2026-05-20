@@ -33,7 +33,14 @@ begin;
 --             with audit log; the picker-card RPC adds an "admin can
 --             change U/R per job" capability Sandra called out in UAT
 --             item 2).
-select plan(57);
+--
+-- CO routing additions (20260520):
+--   table: project_co_reviewers (per-project, per-discipline default
+--          assignment of PC reviewer + PM)
+--   mutating: project_co_reviewer_set (admin/pm setter, audit-logged)
+--   change_orders gains assigned_pc_reviewer_id + assigned_pm_id columns
+--   co_pc_review signature changed to admit a re-assignment parameter
+select plan(63);
 
 -- ─────────────────────────────────────────────────────────────────────
 -- 1. Existence checks for every RPC the frontend depends on.
@@ -41,7 +48,10 @@ select plan(57);
 select has_function('projectcontrols', 'coa_code_upsert',     array['jsonb'],         'coa_code_upsert exists');
 select has_function('projectcontrols', 'work_type_milestones_set', array['uuid', 'jsonb'], 'work_type_milestones_set exists');
 select has_function('projectcontrols', 'co_submit',           array['jsonb'],         'co_submit exists');
-select has_function('projectcontrols', 'co_pc_review',        array['uuid', 'text', 'text'], 'co_pc_review exists');
+-- co_pc_review v3 added a 4th uuid parameter (p_reassign_pm_id) so a
+-- PC reviewer can override the assigned PM at forward time. The
+-- 3-argument signature was dropped in 20260520000002.
+select has_function('projectcontrols', 'co_pc_review',        array['uuid', 'text', 'text', 'uuid'], 'co_pc_review v3 exists');
 select has_function('projectcontrols', 'co_approve',          array['uuid', 'text', 'text'], 'co_approve exists');
 select has_function('projectcontrols', 'project_lock_baseline', array['uuid', 'timestamptz'], 'project_lock_baseline exists');
 select has_function('projectcontrols', 'admin_set_user_role', array['uuid', 'projectcontrols.user_role', 'text'], 'admin_set_user_role exists');
@@ -70,7 +80,7 @@ select is(
   'co_submit is SECURITY DEFINER'
 );
 select is(
-  (select prosecdef from pg_proc where oid = 'projectcontrols.co_pc_review(uuid, text, text)'::regprocedure),
+  (select prosecdef from pg_proc where oid = 'projectcontrols.co_pc_review(uuid, text, text, uuid)'::regprocedure),
   true,
   'co_pc_review is SECURITY DEFINER'
 );
@@ -257,6 +267,26 @@ select has_column('projectcontrols', 'llm_invocation_log', 'user_id', 'llm_invoc
 select has_column('projectcontrols', 'llm_invocation_log', 'queue_id', 'llm_invocation_log has queue_id');
 select has_column('projectcontrols', 'llm_invocation_log', 'invoked_at', 'llm_invocation_log has invoked_at');
 select has_column('projectcontrols', 'llm_invocation_log', 'ok', 'llm_invocation_log has ok');
+
+-- ─────────────────────────────────────────────────────────────────────
+-- 8. CO routing — project_co_reviewers table + setter RPC + the new
+--    assigned_pc_reviewer_id / assigned_pm_id columns on change_orders.
+--    These power Sandra's "submitter picks the reviewer" workflow so
+--    each CO routes to a specific person rather than broadcasting to
+--    every role-holder.
+-- ─────────────────────────────────────────────────────────────────────
+select has_table('projectcontrols', 'project_co_reviewers', 'project_co_reviewers table exists');
+select has_column('projectcontrols', 'project_co_reviewers', 'pc_reviewer_id',
+  'project_co_reviewers has pc_reviewer_id');
+select has_column('projectcontrols', 'project_co_reviewers', 'pm_id',
+  'project_co_reviewers has pm_id');
+select has_column('projectcontrols', 'change_orders', 'assigned_pc_reviewer_id',
+  'change_orders has assigned_pc_reviewer_id');
+select has_column('projectcontrols', 'change_orders', 'assigned_pm_id',
+  'change_orders has assigned_pm_id');
+select has_function('projectcontrols', 'project_co_reviewer_set',
+  array['uuid', 'uuid', 'uuid', 'uuid'],
+  'project_co_reviewer_set exists');
 
 select * from finish();
 
