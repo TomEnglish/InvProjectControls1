@@ -52,17 +52,35 @@ function json(body: unknown, status = 200) {
 type HeuristicWarnings = {
   disciplineMismatch: { rowIndex: number; declared: string; rowValue: string }[];
   workTypeMismatch: { rowIndex: number; declared: string; code: string; codeCraft: string }[];
+  filenameMismatch?: string | null;
 };
+
+// Sandra UAT #19 — flag files that don't follow the expected naming pattern.
+function checkFilename(filename: string, declaredCraft: string): string | null {
+  const lower = filename.toLowerCase();
+  const craftToken = declaredCraft.toLowerCase().replace(/_/g, '');
+  const hasCraft = lower.includes(craftToken.slice(0, 4)) || lower.includes(declaredCraft.toLowerCase());
+  const hasWeekEnding =
+    /week[_-]?ending/i.test(filename) ||
+    /\d{4}[-_]\d{2}[-_]\d{2}/.test(filename);
+  const hasAudit = lower.includes('audit') || lower.includes('progress');
+  if (!hasCraft || !hasWeekEnding || !hasAudit) {
+    return `Filename "${filename}" does not match the expected pattern (e.g. civil_pipe_audit_week_ending_YYYY-MM-DD). Confirm craft and week ending are clear.`;
+  }
+  return null;
+}
 
 async function buildHeuristicWarnings(
   admin: ReturnType<typeof createClient>,
   tenantId: string,
   declaredCraft: string,
   rows: ParsedRow[],
+  filename: string,
 ): Promise<HeuristicWarnings> {
   const warnings: HeuristicWarnings = {
     disciplineMismatch: [],
     workTypeMismatch: [],
+    filenameMismatch: checkFilename(filename, declaredCraft),
   };
 
   // Row-level DISCIPLINE column check (case-insensitive substring match
@@ -167,7 +185,6 @@ Deno.serve(async (req) => {
   // pre-gate here so we don't bother parsing on a definite-deny.
   const ALLOWED_ROLES = new Set([
     'clerk',
-    'editor',
     'pc_reviewer',
     'pm',
     'admin',
@@ -245,10 +262,12 @@ Deno.serve(async (req) => {
     caller.tenant_id,
     declaredCraft,
     parsed.rows,
+    file.name,
   );
   const hasHeuristicWarning =
     heuristicWarnings.disciplineMismatch.length > 0 ||
-    heuristicWarnings.workTypeMismatch.length > 0;
+    heuristicWarnings.workTypeMismatch.length > 0 ||
+    !!heuristicWarnings.filenameMismatch;
   if (hasHeuristicWarning && !overrideWarnings) {
     // Surface back so the client UI can show the warning + a confirm
     // "submit anyway" button which re-POSTs with overrideWarnings=true.

@@ -22,7 +22,8 @@ begin;
 -- A20 Wave 1 additions:
 --   mutating: clerk_crafts_set, upload_queue_submit,
 --             upload_queue_state_transition, upload_queue_llm_update
---   user_role enum gains 'clerk' (rank 2, between viewer and editor)
+--   user_role enum gains 'clerk' (rank 2, between viewer and pc_reviewer).
+--   ELL-62 removes 'editor' — former editor duties sit on pc_reviewer+.
 --
 -- A20 Wave 2 additions:
 --   table: llm_invocation_log (rate-limit + cost tracking for the async
@@ -40,7 +41,7 @@ begin;
 --   mutating: project_co_reviewer_set (admin/pm setter, audit-logged)
 --   change_orders gains assigned_pc_reviewer_id + assigned_pm_id columns
 --   co_pc_review signature changed to admit a re-assignment parameter
-select plan(63);
+select plan(64);
 
 -- ─────────────────────────────────────────────────────────────────────
 -- 1. Existence checks for every RPC the frontend depends on.
@@ -159,10 +160,27 @@ select has_column('projectcontrols', 'audit_log', 'created_at', 'audit_log has c
 --    set of values. If anyone adds/removes a value, every assert_role
 --    callsite needs review.
 -- ─────────────────────────────────────────────────────────────────────
-select set_eq(
-  $$ select unnest(enum_range(null::projectcontrols.user_role))::text $$,
-  $$ values ('super_admin'), ('admin'), ('pm'), ('pc_reviewer'), ('editor'), ('clerk'), ('viewer') $$,
-  'user_role enum has the seven expected values (clerk added in A20 Wave 1)'
+select ok(
+  (select count(*)::int from projectcontrols.app_users where role::text = 'editor') = 0,
+  'no app_users rows retain editor role after ELL-62 migration'
+);
+
+select ok(
+  (select count(*)::int from projectcontrols.project_members where project_role::text = 'editor') = 0,
+  'no project_members rows retain editor role after ELL-62 migration'
+);
+
+select ok(
+  exists (
+    select 1
+    from pg_constraint c
+    join pg_class rel on rel.oid = c.conrelid
+    join pg_namespace n on n.oid = rel.relnamespace
+    where n.nspname = 'projectcontrols'
+      and rel.relname = 'app_users'
+      and c.conname = 'app_users_role_not_editor'
+  ),
+  'app_users_role_not_editor check blocks editor assignments (ELL-49 deferred enum drop)'
 );
 
 -- ─────────────────────────────────────────────────────────────────────

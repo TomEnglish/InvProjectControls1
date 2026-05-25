@@ -50,7 +50,7 @@ export function ProjectSetupPage() {
   const projectId = useProjectStore((s) => s.currentProjectId);
   const qc = useQueryClient();
   const { data: me } = useCurrentUser();
-  const canEdit = hasRole(me?.role, 'pm');
+  const canSetupEdit = hasRole(me?.role, 'pc_reviewer');
 
   const { data: project, isLoading: loadingProject } = useQuery({
     queryKey: ['project', projectId] as const,
@@ -137,7 +137,7 @@ export function ProjectSetupPage() {
             <input
               className={inputClass}
               value={draft.name}
-              disabled={locked || !canEdit}
+              disabled={locked || !canSetupEdit}
               onChange={(e) => setDraft({ ...draft, name: e.target.value })}
             />
           </Field>
@@ -145,7 +145,7 @@ export function ProjectSetupPage() {
             <input
               className={inputClass}
               value={draft.client}
-              disabled={locked || !canEdit}
+              disabled={locked || !canSetupEdit}
               onChange={(e) => setDraft({ ...draft, client: e.target.value })}
             />
           </Field>
@@ -154,7 +154,7 @@ export function ProjectSetupPage() {
               type="date"
               className={inputClass}
               value={draft.start_date}
-              disabled={locked || !canEdit}
+              disabled={locked || !canSetupEdit}
               onChange={(e) => setDraft({ ...draft, start_date: e.target.value })}
             />
           </Field>
@@ -163,7 +163,7 @@ export function ProjectSetupPage() {
               type="date"
               className={inputClass}
               value={draft.end_date}
-              disabled={locked || !canEdit}
+              disabled={locked || !canSetupEdit}
               onChange={(e) => setDraft({ ...draft, end_date: e.target.value })}
             />
           </Field>
@@ -175,7 +175,7 @@ export function ProjectSetupPage() {
             />
           </Field>
         </div>
-        {canEdit && (
+        {canSetupEdit && (
           <div className="mt-4 flex gap-2 items-center">
             <Button
               variant="primary"
@@ -205,7 +205,7 @@ export function ProjectSetupPage() {
         <CardHeader
           title="Active Disciplines"
           actions={
-            canEdit && !locked ? (
+            canSetupEdit && !locked ? (
               <Button variant="outline" size="sm" onClick={() => setAddDisciplineOpen(true)}>
                 + Add Discipline
               </Button>
@@ -251,7 +251,7 @@ export function ProjectSetupPage() {
         </div>
       </Card>
 
-      {!locked && canEdit && <PerDisciplineBaselineCard projectId={projectId} />}
+      {!locked && canSetupEdit && <PerDisciplineBaselineCard projectId={projectId} />}
 
       <RollupModeCard projectId={projectId} />
 

@@ -35,7 +35,8 @@ function fmtSize(bytes: number): string {
 function WarningChips({ row }: { row: UploadQueueRow }) {
   const heuristicCount =
     (row.heuristic_warnings?.disciplineMismatch.length ?? 0) +
-    (row.heuristic_warnings?.workTypeMismatch.length ?? 0);
+    (row.heuristic_warnings?.workTypeMismatch.length ?? 0) +
+    (row.heuristic_warnings?.filenameMismatch ? 1 : 0);
   const llmConcern =
     row.llm_warnings && row.llm_warnings.verdict !== 'consistent';
   const llmScanning = row.llm_scan_state === 'pending';
@@ -134,11 +135,11 @@ export function UploadQueuePage() {
   // Role gate. The route itself has no guard so a clerk navigating
   // directly via URL would otherwise see the auditor inbox; bounce
   // with an explanatory empty state instead of a hard 404.
-  if (me && !hasRole(me.role, 'editor')) {
+  if (me && !hasRole(me.role, 'pc_reviewer')) {
     return (
       <Card>
         <p className="text-sm text-[color:var(--color-text-muted)]">
-          Auditor inbox — restricted to editor and above. Clerks see their own
+          Auditor inbox — restricted to PC reviewer and above. Clerks see their own
           submissions on the <strong>Upload</strong> page.
         </p>
       </Card>

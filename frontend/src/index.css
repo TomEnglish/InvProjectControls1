@@ -506,6 +506,24 @@ a:hover { color: var(--color-primary-hover); }
    Reports A4 PDF export to anchor the document with project + date. */
 .is-print-only { display: none; }
 
+/* Internal-only rows/columns — visible on screen for auditors, hidden from
+   client-facing PDF/CSV exports. */
+.is-internal-only,
+.is-internal-col { /* default: visible */ }
+
+@page reports-portrait {
+  size: portrait;
+  margin: 0.5in;
+}
+
+@page qmr-landscape {
+  size: landscape;
+  margin: 0.4in;
+}
+
+.is-reports-page { page: reports-portrait; }
+.is-qmr-page { page: qmr-landscape; }
+
 /* Print stylesheet — strip chrome, force black-on-white */
 @media print {
   body { background: #fff; color: #000; font-size: 11pt; }
@@ -570,10 +588,14 @@ a:hover { color: var(--color-primary-hover); }
     -webkit-print-color-adjust: exact; print-color-adjust: exact;
   }
 
+  .is-internal-only,
+  .is-internal-col {
+    display: none !important;
+  }
+
   /* Wave E — QMR print layout. Sandra's 9999.pdf is landscape with a
-     dense 14-column table; force landscape and shrink the type so the
-     table fits without horizontal scroll on a single sheet. */
-  @page { size: landscape; margin: 0.4in; }
+     dense table; force landscape and shrink the type so the table fits
+     without horizontal scroll on a single sheet. */
   .is-qmr-table { font-size: 8pt !important; }
   .is-qmr-table th, .is-qmr-table td {
     padding: 2pt 4pt !important;

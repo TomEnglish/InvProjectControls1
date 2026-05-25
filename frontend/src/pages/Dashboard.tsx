@@ -27,7 +27,7 @@ function LoadingSkeleton() {
   return (
     <>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
-        {Array.from({ length: 5 }).map((_, i) => (
+        {Array.from({ length: 6 }).map((_, i) => (
           <KpiCardSkeleton key={i} />
         ))}
       </div>
@@ -71,10 +71,14 @@ export function DashboardPage() {
     equal: 'Equal-weighted',
     custom: 'Custom weights',
   };
+  const overallConfigured =
+    !!qtyRollup.data?.includes_streams &&
+    qtyRollup.data.mode === 'custom' &&
+    Math.abs(qtyRollup.data.composite_pct - qtyRollup.data.field_composite_pct) > 0.0001;
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
         <KpiCard
           label="Overall Earned"
           value={fmt.pct(s.overall_pct)}
@@ -98,11 +102,24 @@ export function DashboardPage() {
           tone={spiTone}
         />
         {qtyRollup.data ? (
-          <KpiCard
-            label="Composite % (qty)"
-            value={fmt.pct(qtyRollup.data.composite_pct)}
-            subtext={rollupModeLabel[qtyRollup.data.mode]}
-          />
+          <>
+            <KpiCard
+              label={qtyRollup.data.includes_streams ? 'Field composite %' : 'Composite % (qty)'}
+              value={fmt.pct(qtyRollup.data.field_composite_pct)}
+              subtext={rollupModeLabel[qtyRollup.data.mode]}
+            />
+            {qtyRollup.data.includes_streams && (
+              <KpiCard
+                label="Overall project %"
+                value={overallConfigured ? fmt.pct(qtyRollup.data.composite_pct) : '—'}
+                subtext={
+                  overallConfigured
+                    ? 'Includes procurement + engineering'
+                    : 'Configure custom weights on Project Setup'
+                }
+              />
+            )}
+          </>
         ) : (
           <KpiCardSkeleton />
         )}

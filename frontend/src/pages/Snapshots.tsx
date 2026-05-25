@@ -26,7 +26,7 @@ function HowToCard() {
             <span className="is-chip is-chip-primary" style={{ padding: '1px 6px', fontSize: 11 }}>B (Later)</span>.
             Selections will automatically swap if chosen out of chronological order to ensure A is always the earlier snapshot and B is the later snapshot.
             Once both are set, a comparison card appears showing per-record drift in earned percent and earned hours between the two captures.
-            Green deltas mean forward progress; red means regression.
+            Drift magnitudes are always positive; week-ending dates label each side.
           </p>
         </div>
       </div>
@@ -42,6 +42,15 @@ function NoProject() {
       </p>
     </Card>
   );
+}
+
+function snapshotOrderDate(s: Snapshot): string {
+  return s.week_ending ?? s.snapshot_date;
+}
+
+function snapshotPickerLabel(s: Snapshot): string {
+  const we = snapshotOrderDate(s);
+  return `${we} · ${s.label}`;
 }
 
 const KIND_LABEL: Record<Snapshot['kind'], string> = {
@@ -139,7 +148,7 @@ export function SnapshotsPage() {
                         }
                         if (b) {
                           const snapB = rows.find((x) => x.id === b);
-                          if (snapB && s.snapshot_date > snapB.snapshot_date) {
+                          if (snapB && snapshotOrderDate(s) > snapshotOrderDate(snapB)) {
                             setA(b);
                             setB(s.id);
                             return;
@@ -147,7 +156,7 @@ export function SnapshotsPage() {
                         }
                         setA(s.id);
                       }}
-                      aria-label={`Mark ${s.label} as A`}
+                      aria-label={`Mark ${snapshotPickerLabel(s)} as A`}
                     />
                   </td>
                   <td style={{ width: 85 }} className="text-center">
@@ -163,7 +172,7 @@ export function SnapshotsPage() {
                         }
                         if (a) {
                           const snapA = rows.find((x) => x.id === a);
-                          if (snapA && s.snapshot_date < snapA.snapshot_date) {
+                          if (snapA && snapshotOrderDate(s) < snapshotOrderDate(snapA)) {
                             setB(a);
                             setA(s.id);
                             return;
@@ -171,7 +180,7 @@ export function SnapshotsPage() {
                         }
                         setB(s.id);
                       }}
-                      aria-label={`Mark ${s.label} as B`}
+                      aria-label={`Mark ${snapshotPickerLabel(s)} as B`}
                     />
                   </td>
                   <td className="font-mono">{s.snapshot_date}</td>
@@ -201,8 +210,8 @@ export function SnapshotsPage() {
           <div className="px-6 pt-5 pb-3">
             <CardHeader
               eyebrow="Comparison"
-              title={`${sortedById.get(a)?.label ?? '—'} → ${sortedById.get(b)?.label ?? '—'}`}
-              caption="Per-record drift between the two selected snapshots."
+              title={`${sortedById.get(a) ? snapshotPickerLabel(sortedById.get(a)!) : '—'} → ${sortedById.get(b) ? snapshotPickerLabel(sortedById.get(b)!) : '—'}`}
+              caption="Per-record drift between A (earlier week ending) and B (later). Δ columns show positive magnitude only."
               actions={
                 <Button
                   variant="outline"
@@ -261,10 +270,10 @@ export function SnapshotsPage() {
                     <th>Description</th>
                     <th className="text-right">Pct A</th>
                     <th className="text-right">Pct B</th>
-                    <th className="text-right">Δ Pct</th>
+                    <th className="text-right">Δ Pct (mag.)</th>
                     <th className="text-right">Earned hrs A</th>
                     <th className="text-right">Earned hrs B</th>
-                    <th className="text-right">Δ Earned hrs</th>
+                    <th className="text-right">Δ Earned hrs (mag.)</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -284,36 +293,10 @@ export function SnapshotsPage() {
                       <td>{r.description}</td>
                       <td className="text-right font-mono">{r.pct_a.toFixed(1)}</td>
                       <td className="text-right font-mono">{r.pct_b.toFixed(1)}</td>
-                      <td
-                        className="text-right font-mono"
-                        style={{
-                          color:
-                            r.delta_pct > 0
-                              ? 'var(--color-variance-favourable)'
-                              : r.delta_pct < 0
-                                ? 'var(--color-variance-unfavourable)'
-                                : 'var(--color-text)',
-                        }}
-                      >
-                        {r.delta_pct >= 0 ? '+' : ''}
-                        {r.delta_pct.toFixed(1)}
-                      </td>
+                      <td className="text-right font-mono">{r.delta_pct.toFixed(1)}</td>
                       <td className="text-right font-mono">{fmt.int(r.earned_hrs_a)}</td>
                       <td className="text-right font-mono">{fmt.int(r.earned_hrs_b)}</td>
-                      <td
-                        className="text-right font-mono"
-                        style={{
-                          color:
-                            r.delta_earned_hrs > 0
-                              ? 'var(--color-variance-favourable)'
-                              : r.delta_earned_hrs < 0
-                                ? 'var(--color-variance-unfavourable)'
-                                : 'var(--color-text)',
-                        }}
-                      >
-                        {r.delta_earned_hrs >= 0 ? '+' : ''}
-                        {fmt.int(r.delta_earned_hrs)}
-                      </td>
+                      <td className="text-right font-mono">{fmt.int(r.delta_earned_hrs)}</td>
                     </tr>
                   ))}
                 </tbody>

@@ -12,8 +12,7 @@ const ROLES: { value: UserRole; label: string; hint: string }[] = [
   { value: 'super_admin', label: 'Super Controller', hint: 'Tenant-wide governance and controller delegation.' },
   { value: 'admin', label: 'Controller', hint: 'Project controller when assigned to project membership.' },
   { value: 'pm', label: 'PM', hint: 'Approves change orders, closes periods, and manages project execution.' },
-  { value: 'pc_reviewer', label: 'PC Reviewer', hint: 'Forwards or rejects change orders at the PC stage.' },
-  { value: 'editor', label: 'Editor', hint: 'Updates progress records and submits change orders.' },
+  { value: 'pc_reviewer', label: 'PC Reviewer', hint: 'Updates progress, submits change orders, and reviews clerk uploads.' },
   {
     value: 'clerk',
     label: 'Clerk',
@@ -67,7 +66,7 @@ export function InviteUserModal({ open, onClose }: Props) {
   const qc = useQueryClient();
   const [email, setEmail] = useState('');
   const [displayName, setDisplayName] = useState('');
-  const [role, setRole] = useState<UserRole>('editor');
+  const [role, setRole] = useState<UserRole>('viewer');
   const [success, setSuccess] = useState<string | null>(null);
   const [confirmBind, setConfirmBind] = useState(false);
   const { data: me } = useCurrentUser();
@@ -82,7 +81,7 @@ export function InviteUserModal({ open, onClose }: Props) {
 
   useEffect(() => {
     if (!roleOptions.some((option) => option.value === role)) {
-      setRole('editor');
+      setRole('viewer');
     }
   }, [role, roleOptions]);
 
@@ -103,7 +102,7 @@ export function InviteUserModal({ open, onClose }: Props) {
       setSuccess(`Invite sent to ${email}.`);
       setEmail('');
       setDisplayName('');
-      setRole('editor');
+      setRole('viewer');
     },
   });
 
@@ -121,7 +120,7 @@ export function InviteUserModal({ open, onClose }: Props) {
       setConfirmBind(false);
       setEmail('');
       setDisplayName('');
-      setRole('editor');
+      setRole('viewer');
     },
   });
 
@@ -132,7 +131,7 @@ export function InviteUserModal({ open, onClose }: Props) {
     setConfirmBind(false);
     setEmail('');
     setDisplayName('');
-    setRole('editor');
+    setRole('viewer');
   };
 
   const handleClose = () => {

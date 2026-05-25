@@ -4,7 +4,12 @@ import { supabase } from '@/lib/supabase';
 import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import { Field, inputClass } from '@/components/ui/FormField';
-import { useCoaCodes, useWorkTypes } from '@/lib/queries';
+import {
+  useCoaCodes,
+  useProjectCoaCodes,
+  useProjectCoaPfOverrides,
+  useWorkTypes,
+} from '@/lib/queries';
 
 type Props = {
   open: boolean;
@@ -33,11 +38,10 @@ export function NewRecordModal({ open, onClose, projectId }: Props) {
   });
 
   const { data: coaCodes } = useCoaCodes();
+  const { data: inScopeIds } = useProjectCoaCodes(projectId);
+  const { data: pfOverrides } = useProjectCoaPfOverrides(projectId);
   const { data: workTypes } = useWorkTypes();
 
-  // Default cost code per discipline. Mirrors the heuristic in the backfill
-  // migration so manual records land in the same QMR bucket as Sandra's
-  // typical uploaded data. Admins can change the code before submit.
   const DEFAULT_CODE_BY_DISCIPLINE: Record<string, string> = {
     CIVIL: '04130',
     PIPE: '08212',
@@ -48,6 +52,13 @@ export function NewRecordModal({ open, onClose, projectId }: Props) {
     SITE: '01530',
     FOUNDATIONS: '04130',
   };
+
+  const inScopeCodes = useMemo(() => {
+    if (!coaCodes || !inScopeIds) return [];
+    return coaCodes
+      .filter((c) => c.level === 2 && inScopeIds.has(c.id))
+      .sort((a, b) => a.code.localeCompare(b.code));
+  }, [coaCodes, inScopeIds]);
 
   const { data: iwps } = useQuery({
     queryKey: ['iwps', projectId] as const,
@@ -78,12 +89,44 @@ export function NewRecordModal({ open, onClose, projectId }: Props) {
   });
 
   const selectedDiscipline = disciplines?.find((d) => d.id === form.discipline_id);
-  // Filter the work-type dropdown to entries matching the selected
-  // discipline. Empty list when no discipline is picked yet.
+  const selectedCoa = inScopeCodes.find((c) => c.code === form.code);
+
+  const effectivePfAdj = selectedCoa
+    ? (pfOverrides?.get(selectedCoa.id) ?? selectedCoa.pf_adj)
+    : null;
+  const effectivePfRate =
+    selectedCoa && effectivePfAdj != null
+      ? selectedCoa.base_rate * effectivePfAdj
+      : null;
+
   const workTypesForDiscipline = useMemo(() => {
     if (!selectedDiscipline || !workTypes) return [];
     return workTypes.filter((wt) => wt.discipline_code === selectedDiscipline.discipline_code);
   }, [selectedDiscipline, workTypes]);
+
+  const pickCode = (code: string) => {
+    const coa = inScopeCodes.find((c) => c.code === code);
+    const pfAdj = coa ? (pfOverrides?.get(coa.id) ?? coa.pf_adj) : null;
+    const pfRate = coa && pfAdj != null ? coa.base_rate * pfAdj : null;
+    const nextBudgetHrs =
+      pfRate != null && form.budget_qty > 0
+        ? Math.round(form.budget_qty * pfRate * 10) / 10
+        : form.budget_hrs;
+    setForm({
+      ...form,
+      code,
+      uom: coa?.uom ?? form.uom,
+      budget_hrs: nextBudgetHrs,
+    });
+  };
+
+  const setBudgetQty = (budget_qty: number) => {
+    const nextBudgetHrs =
+      effectivePfRate != null && budget_qty > 0
+        ? Math.round(budget_qty * effectivePfRate * 10) / 10
+        : form.budget_hrs;
+    setForm({ ...form, budget_qty, budget_hrs: nextBudgetHrs });
+  };
 
   const submit = useMutation({
     mutationFn: async () => {
@@ -94,9 +137,6 @@ export function NewRecordModal({ open, onClose, projectId }: Props) {
         .single();
       if (meErr) throw meErr;
 
-      // Next record_no for the project. Concurrent inserts can collide; the
-      // unique (project_id, record_no) constraint will then surface 23505 to
-      // the user, who can retry. Acceptable for Phase 4.
       const { data: maxRow } = await supabase
         .from('progress_records')
         .select('record_no')
@@ -157,21 +197,21 @@ export function NewRecordModal({ open, onClose, projectId }: Props) {
             onChange={(e) => {
               const next = e.target.value;
               const disc = disciplines?.find((d) => d.id === next);
-              // Auto-fill code with the discipline default — only when the
-              // user hasn't already picked one. Lets PMs add records fast
-              // without searching the COA dropdown every time.
               const defaultCode = disc ? DEFAULT_CODE_BY_DISCIPLINE[disc.discipline_code] ?? '' : '';
-              // Auto-fill work_type with the discipline's is_default work_type.
               const defaultWorkType = disc && workTypes
                 ? workTypes.find(
                     (wt) =>
                       wt.discipline_code === disc.discipline_code && wt.is_default,
                   )
                 : null;
+              const scopedDefault =
+                defaultCode && inScopeCodes.some((c) => c.code === defaultCode)
+                  ? defaultCode
+                  : form.code;
               setForm({
                 ...form,
                 discipline_id: next,
-                code: form.code || defaultCode,
+                code: form.code || scopedDefault,
                 work_type_id: form.work_type_id || defaultWorkType?.id || '',
               });
             }}
@@ -213,27 +253,75 @@ export function NewRecordModal({ open, onClose, projectId }: Props) {
             onChange={(e) => setForm({ ...form, rev: e.target.value })}
           />
         </Field>
+
         <Field
-          label="COA Code"
+          label="COA Code (in scope)"
           required
-          hint="The cost code this record rolls up to in the QMR report. Auto-fills from the discipline default — change if needed."
+          hint="Pick one in-scope cost code. U/R is shown for the selected row."
           className="md:col-span-2"
         >
-          <select
-            className={inputClass}
-            value={form.code}
-            onChange={(e) => setForm({ ...form, code: e.target.value })}
-          >
-            <option value="">— select a code —</option>
-            {(coaCodes ?? [])
-              .filter((c) => c.level === 2)
-              .map((c) => (
-                <option key={c.id} value={c.code}>
-                  {c.code} — {c.description} ({c.uom})
-                </option>
-              ))}
-          </select>
+          {inScopeCodes.length === 0 ? (
+            <div className="text-xs text-[color:var(--color-text-muted)] border border-[color:var(--color-line)] rounded-md px-3 py-4">
+              No COA codes are in scope for this project yet. Pick codes on Project Setup first.
+            </div>
+          ) : (
+            <div
+              className="border border-[color:var(--color-line)] rounded-md overflow-y-auto"
+              style={{ maxHeight: 180 }}
+              role="radiogroup"
+              aria-label="In-scope COA codes"
+            >
+              {inScopeCodes.map((c) => {
+                const override = pfOverrides?.get(c.id) ?? null;
+                const pfAdj = override ?? c.pf_adj;
+                const pfRate = c.base_rate * pfAdj;
+                const checked = form.code === c.code;
+                return (
+                  <label
+                    key={c.id}
+                    className={`flex items-start gap-3 px-3 py-2 cursor-pointer border-b border-[color:var(--color-line)] last:border-b-0 ${
+                      checked ? 'bg-[color:var(--color-raised)]' : 'hover:bg-[color:var(--color-canvas)]'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="coa-code"
+                      checked={checked}
+                      onChange={() => pickCode(c.code)}
+                      className="mt-1"
+                    />
+                    <span className="min-w-0 flex-1 text-sm">
+                      <span className="font-mono font-semibold">{c.code}</span>
+                      <span className="text-[color:var(--color-text-muted)]"> — {c.description}</span>
+                      <span className="block text-xs text-[color:var(--color-text-subtle)] mt-0.5">
+                        {c.uom} · U/R {pfRate.toFixed(4)}
+                        {override != null ? ' (project override)' : ''}
+                      </span>
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+          )}
         </Field>
+
+        {selectedCoa && effectivePfRate != null && (
+          <div className="md:col-span-2 grid grid-cols-3 gap-3 p-3 rounded-md bg-[color:var(--color-raised)] border border-[color:var(--color-line)] text-xs">
+            <div>
+              <div className="is-stat-label">Base rate</div>
+              <div className="font-mono mt-0.5">{selectedCoa.base_rate.toFixed(4)}</div>
+            </div>
+            <div>
+              <div className="is-stat-label">Effective PF adj</div>
+              <div className="font-mono mt-0.5">{effectivePfAdj!.toFixed(4)}</div>
+            </div>
+            <div>
+              <div className="is-stat-label">U/R (PF rate)</div>
+              <div className="font-mono mt-0.5 font-bold">{effectivePfRate.toFixed(4)}</div>
+            </div>
+          </div>
+        )}
+
         <Field
           label="Work Type"
           required
@@ -292,10 +380,17 @@ export function NewRecordModal({ open, onClose, projectId }: Props) {
             min={0}
             className={inputClass}
             value={form.budget_qty}
-            onChange={(e) => setForm({ ...form, budget_qty: Number(e.target.value) })}
+            onChange={(e) => setBudgetQty(Number(e.target.value))}
           />
         </Field>
-        <Field label="Budget Hours">
+        <Field
+          label="Budget Hours"
+          hint={
+            effectivePfRate != null
+              ? 'Auto-calculated from qty × U/R when quantity changes.'
+              : undefined
+          }
+        >
           <input
             type="number"
             step={0.1}
@@ -324,7 +419,8 @@ export function NewRecordModal({ open, onClose, projectId }: Props) {
             !form.description ||
             form.budget_hrs <= 0 ||
             !form.code ||
-            !form.work_type_id
+            !form.work_type_id ||
+            inScopeCodes.length === 0
           }
           onClick={() => submit.mutate()}
         >

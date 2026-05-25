@@ -39,10 +39,7 @@ type WorkTypeWeightWarning = {
 
 export function UploadPage() {
   const { data: me } = useCurrentUser();
-  // Clerks go through the auditor-queue path: file is parsed server-side,
-  // stored in queue + Storage, an LLM scan runs async, then an auditor
-  // approves before any progress_records get written. Editor+ keeps the
-  // direct-import behaviour below — they're the audit gate themselves.
+  // PC reviewer+ direct-import path — auditors skip the clerk queue.
   if (me?.role === 'clerk') {
     return (
       <div className="space-y-4">
@@ -51,10 +48,10 @@ export function UploadPage() {
       </div>
     );
   }
-  return <EditorDirectUploadPage />;
+  return <ReviewerDirectUploadPage />;
 }
 
-function EditorDirectUploadPage() {
+function ReviewerDirectUploadPage() {
   const projectId = useProjectStore((s) => s.currentProjectId);
   const qc = useQueryClient();
   const { data: me } = useCurrentUser();

@@ -213,6 +213,14 @@ export function DateRangeFilter({
   );
 }
 
+/** Week-ending Sunday (Mon–Sun reporting week); falls back to upload date. */
+export function snapshotFilterDate(snapshot: {
+  snapshot_date: string;
+  week_ending?: string | null;
+}): string {
+  return snapshot.week_ending ?? snapshot.snapshot_date;
+}
+
 // Convenience: does the given ISO date string fall in the range? null bounds
 // are treated as open-ended. Date-only comparison via lexicographic ordering
 // works because YYYY-MM-DD is monotonic.

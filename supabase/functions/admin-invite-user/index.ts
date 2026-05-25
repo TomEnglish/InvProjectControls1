@@ -23,7 +23,6 @@ type Role =
   | 'admin'
   | 'pm'
   | 'pc_reviewer'
-  | 'editor'
   | 'clerk'
   | 'viewer';
 
@@ -32,17 +31,12 @@ const ROLES: readonly Role[] = [
   'admin',
   'pm',
   'pc_reviewer',
-  'editor',
   'clerk',
   'viewer',
 ];
-// A20 Wave 4 — admins can grant clerk role at invite time. Craft
-// permissions are assigned separately on the User Admin page via the
-// clerk_crafts_set RPC.
 const ADMIN_GRANTABLE_ROLES: readonly Role[] = [
   'pm',
   'pc_reviewer',
-  'editor',
   'clerk',
   'viewer',
 ];

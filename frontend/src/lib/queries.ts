@@ -8,7 +8,6 @@ export type UserRole =
   | 'admin'
   | 'pm'
   | 'pc_reviewer'
-  | 'editor'
   | 'clerk'
   | 'viewer';
 
@@ -43,17 +42,16 @@ export function useCurrentUser() {
 }
 
 // Rank order MUST match the PG assert_role ladder
-// (supabase/migrations/20260515000001_assert_role_v3.sql). Clerks sit
-// between viewer and editor — they have read access plus a narrow INSERT
+// (supabase/migrations/20260521000000_remove_editor_role.sql). Clerks sit
+// between viewer and pc_reviewer — they have read access plus a narrow INSERT
 // right on upload_queue via SECURITY DEFINER RPC, but no live-table writes.
 const roleRank: Record<UserRole, number> = {
   viewer: 1,
   clerk: 2,
-  editor: 3,
-  pc_reviewer: 4,
-  pm: 5,
-  admin: 6,
-  super_admin: 7,
+  pc_reviewer: 3,
+  pm: 4,
+  admin: 5,
+  super_admin: 6,
 };
 
 export function hasRole(current: UserRole | undefined | null, min: UserRole): boolean {
@@ -66,8 +64,12 @@ export type DisciplineRollup = {
   discipline_code: string;
   display_name: string;
   records: number;
+  /** Baseline discipline budget (pre-CO). */
   budget_hrs: number;
+  /** Baseline + approved CO impact. */
+  current_budget_hrs: number;
   earned_hrs: number;
+  remaining_hrs: number;
   actual_hrs: number;
   earned_pct: number;
   cpi: number | null;
@@ -153,6 +155,9 @@ export type ChangeOrder = {
   status: 'draft' | 'pending' | 'pc_reviewed' | 'approved' | 'rejected';
   requested_by: string;
   rejection_reason: string | null;
+  assigned_pc_reviewer_id: string | null;
+  assigned_pm_id: string | null;
+  created_by: string | null;
 };
 
 export function useChangeOrders(projectId: string | null) {
@@ -163,7 +168,7 @@ export function useChangeOrders(projectId: string | null) {
       const { data, error } = await supabase
         .from('change_orders')
         .select(
-          'id, co_number, date, drawing, discipline_id, type, description, qty_change, uom, hrs_impact, status, requested_by, rejection_reason, project_disciplines!change_orders_discipline_id_fkey(discipline_code, display_name)',
+          'id, co_number, date, drawing, discipline_id, type, description, qty_change, uom, hrs_impact, status, requested_by, rejection_reason, assigned_pc_reviewer_id, assigned_pm_id, created_by, project_disciplines!change_orders_discipline_id_fkey(discipline_code, display_name)',
         )
         .eq('project_id', projectId!)
         .order('co_number');
@@ -186,6 +191,9 @@ export function useChangeOrders(projectId: string | null) {
           status: row.status,
           requested_by: row.requested_by,
           rejection_reason: row.rejection_reason,
+          assigned_pc_reviewer_id: row.assigned_pc_reviewer_id ?? null,
+          assigned_pm_id: row.assigned_pm_id ?? null,
+          created_by: row.created_by ?? null,
         };
       });
     },
@@ -373,8 +381,10 @@ export type ProgressRow = {
   actual_qty: number | null;
   earned_qty: number | null;
   budget_hrs: number;
+  current_budget_hrs: number;
   actual_hrs: number;
   earned_hrs: number;
+  remaining_hrs: number;
   percent_complete: number;
   status: string;
   foreman_user_id: string | null;
@@ -490,7 +500,7 @@ export function useProgressRows(projectId: string | null) {
           .select('progress_record_id, seq, value'),
         supabase
           .from('v_progress_record_ev')
-          .select('record_id, earn_pct')
+          .select('record_id, earn_pct, earn_whrs, current_budget_hrs, remaining_hrs')
           .eq('project_id', projectId!),
       ]);
 
@@ -505,9 +515,24 @@ export function useProgressRows(projectId: string | null) {
         msByRecord.set(row.progress_record_id, arr);
       }
 
-      const evByRecord = new Map<string, number>();
-      for (const row of (evRes.data ?? []) as { record_id: string; earn_pct: number | string }[]) {
-        evByRecord.set(row.record_id, Number(row.earn_pct));
+      type EvRow = {
+        record_id: string;
+        earn_pct: number | string;
+        earn_whrs: number | string;
+        current_budget_hrs: number | string;
+        remaining_hrs: number | string;
+      };
+      const evByRecord = new Map<
+        string,
+        { earn_pct: number; earn_whrs: number; current_budget_hrs: number; remaining_hrs: number }
+      >();
+      for (const row of (evRes.data ?? []) as EvRow[]) {
+        evByRecord.set(row.record_id, {
+          earn_pct: Number(row.earn_pct),
+          earn_whrs: Number(row.earn_whrs),
+          current_budget_hrs: Number(row.current_budget_hrs),
+          remaining_hrs: Number(row.remaining_hrs),
+        });
       }
 
       const rawRows = (recordsRes.data ?? []) as unknown as RawRow[];
@@ -539,8 +564,10 @@ export function useProgressRows(projectId: string | null) {
           actual_qty: r.actual_qty != null ? Number(r.actual_qty) : null,
           earned_qty: r.earned_qty != null ? Number(r.earned_qty) : null,
           budget_hrs: Number(r.budget_hrs),
+          current_budget_hrs: evByRecord.get(r.id)?.current_budget_hrs ?? Number(r.budget_hrs),
           actual_hrs: Number(r.actual_hrs),
-          earned_hrs: Number(r.earned_hrs),
+          earned_hrs: evByRecord.get(r.id)?.earn_whrs ?? Number(r.earned_hrs),
+          remaining_hrs: evByRecord.get(r.id)?.remaining_hrs ?? Math.max(0, Number(r.budget_hrs) - Number(r.earned_hrs)),
           percent_complete: Number(r.percent_complete),
           status: r.status,
           foreman_user_id: r.foreman_user_id,
@@ -569,7 +596,7 @@ export function useProgressRows(projectId: string | null) {
           whrs_unit: r.whrs_unit != null ? Number(r.whrs_unit) : null,
           source_row: r.source_row,
           milestones: ms,
-          earn_pct: evByRecord.get(r.id) ?? Number(r.percent_complete) / 100,
+          earn_pct: evByRecord.get(r.id)?.earn_pct ?? Number(r.percent_complete) / 100,
         };
       });
     },
@@ -579,13 +606,18 @@ export function useProgressRows(projectId: string | null) {
 export type ProjectMetrics = {
   project_id: string;
   total_records: number;
+  baseline_budget_hrs: number;
   total_budget_hrs: number;
   total_earned_hrs: number;
+  total_remaining_hrs: number;
   total_actual_hrs: number;
   percent_complete: number;
   cpi: number | null;
   spi: number | null;
   sv: number;
+  cv: number;
+  buffer_remaining: number;
+  unbudgeted_actuals: number;
 };
 
 export function useProjectMetrics(projectId: string | null) {
@@ -602,13 +634,18 @@ export function useProjectMetrics(projectId: string | null) {
       return {
         project_id: row.project_id,
         total_records: Number(row.total_records),
+        baseline_budget_hrs: Number(row.baseline_budget_hrs ?? row.total_budget_hrs),
         total_budget_hrs: Number(row.total_budget_hrs),
         total_earned_hrs: Number(row.total_earned_hrs),
+        total_remaining_hrs: Number(row.total_remaining_hrs ?? 0),
         total_actual_hrs: Number(row.total_actual_hrs),
         percent_complete: Number(row.percent_complete) / 100,
         cpi: row.cpi != null ? Number(row.cpi) : null,
         spi: row.spi != null ? Number(row.spi) : null,
         sv: Number(row.sv),
+        cv: Number(row.cv ?? row.sv),
+        buffer_remaining: Number(row.buffer_remaining ?? Math.max(0, Number(row.total_earned_hrs) - Number(row.total_actual_hrs))),
+        unbudgeted_actuals: Number(row.unbudgeted_actuals ?? Math.max(0, Number(row.total_actual_hrs) - Number(row.total_earned_hrs))),
       };
     },
   });
@@ -620,7 +657,9 @@ export type DisciplineMetric = {
   display_name: string;
   records: number;
   budget_hrs: number;
+  current_budget_hrs: number;
   earned_hrs: number;
+  remaining_hrs: number;
   actual_hrs: number;
   earned_pct: number;
   cpi: number | null;
@@ -639,7 +678,9 @@ export function useDisciplineMetrics(projectId: string | null) {
         display_name: r.display_name as string,
         records: Number(r.records),
         budget_hrs: Number(r.budget_hrs),
+        current_budget_hrs: Number(r.current_budget_hrs ?? r.budget_hrs),
         earned_hrs: Number(r.earned_hrs),
+        remaining_hrs: Number(r.remaining_hrs ?? Math.max(0, Number(r.budget_hrs) - Number(r.earned_hrs))),
         actual_hrs: Number(r.actual_hrs),
         // RPC returns earned_pct 0..100; normalize to 0..1 to match chart consumers.
         earned_pct: Number(r.earned_pct) / 100,
@@ -669,7 +710,11 @@ export function useDisciplineMetricsAtSnapshot(snapshotId: string | null) {
         display_name: r.display_name as string,
         records: Number(r.records),
         budget_hrs: Number(r.budget_hrs),
+        current_budget_hrs: Number(r.current_budget_hrs ?? r.budget_hrs),
         earned_hrs: Number(r.earned_hrs),
+        remaining_hrs: Number(
+          r.remaining_hrs ?? Math.max(0, Number(r.budget_hrs) - Number(r.earned_hrs)),
+        ),
         actual_hrs: Number(r.actual_hrs),
         earned_pct: Number(r.earned_pct) / 100,
         cpi: r.cpi != null ? Number(r.cpi) : null,
@@ -680,7 +725,9 @@ export function useDisciplineMetricsAtSnapshot(snapshotId: string | null) {
 
 export type ProjectQtyRollup = {
   composite_pct: number;
+  field_composite_pct: number;
   mode: 'hours_weighted' | 'equal' | 'custom';
+  includes_streams: boolean;
 };
 
 export function useProjectQtyRollup(projectId: string | null) {
@@ -692,11 +739,43 @@ export function useProjectQtyRollup(projectId: string | null) {
       if (error) throw error;
       const row = Array.isArray(data) ? data[0] : data;
       if (!row) return null;
-      // composite_pct comes back 0..100; normalize to 0..1.
       return {
         composite_pct: Number(row.composite_pct) / 100,
+        field_composite_pct: Number(row.field_composite_pct ?? row.composite_pct) / 100,
         mode: row.mode as ProjectQtyRollup['mode'],
+        includes_streams: Boolean(row.includes_streams),
       };
+    },
+  });
+}
+
+export type ProjectProgressStream = {
+  id: string;
+  stream_code: string;
+  display_name: string;
+  percent_complete: number;
+  rollup_weight: number | null;
+};
+
+export function useProjectProgressStreams(projectId: string | null) {
+  return useQuery({
+    queryKey: ['project-progress-streams', projectId] as const,
+    enabled: !!projectId,
+    queryFn: async (): Promise<ProjectProgressStream[]> => {
+      await supabase.rpc('project_progress_streams_seed', { p_project_id: projectId! });
+      const { data, error } = await supabase
+        .from('project_progress_streams')
+        .select('id, stream_code, display_name, percent_complete, rollup_weight')
+        .eq('project_id', projectId!)
+        .order('stream_code');
+      if (error) throw error;
+      return (data ?? []).map((r) => ({
+        id: r.id as string,
+        stream_code: r.stream_code as string,
+        display_name: r.display_name as string,
+        percent_complete: Number(r.percent_complete),
+        rollup_weight: r.rollup_weight != null ? Number(r.rollup_weight) : null,
+      }));
     },
   });
 }
@@ -829,7 +908,9 @@ export function useDashboardSummary(projectId: string | null) {
               display_name: d.display_name,
               records: d.records,
               budget_hrs: d.budget_hrs,
+              current_budget_hrs: d.current_budget_hrs,
               earned_hrs: d.earned_hrs,
+              remaining_hrs: d.remaining_hrs,
               actual_hrs: d.actual_hrs,
               earned_pct: d.earned_pct,
               cpi: d.cpi,
@@ -1017,6 +1098,7 @@ export type HeuristicWarnings = {
     code: string;
     codeCraft: string;
   }>;
+  filenameMismatch?: string | null;
 };
 
 export type LlmWarnings = {
@@ -1144,17 +1226,17 @@ function mapQueueRow(
  * the row mutations land via state-transition RPC, not refetch on tab
  * switch.
  *
- * Gated on role >= editor: clerks who URL-navigate to /upload-queue
+ * Gated on role >= pc_reviewer: clerks who URL-navigate to /upload-queue
  * hit a render-level bounce, but we also skip the query + realtime
  * channel so they don't burn server resources on a page they can't use.
  */
 export function useUploadQueue() {
   const qc = useQueryClient();
   const { data: me } = useCurrentUser();
-  const isEditorPlus = hasRole(me?.role, 'editor');
+  const isReviewerPlus = hasRole(me?.role, 'pc_reviewer');
   const query = useQuery({
     queryKey: ['upload-queue'] as const,
-    enabled: isEditorPlus,
+    enabled: isReviewerPlus,
     queryFn: async (): Promise<UploadQueueRow[]> => {
       const { data, error } = await supabase
         .from('upload_queue')
@@ -1168,7 +1250,7 @@ export function useUploadQueue() {
   });
 
   useEffect(() => {
-    if (!isEditorPlus) return;
+    if (!isReviewerPlus) return;
     const channel = supabase
       .channel('upload-queue-realtime')
       .on(
@@ -1183,7 +1265,7 @@ export function useUploadQueue() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [qc, isEditorPlus]);
+  }, [qc, isReviewerPlus]);
 
   return query;
 }
@@ -1354,7 +1436,7 @@ export function useAssignableProjects() {
 
 /**
  * Crafts the current user is permitted to submit for on a given project.
- * For clerks this scopes the declared-craft dropdown; for editor+ it
+ * For clerks this scopes the declared-craft dropdown; for pc_reviewer+ it
  * returns the full project_disciplines list since they have no
  * per-craft restriction.
  */

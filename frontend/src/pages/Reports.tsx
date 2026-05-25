@@ -21,6 +21,7 @@ import {
   DateRangeFilter,
   ALL_TIME_RANGE,
   isInRange,
+  snapshotFilterDate,
   type DateRange,
 } from '@/components/ui/DateRangeFilter';
 import { selectClass } from '@/components/ui/FormField';
@@ -79,7 +80,7 @@ export function ReportsPage() {
   // contradicts the active range.
   useEffect(() => {
     if (!selectedSnapshot) return;
-    if (!isInRange(selectedSnapshot.snapshot_date, dateRange)) {
+    if (!isInRange(snapshotFilterDate(selectedSnapshot), dateRange)) {
       setSnapshotId(null);
     }
   }, [dateRange, selectedSnapshot]);
@@ -97,7 +98,7 @@ export function ReportsPage() {
   const sortedSnapshots = useMemo(() => {
     return (snapshots.data ?? [])
       .slice()
-      .filter((s) => isInRange(s.snapshot_date, dateRange))
+      .filter((s) => isInRange(snapshotFilterDate(s), dateRange))
       .sort((a, b) => (b.snapshot_date.localeCompare(a.snapshot_date)));
   }, [snapshots.data, dateRange]);
 
@@ -166,7 +167,7 @@ export function ReportsPage() {
   const sv = s.total_earned_hrs - projectBcws;
 
   return (
-    <div className="space-y-4">
+    <div className="is-reports-page space-y-4">
       {/* A4 — print-only header so the PDF carries its own context
           (project + report date) without the on-screen chrome.
           `is-print-only` toggles via @media print. */}
@@ -231,12 +232,12 @@ export function ReportsPage() {
           return (
             <SummaryTile
               label="Buffer Remaining"
-              help="Comfortable buffer if >10% of budget. Yellow warn if <=10% ('CO recommended'). Red danger if negative ('CO required'). Formula: max(0, BCWP − ACWP)."
+              help="Comfortable buffer if >10% of current budget. Yellow warn if ≤10% ('CO recommended'). Red when overrun ('CO required'). Formula: max(0, BCWP − ACWP)."
               value={fmt.int(buffer)}
               caption={
-                cv >= 0
-                  ? `${pctRemaining.toFixed(1)}% of budget remaining`
-                  : `Over budget by ${fmt.int(Math.abs(cv))} hrs`
+                cv > 0
+                  ? `${pctRemaining.toFixed(1)}% of current budget remaining`
+                  : 'Earned budget exhausted — change order required'
               }
               tone={bufferTone}
               chip={chip}
@@ -288,7 +289,7 @@ export function ReportsPage() {
           </ChartCard>
           <ChartCard
             title="CPI / SPI trend"
-            caption="Per locked period. CPI = earned÷actual hours (cost performance, ≥1 favourable). SPI = earned÷planned hours (schedule performance, ≥1 favourable)."
+            caption="Per locked week. CPI and SPI target 1.00 — values below target use an amber chip (underperforming), not a negative number. Red/green arrows are not used for ratios."
           >
             <CpiSpiTrendChart periods={ps} />
           </ChartCard>
@@ -316,52 +317,54 @@ export function ReportsPage() {
               const headers = [
                 'Discipline',
                 'Budget hrs',
-                'BCWP (Earned hrs)',
-                'ACWP (Actual hrs)',
-                'CV',
+                'Earned hrs',
+                'Actual hrs',
+                'Buffer remaining hrs',
                 'CPI',
-                'EAC',
+                'FAC',
               ];
               const rows = s.disciplines.map((d) => {
                 const cv = d.earned_hrs - d.actual_hrs;
+                const buffer = Math.max(0, cv);
                 const cpi = d.actual_hrs > 0 ? d.earned_hrs / d.actual_hrs : null;
-                const eac = cpi && cpi > 0 ? d.budget_hrs / cpi : null;
+                const fac = cpi && cpi > 0 ? d.current_budget_hrs / cpi : null;
                 return [
                   d.display_name,
-                  d.budget_hrs.toFixed(0),
+                  d.current_budget_hrs.toFixed(0),
                   d.earned_hrs.toFixed(0),
                   d.actual_hrs.toFixed(0),
-                  cv.toFixed(0),
+                  buffer.toFixed(0),
                   cpi != null ? cpi.toFixed(3) : '',
-                  eac != null ? eac.toFixed(0) : '',
+                  fac != null ? fac.toFixed(0) : '',
                 ];
               });
-              const totalCv = s.total_earned_hrs - s.total_actual_hrs;
-              const totalEac = s.cpi && s.cpi > 0 ? s.total_budget_hrs / s.cpi : null;
+              const totalBuffer = Math.max(0, s.total_earned_hrs - s.total_actual_hrs);
+              const totalFac = s.cpi && s.cpi > 0 ? s.total_budget_hrs / s.cpi : null;
               rows.push([
                 'PROJECT TOTAL',
                 s.total_budget_hrs.toFixed(0),
                 s.total_earned_hrs.toFixed(0),
                 s.total_actual_hrs.toFixed(0),
-                totalCv.toFixed(0),
+                totalBuffer.toFixed(0),
                 s.cpi != null ? s.cpi.toFixed(3) : '',
-                totalEac != null ? totalEac.toFixed(0) : '',
+                totalFac != null ? totalFac.toFixed(0) : '',
               ]);
               if (projectBcws > 0) {
+                const sv = s.total_earned_hrs - projectBcws;
                 rows.push([
-                  `Schedule variance (BCWS = ${projectBcws.toFixed(0)})`,
+                  `Schedule variance (planned ${projectBcws.toFixed(0)} hrs)`,
                   '',
                   '',
                   '',
-                  (s.total_earned_hrs - projectBcws).toFixed(0),
+                  Math.abs(sv).toFixed(0),
                   s.spi != null ? s.spi.toFixed(3) : '',
-                  '',
+                  sv >= 0 ? 'ahead' : 'behind',
                 ]);
               }
-              downloadCsv(`variance-analysis-${date}.csv`, headers, rows);
+              downloadCsv(`variance-report-${date}.csv`, headers, rows);
             }}
           >
-            <Download size={14} /> Export
+            <Download size={14} /> Export CSV
           </Button>
         </div>
         <div className="p-6 pt-4">
@@ -405,10 +408,10 @@ function SnapshotSelector({
       <div className="flex items-center gap-3 flex-wrap">
         <Calendar size={16} className="text-[color:var(--color-text-muted)]" />
         <div>
-          <div className="is-eyebrow mb-0.5">Reporting period</div>
+          <div className="is-eyebrow mb-0.5">Week ending</div>
           <div className="text-sm font-semibold">
             {snapshotId
-              ? `As of ${snapshots.find((s) => s.id === snapshotId)?.snapshot_date ?? '—'}`
+              ? `Week ending ${snapshotFilterDate(snapshots.find((s) => s.id === snapshotId)!)}`
               : 'Live (current state)'}
           </div>
         </div>
@@ -429,7 +432,7 @@ function SnapshotSelector({
             {snapshots.length > 1 && <option disabled>──────────</option>}
             {snapshots.slice(1).map((s) => (
               <option key={s.id} value={s.id}>
-                {s.snapshot_date} — {s.label}
+                {snapshotFilterDate(s)} — {s.label}
               </option>
             ))}
           </select>

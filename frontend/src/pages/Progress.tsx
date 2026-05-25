@@ -3,7 +3,8 @@ import { useQuery } from '@tanstack/react-query';
 import { Search, X } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useProjectStore } from '@/stores/project';
-import { useProgressRows, useIwps, useCurrentUser, hasRole } from '@/lib/queries';
+import { useProgressRows, useIwps, useCurrentUser, useWorkTypes, hasRole } from '@/lib/queries';
+import type { ProgressRow, WorkTypeMilestone } from '@/lib/queries';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { inputClass } from '@/components/ui/FormField';
@@ -28,7 +29,7 @@ const emptySet = (): Set<string> => new Set();
 export function ProgressPage() {
   const projectId = useProjectStore((s) => s.currentProjectId);
   const { data: me } = useCurrentUser();
-  const canAddRecord = hasRole(me?.role, 'editor');
+  const canAddRecord = hasRole(me?.role, 'pc_reviewer');
 
   const [discFilter, setDiscFilter] = useState<Set<string>>(emptySet);
   const [iwpFilter, setIwpFilter] = useState<Set<string>>(emptySet);
@@ -44,6 +45,7 @@ export function ProgressPage() {
 
   const { data: records, isLoading, error } = useProgressRows(projectId);
   const { data: iwps } = useIwps(projectId);
+  const { data: workTypes } = useWorkTypes();
 
   const { data: disciplines } = useQuery({
     queryKey: ['project-disciplines-simple', projectId] as const,
@@ -51,13 +53,33 @@ export function ProgressPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('project_disciplines')
-        .select('discipline_code, display_name')
+        .select('id, discipline_code, display_name, default_work_type_id')
         .eq('project_id', projectId!)
         .order('discipline_code');
       if (error) throw error;
-      return data;
+      return data as {
+        id: string;
+        discipline_code: string;
+        display_name: string;
+        default_work_type_id: string | null;
+      }[];
     },
   });
+
+  const getMilestones = useMemo(() => {
+    const byWorkTypeId = new Map(
+      (workTypes ?? []).map((wt) => [wt.id, wt.milestones] as const),
+    );
+    const disciplineDefault = new Map(
+      (disciplines ?? []).map((d) => [d.id, d.default_work_type_id] as const),
+    );
+    return (record: ProgressRow): WorkTypeMilestone[] => {
+      const wtId =
+        record.work_type_id ??
+        (record.discipline_id ? disciplineDefault.get(record.discipline_id) ?? null : null);
+      return wtId ? byWorkTypeId.get(wtId) ?? [] : [];
+    };
+  }, [workTypes, disciplines]);
 
   const distinct = useMemo(() => {
     const foremen = new Set<string>();
@@ -94,6 +116,7 @@ export function ProgressPage() {
       if (!q) return true;
       return (
         (r.dwg ?? '').toLowerCase().includes(q) ||
+        (r.code ?? '').toLowerCase().includes(q) ||
         r.description.toLowerCase().includes(q) ||
         (r.line_area ?? '').toLowerCase().includes(q)
       );
@@ -197,7 +220,7 @@ export function ProgressPage() {
             />
             <input
               className={`${inputClass} pl-8 w-64`}
-              placeholder="Search DWG, description…"
+              placeholder="Search DWG, account code, description…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
@@ -231,7 +254,7 @@ export function ProgressPage() {
                   'Work Type Desc',
                   'DWG',
                   'Rev',
-                  'Code',
+                  'Account code',
                   'IWP',
                   'CWP',
                   'Test Pkg',
@@ -340,7 +363,12 @@ export function ProgressPage() {
         {activeFilterCount > 0 && ` · ${activeFilterCount} filter${activeFilterCount === 1 ? '' : 's'} active`}
       </div>
 
-      <ProgressTable records={filtered} selectedId={selectedId} onSelect={setSelectedId} />
+      <ProgressTable
+        records={filtered}
+        selectedId={selectedId}
+        onSelect={setSelectedId}
+        getMilestones={getMilestones}
+      />
 
       {selected && (
         <RecordDetail

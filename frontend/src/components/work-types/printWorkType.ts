@@ -1,145 +1,153 @@
 import type { WorkTypeRow } from '@/lib/queries';
 
+const LOG_COLUMNS = 5;
+
 /**
- * Open a self-contained print window for a single work_type and trigger the
- * OS print dialog. Users pick "Save as PDF" from the dialog to get a
- * shareable handout for superintendents in the field.
- *
- * Variable milestone count (1–8) vs. the old fixed-8 ROC template — empty
- * rows are omitted from the printable table instead of showing dashes.
+ * Jerry's audit-log print layout (ELL-64): one row per work type with
+ * M1–M5 milestone definitions across and weight percentages underneath.
+ * Opens a print dialog — users pick "Save as PDF" for field handouts.
  */
 export function printWorkType(workType: WorkTypeRow): void {
-  const w = window.open('', '_blank', 'width=900,height=1100');
+  const w = window.open('', '_blank', 'width=1000,height=900');
   if (!w) return;
 
   const ms = [...workType.milestones].sort((a, b) => a.seq - b.seq);
+  const bySeq = new Map(ms.map((m) => [m.seq, m]));
   const totalWeight = ms.reduce((s, m) => s + m.weight, 0);
   const totalPct = totalWeight * 100;
 
-  let cumulative = 0;
-  const rows: string[] = [];
-  for (const m of ms) {
-    const pct = m.weight * 100;
-    cumulative += pct;
-    rows.push(`
-      <tr>
-        <td><strong>M${m.seq}</strong></td>
-        <td>${escapeHtml(m.label)}</td>
-        <td class="num">${pct.toFixed(2)}%</td>
-        <td class="num">${cumulative.toFixed(2)}%</td>
-      </tr>`);
+  const headerCells: string[] = [];
+  const labelCells: string[] = [];
+  const pctCells: string[] = [];
+
+  for (let seq = 1; seq <= LOG_COLUMNS; seq++) {
+    const m = bySeq.get(seq);
+    headerCells.push(`<th>M${seq}</th>`);
+    labelCells.push(
+      `<td class="def">${m ? escapeHtml(m.label) : '—'}</td>`,
+    );
+    pctCells.push(
+      `<td class="pct">${m ? `${(m.weight * 100).toFixed(2)}%` : '—'}</td>`,
+    );
   }
+
+  const extra =
+    ms.filter((m) => m.seq > LOG_COLUMNS).length > 0
+      ? `<p class="extra-note">This work type has ${ms.length} milestones; M6–M8 are omitted from the field log layout.</p>`
+      : '';
 
   const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Work Type — ${escapeHtml(workType.work_type_code)} — ${escapeHtml(workType.description)}</title>
+  <title>ROC Log — ${escapeHtml(workType.work_type_code)}</title>
   <style>
-    @page { margin: 0.6in; }
+    @page { margin: 0.5in; size: landscape; }
     * { box-sizing: border-box; }
     body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      color: #1e293b;
+      font-family: 'Courier New', Courier, monospace;
+      color: #111;
       margin: 0;
-      padding: 24px;
-      font-size: 12pt;
+      padding: 16px 20px;
+      font-size: 10pt;
     }
-    .doc-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-end;
-      border-bottom: 2px solid #0369a1;
-      padding-bottom: 10px;
-      margin-bottom: 18px;
-    }
-    .doc-title { color: #0369a1; font-size: 9pt; letter-spacing: 0.15em; text-transform: uppercase; font-weight: 700; }
-    .doc-code { font-size: 22pt; font-weight: 800; line-height: 1.1; margin-top: 2px; }
-    .doc-desc { font-size: 14pt; color: #475569; margin-top: 4px; }
-    .doc-meta { text-align: right; font-size: 10pt; color: #64748b; }
-    .doc-total { font-size: 24pt; font-weight: 800; color: ${totalPct > 99.5 && totalPct < 100.5 ? '#059669' : '#dc2626'}; line-height: 1; }
-    .doc-total-label { font-size: 8pt; letter-spacing: 0.1em; text-transform: uppercase; color: #64748b; }
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      margin-bottom: 18px;
-    }
-    th, td {
-      text-align: left;
-      padding: 10px 12px;
-      border-bottom: 1px solid #e2e8f0;
-    }
-    th {
-      background: #f1f5f9;
+    .doc-title {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
       font-size: 9pt;
-      letter-spacing: 0.08em;
+      letter-spacing: 0.12em;
       text-transform: uppercase;
       color: #475569;
-      font-weight: 700;
+      margin-bottom: 4px;
     }
-    td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
-    .footer {
-      margin-top: 30px;
-      padding-top: 12px;
-      border-top: 1px solid #e2e8f0;
+    .log-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 8px;
+    }
+    .log-table th,
+    .log-table td {
+      border: 1px solid #334155;
+      padding: 6px 8px;
+      vertical-align: top;
+    }
+    .log-table th {
+      background: #f1f5f9;
+      font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+      font-size: 8pt;
+      text-align: center;
+      width: ${100 / (LOG_COLUMNS + 2)}%;
+    }
+    .code-cell {
+      font-weight: 700;
+      font-size: 11pt;
+      white-space: nowrap;
+      width: 72px;
+    }
+    .desc-cell {
+      font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+      font-size: 10pt;
+      min-width: 180px;
+    }
+    .def {
       font-size: 9pt;
-      color: #94a3b8;
+      line-height: 1.35;
+      min-height: 48px;
+    }
+    .pct {
+      text-align: center;
+      font-weight: 700;
+      font-size: 10pt;
+      background: #f8fafc;
+    }
+    .pct-row td {
+      border-top: 2px solid #334155;
+    }
+    .meta {
+      margin-top: 10px;
+      font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+      font-size: 8pt;
+      color: #64748b;
       display: flex;
       justify-content: space-between;
     }
-    .legend {
-      background: #f8fafc;
-      border-left: 3px solid #0369a1;
-      padding: 12px 14px;
-      font-size: 10pt;
-      color: #475569;
+    .extra-note {
+      font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+      font-size: 8pt;
+      color: #64748b;
+      margin: 8px 0 0;
     }
-    .legend strong { color: #1e293b; }
     @media print {
       body { padding: 0; }
     }
   </style>
 </head>
 <body>
-  <div class="doc-header">
-    <div>
-      <div class="doc-title">Work Type / Rules of Credit</div>
-      <div class="doc-code">${escapeHtml(workType.work_type_code)}</div>
-      <div class="doc-desc">${escapeHtml(workType.description)} · ${escapeHtml(workType.discipline_code)}</div>
-    </div>
-    <div class="doc-meta">
-      <div class="doc-total">${totalPct.toFixed(2)}%</div>
-      <div class="doc-total-label">Total weight</div>
-      <div style="margin-top: 8px;">v${workType.version}${workType.is_default ? ' · Discipline default' : ''}</div>
-      <div>Printed ${new Date().toLocaleDateString()}</div>
-    </div>
-  </div>
-
-  <div class="legend">
-    Each milestone earns its <strong>weight</strong> of the line item's budget hours when reached.
-    <strong>Cumulative</strong> shows the percent-to-100 once all prior milestones plus this one are complete.
-    Hand this sheet to the foreman so they know exactly what each milestone is worth.
-  </div>
-
-  <table style="margin-top: 16px;">
+  <div class="doc-title">Rules of Credit — Field Log</div>
+  <table class="log-table">
     <thead>
       <tr>
-        <th style="width: 50px;">Step</th>
-        <th>Milestone</th>
-        <th class="num" style="width: 100px;">Weight</th>
-        <th class="num" style="width: 110px;">Cumulative</th>
+        <th>Code</th>
+        <th>Description</th>
+        ${headerCells.join('')}
       </tr>
     </thead>
     <tbody>
-      ${rows.join('')}
+      <tr>
+        <td class="code-cell">${escapeHtml(workType.work_type_code)}</td>
+        <td class="desc-cell">${escapeHtml(workType.description)}<br><span style="color:#64748b;font-size:8pt">${escapeHtml(workType.discipline_code)} · v${workType.version}</span></td>
+        ${labelCells.join('')}
+      </tr>
+      <tr class="pct-row">
+        <td colspan="2" style="text-align:right;font-size:8pt;color:#64748b">Weight %</td>
+        ${pctCells.join('')}
+      </tr>
     </tbody>
   </table>
-
-  <div class="footer">
-    <div>Invenio ProjectControls</div>
-    <div>${escapeHtml(workType.work_type_code)} · ${escapeHtml(workType.description)} · v${workType.version}</div>
+  ${extra}
+  <div class="meta">
+    <span>Invenio ProjectControls</span>
+    <span>Total weight: ${totalPct.toFixed(2)}% · Printed ${new Date().toLocaleDateString()}</span>
   </div>
-
   <script>
     window.addEventListener('load', () => { setTimeout(() => window.print(), 100); });
   </script>

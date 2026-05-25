@@ -6,9 +6,27 @@ type Props = {
   neutral?: number;
   /** Display formatter; default: 3dp for ratios, sign+int for variances */
   format?: (v: number) => string;
+  /** Ratio mode (CPI/SPI): no arrow — chip conveys performance, not a signed value. */
+  variant?: 'variance' | 'ratio';
 };
 
-export function VarianceCell({ value, neutral = 0, format }: Props) {
+export function VarianceCell({ value, neutral = 0, format, variant = 'variance' }: Props) {
+  if (variant === 'ratio') {
+    const onTarget = value >= neutral;
+    const display = format ? format(value) : value.toFixed(3);
+    return (
+      <span className="inline-flex items-center gap-1.5 font-mono text-[color:var(--color-text)]">
+        <span>{display}</span>
+        <span
+          className={`is-chip ${onTarget ? 'is-chip-success' : 'is-chip-warn'}`}
+          style={{ padding: '1px 6px', fontSize: 10, height: 18, display: 'inline-flex', alignItems: 'center' }}
+        >
+          {onTarget ? 'On target' : 'Below target'}
+        </span>
+      </span>
+    );
+  }
+
   const delta = value - neutral;
   const kind = delta > 0 ? 'favourable' : delta < 0 ? 'unfavourable' : 'neutral';
   const color =

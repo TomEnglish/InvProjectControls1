@@ -76,7 +76,7 @@ async function main() {
   //       handle_new_user() does not fire; the explicit app_users upsert
   //       below is the sole bridge into projectcontrols.
 
-  type UserRole = 'super_admin' | 'admin' | 'pm' | 'pc_reviewer' | 'editor' | 'viewer';
+  type UserRole = 'super_admin' | 'admin' | 'pm' | 'pc_reviewer' | 'clerk' | 'viewer';
 
   async function ensureAuthUser(
     email: string,
@@ -89,7 +89,14 @@ async function main() {
     });
     if (listErr) throw listErr;
     const existing = list?.users.find((u) => u.email?.toLowerCase() === email.toLowerCase());
-    if (existing) return existing.id;
+    if (existing) {
+      const { error: updateErr } = await sb.auth.admin.updateUserById(existing.id, {
+        password,
+        email_confirm: true,
+      });
+      if (updateErr) throw updateErr;
+      return existing.id;
+    }
     const { data, error } = await sb.auth.admin.createUser({
       email,
       password,
@@ -457,6 +464,50 @@ async function main() {
     );
     if (pmErr) throw pmErr;
     console.log('  project_members: 1 (uat-bot admin on KIS-2026-001)');
+  }
+
+  // CO approval chain test users (ELL-44 / app_review_todo #13).
+  const chainPassword = process.env.CO_TEST_PASSWORD ?? 'password123$';
+  const chainUsers: { email: string; role: UserRole; name: string }[] = [
+    { email: 'pm.test@invenio.app', role: 'pm', name: 'Test PM' },
+    { email: 'auditor.test@invenio.app', role: 'pc_reviewer', name: 'Test Auditor' },
+    { email: 'clerk.test@invenio.app', role: 'clerk', name: 'Test Clerk' },
+  ];
+  const chainIds: Record<string, string> = {};
+  for (const u of chainUsers) {
+    const uid = await ensureAuthUser(u.email, chainPassword, u.name);
+    await ensureAppUser(uid, u.email, u.role, u.name);
+    chainIds[u.role] = uid;
+  }
+  const kisProjectId = projectIds['KIS-2026-001'];
+  if (kisProjectId) {
+    for (const uid of Object.values(chainIds)) {
+      await sb.from('project_members').upsert(
+        {
+          tenant_id: tenantId,
+          project_id: kisProjectId,
+          user_id: uid,
+          project_role: 'member',
+          added_by: superAdminId,
+        },
+        { onConflict: 'project_id,user_id' },
+      );
+    }
+    if (chainIds.clerk) {
+      for (const craft of ['CIVIL', 'PIPE']) {
+        await sb.from('project_clerk_crafts').upsert(
+          {
+            tenant_id: tenantId,
+            project_id: kisProjectId,
+            user_id: chainIds.clerk,
+            craft,
+            granted_by: superAdminId,
+          },
+          { onConflict: 'project_id,user_id,craft' },
+        );
+      }
+    }
+    console.log('  CO chain users: pm.test / auditor.test / clerk.test@invenio.app');
   }
 
   // --- 6. Project disciplines (budget) — for KIS-2026-001

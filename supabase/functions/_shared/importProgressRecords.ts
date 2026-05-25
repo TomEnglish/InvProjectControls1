@@ -2,7 +2,7 @@
 //
 // The "write parsed rows into progress_records + a weekly snapshot" body,
 // extracted from import-progress-records/index.ts so both that fn (direct
-// import path, editor+ caller) and queue-approve-upload (auditor commits
+// import path, pc_reviewer+ caller) and queue-approve-upload (auditor commits
 // a clerk-submitted file) call the same logic with the same shape.
 //
 // Caller responsibilities:

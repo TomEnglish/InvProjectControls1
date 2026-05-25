@@ -34,6 +34,7 @@ export function ChangeManagementPage() {
   const { data: me } = useCurrentUser();
 
   const [statusFilter, setStatusFilter] = useState<string>('All');
+  const [mineOnly, setMineOnly] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [decision, setDecision] = useState<
@@ -46,8 +47,17 @@ export function ChangeManagementPage() {
 
   const filtered = useMemo(() => {
     if (!cos) return [];
-    return statusFilter === 'All' ? cos : cos.filter((c) => c.status === statusFilter);
-  }, [cos, statusFilter]);
+    let rows = statusFilter === 'All' ? cos : cos.filter((c) => c.status === statusFilter);
+    if (mineOnly && me?.id) {
+      rows = rows.filter(
+        (c) =>
+          c.created_by === me.id ||
+          c.assigned_pc_reviewer_id === me.id ||
+          c.assigned_pm_id === me.id,
+      );
+    }
+    return rows;
+  }, [cos, statusFilter, mineOnly, me?.id]);
 
   const selected = filtered.find((c) => c.id === selectedId) ?? null;
 
@@ -117,22 +127,32 @@ export function ChangeManagementPage() {
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center flex-wrap gap-2">
-        <select
-          aria-label="Status filter"
-          className={selectClass}
-          style={{ width: 200 }}
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-        >
-          <option value="All">All Statuses</option>
-          <option value="pending">Pending</option>
-          <option value="pc_reviewed">PC Reviewed</option>
-          <option value="approved">Approved</option>
-          <option value="rejected">Rejected</option>
-        </select>
+        <div className="flex items-center gap-3 flex-wrap">
+          <select
+            aria-label="Status filter"
+            className={selectClass}
+            style={{ width: 200 }}
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+          >
+            <option value="All">All Statuses</option>
+            <option value="pending">Pending</option>
+            <option value="pc_reviewed">PC Reviewed</option>
+            <option value="approved">Approved</option>
+            <option value="rejected">Rejected</option>
+          </select>
+          <label className="text-sm flex items-center gap-2 cursor-pointer text-[color:var(--color-text-muted)]">
+            <input
+              type="checkbox"
+              checked={mineOnly}
+              onChange={(e) => setMineOnly(e.target.checked)}
+            />
+            Assigned to me
+          </label>
+        </div>
         <Button
           variant="primary"
-          disabled={!hasRole(me?.role, 'editor')}
+          disabled={!hasRole(me?.role, 'pc_reviewer')}
           onClick={() => setModalOpen(true)}
         >
           + New Change Order
@@ -368,7 +388,7 @@ function CoRow({
           {co.status === 'pc_reviewed' && canApprove && (
             <>
               <Button size="sm" variant="primary" disabled={approveBusy} onClick={() => onApprove('forward')}>
-                Approve
+                Approve…
               </Button>
               <Button size="sm" variant="danger" disabled={approveBusy} onClick={() => onApprove('reject')}>
                 Reject

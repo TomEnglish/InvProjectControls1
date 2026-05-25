@@ -11,7 +11,7 @@ export function EarnedValueByDisciplineChart({ disciplines }: { disciplines: Dis
     datasets: [
       {
         label: 'Budget Hrs',
-        data: disciplines.map((d) => d.budget_hrs),
+        data: disciplines.map((d) => d.current_budget_hrs),
         // sky-700 @ 18%
         backgroundColor: 'rgba(3, 105, 161, 0.18)',
         borderColor: '#0369a1',

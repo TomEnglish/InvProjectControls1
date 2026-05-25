@@ -1,6 +1,6 @@
 // import-progress-records
 //
-// Direct-import path used by editor+ callers on the /progress/upload page.
+// Direct-import path used by pc_reviewer+ callers on the /progress/upload page.
 // Accepts the parsed-row payload produced by frontend/src/lib/progressParser.ts
 // and writes progress_records + progress_record_milestones + a weekly
 // progress_snapshots capture via the shared importProgressRecords body.
@@ -40,7 +40,7 @@ function json(body: unknown, status = 200) {
   });
 }
 
-const ALLOWED_ROLES = new Set(['super_admin', 'admin', 'pm', 'pc_reviewer', 'editor']);
+const ALLOWED_ROLES = new Set(['super_admin', 'admin', 'pm', 'pc_reviewer']);
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });

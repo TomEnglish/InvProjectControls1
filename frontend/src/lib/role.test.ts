@@ -4,7 +4,6 @@ import { hasRole } from './queries';
 describe('hasRole', () => {
   it('lets super_admin pass every role gate', () => {
     expect(hasRole('super_admin', 'viewer')).toBe(true);
-    expect(hasRole('super_admin', 'editor')).toBe(true);
     expect(hasRole('super_admin', 'pc_reviewer')).toBe(true);
     expect(hasRole('super_admin', 'pm')).toBe(true);
     expect(hasRole('super_admin', 'admin')).toBe(true);
@@ -18,22 +17,21 @@ describe('hasRole', () => {
     expect(hasRole('admin', 'super_admin')).toBe(false);
   });
 
-  it('blocks editor from PM-gated actions', () => {
-    expect(hasRole('editor', 'pm')).toBe(false);
+  it('blocks pc_reviewer from PM-gated actions', () => {
+    expect(hasRole('pc_reviewer', 'pm')).toBe(false);
   });
 
-  it('slots clerk between viewer and editor', () => {
+  it('slots clerk between viewer and pc_reviewer', () => {
     expect(hasRole('clerk', 'viewer')).toBe(true);
     expect(hasRole('clerk', 'clerk')).toBe(true);
-    expect(hasRole('clerk', 'editor')).toBe(false);
+    expect(hasRole('clerk', 'pc_reviewer')).toBe(false);
     expect(hasRole('clerk', 'pm')).toBe(false);
     expect(hasRole('viewer', 'clerk')).toBe(false);
-    expect(hasRole('editor', 'clerk')).toBe(true);
+    expect(hasRole('pc_reviewer', 'clerk')).toBe(true);
   });
 
   it('lets PM pass PC reviewer gate', () => {
     expect(hasRole('pm', 'pc_reviewer')).toBe(true);
-    expect(hasRole('pm', 'editor')).toBe(true);
   });
 
   it('returns false for missing role', () => {

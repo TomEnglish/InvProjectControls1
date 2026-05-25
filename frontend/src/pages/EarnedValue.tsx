@@ -1,13 +1,15 @@
 import { useMemo, useState } from 'react';
-import { ArrowUp, ArrowDown } from 'lucide-react';
+import { ArrowUp, ArrowDown, Download } from 'lucide-react';
 import { useProjectStore } from '@/stores/project';
 import { useDashboardSummary, useProgressRows } from '@/lib/queries';
 import type { ProgressRow } from '@/lib/queries';
 import { Card, CardHeader } from '@/components/ui/Card';
+import { Button } from '@/components/ui/Button';
 import { KpiCard, KpiCardSkeleton } from '@/components/dashboard/KpiCard';
 import { EarnedValueByDisciplineChart } from '@/components/dashboard/EarnedValueByDisciplineChart';
 import { FilterDropdown } from '@/components/progress/FilterDropdown';
 import { fmt } from '@/lib/format';
+import { downloadCsv } from '@/lib/export';
 
 function NoProject() {
   return (
@@ -19,7 +21,7 @@ function NoProject() {
   );
 }
 
-type SortKey = 'dwg' | 'description' | 'discipline' | 'budget' | 'earned' | 'remaining' | 'percent';
+type SortKey = 'dwg' | 'code' | 'description' | 'discipline' | 'budget' | 'earned' | 'remaining' | 'percent';
 type SortDir = 'asc' | 'desc';
 
 const PCT_BUCKETS: { value: string; label: string; test: (p: number) => boolean }[] = [
@@ -80,11 +82,12 @@ export function EarnedValuePage() {
       const get = (r: ProgressRow): number | string => {
         switch (key) {
           case 'dwg': return r.dwg ?? '';
+          case 'code': return r.code ?? '';
           case 'description': return r.description;
           case 'discipline': return r.discipline_name ?? '';
           case 'budget': return r.budget_hrs;
           case 'earned': return r.earned_hrs;
-          case 'remaining': return Math.abs(r.budget_hrs - r.earned_hrs);
+          case 'remaining': return r.remaining_hrs;
           case 'percent': return r.percent_complete;
         }
       };
@@ -176,12 +179,63 @@ export function EarnedValuePage() {
       </Card>
 
       <Card padded={false}>
-        <div className="px-6 pt-5 pb-3">
+        <div className="px-6 pt-5 pb-3 flex flex-wrap items-start justify-between gap-3">
           <CardHeader
             eyebrow={showAll ? 'All records' : 'Top 20'}
             title="Records by remaining hours"
-            caption="Filter, sort, and switch between a focused top-20 view and the full record list. Negative remaining = over budget."
+            caption="Filter, sort, and switch between a focused top-20 view and the full record list. Remaining hours are capped at zero when progress exceeds budget."
           />
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={filtered.length === 0}
+            onClick={() => {
+              const exportRows = filtered.slice().sort((a, b) => {
+                const get = (r: ProgressRow) => {
+                  switch (sort.key) {
+                    case 'code': return r.code ?? '';
+                    case 'dwg': return r.dwg ?? '';
+                    case 'description': return r.description;
+                    case 'discipline': return r.discipline_name ?? '';
+                    case 'budget': return r.current_budget_hrs;
+                    case 'earned': return r.earned_hrs;
+                    case 'remaining': return r.remaining_hrs;
+                    case 'percent': return r.percent_complete;
+                  }
+                };
+                const av = get(a);
+                const bv = get(b);
+                const dir = sort.dir === 'asc' ? 1 : -1;
+                if (typeof av === 'number' && typeof bv === 'number') return (av - bv) * dir;
+                return String(av).localeCompare(String(bv)) * dir;
+              });
+              downloadCsv(
+                `earned-value-${new Date().toISOString().slice(0, 10)}.csv`,
+                [
+                  'Account code',
+                  'DWG',
+                  'Description',
+                  'Discipline',
+                  'Budget hrs',
+                  'Earned hrs',
+                  'Remaining hrs',
+                  '% Complete',
+                ],
+                exportRows.map((r) => [
+                  r.code ?? '',
+                  r.dwg ?? '',
+                  r.description,
+                  r.discipline_name ?? '',
+                  r.current_budget_hrs.toFixed(0),
+                  r.earned_hrs.toFixed(0),
+                  r.remaining_hrs.toFixed(0),
+                  r.percent_complete.toFixed(1),
+                ]),
+              );
+            }}
+          >
+            <Download size={14} /> Export CSV
+          </Button>
         </div>
 
         <div className="px-6 pb-3 flex flex-wrap items-center gap-2">
@@ -255,6 +309,7 @@ export function EarnedValuePage() {
             <thead>
               <tr>
                 <SortHeader label="DWG" k="dwg" sort={sort} onClick={toggleSort} />
+                <SortHeader label="Account code" k="code" sort={sort} onClick={toggleSort} />
                 <SortHeader label="Description" k="description" sort={sort} onClick={toggleSort} />
                 <SortHeader label="Discipline" k="discipline" sort={sort} onClick={toggleSort} />
                 <SortHeader label="Budget hrs" k="budget" sort={sort} onClick={toggleSort} align="right" />
@@ -266,31 +321,22 @@ export function EarnedValuePage() {
             <tbody>
               {sorted.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="text-center text-[color:var(--color-text-muted)] py-8">
+                  <td colSpan={8} className="text-center text-[color:var(--color-text-muted)] py-8">
                     {allRows.length === 0 ? 'No records yet.' : 'No records match your filters.'}
                   </td>
                 </tr>
               )}
               {sorted.map((r) => {
-                const remaining = r.budget_hrs - r.earned_hrs;
+                const remaining = r.remaining_hrs;
                 return (
                   <tr key={r.id}>
                     <td className="font-mono">{r.dwg ?? '—'}</td>
+                    <td className="font-mono">{r.code ?? '—'}</td>
                     <td>{r.description}</td>
                     <td>{r.discipline_name ?? '—'}</td>
-                    <td className="text-right font-mono">{fmt.int(r.budget_hrs)}</td>
+                    <td className="text-right font-mono">{fmt.int(r.current_budget_hrs)}</td>
                     <td className="text-right font-mono">{fmt.int(r.earned_hrs)}</td>
-                    <td
-                      className="text-right font-mono"
-                      style={{
-                        color:
-                          remaining < 0
-                            ? 'var(--color-variance-unfavourable)'
-                            : 'var(--color-text)',
-                      }}
-                    >
-                      {fmt.int(remaining)}
-                    </td>
+                    <td className="text-right font-mono">{fmt.int(remaining)}</td>
                     <td className="text-right font-mono">{r.percent_complete.toFixed(1)}%</td>
                   </tr>
                 );

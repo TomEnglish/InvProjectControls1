@@ -124,7 +124,7 @@ Deno.serve(async (req) => {
 
   const { data: co, error: coErr } = await adminClient
     .from('change_orders')
-    .select('id, tenant_id, project_id, co_number, description, status, qty_change, uom, hrs_impact, created_by, requested_by, rejection_reason')
+    .select('id, tenant_id, project_id, co_number, description, status, qty_change, uom, hrs_impact, created_by, requested_by, rejection_reason, assigned_pc_reviewer_id, assigned_pm_id')
     .eq('id', body.co_id)
     .maybeSingle();
   if (coErr || !co) return json({ ok: false, reason: 'co not found' }, 200);
@@ -135,15 +135,23 @@ Deno.serve(async (req) => {
     .eq('id', co.project_id)
     .maybeSingle();
 
-  // Decide recipients based on event.
+  // Route to assigned reviewers when set; otherwise fall back to role broadcast.
   let recipientRoles: string[] = [];
   let directRecipientId: string | null = null;
   switch (body.event) {
     case 'submitted':
-      recipientRoles = ['pc_reviewer', 'pm', 'admin'];
+      if (co.assigned_pc_reviewer_id) {
+        directRecipientId = co.assigned_pc_reviewer_id;
+      } else {
+        recipientRoles = ['pc_reviewer', 'pm', 'admin'];
+      }
       break;
     case 'pc_reviewed':
-      recipientRoles = ['pm', 'admin'];
+      if (co.assigned_pm_id) {
+        directRecipientId = co.assigned_pm_id;
+      } else {
+        recipientRoles = ['pm', 'admin'];
+      }
       break;
     case 'approved':
     case 'rejected':

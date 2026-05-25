@@ -7,26 +7,13 @@ import { Card, CardHeader } from '@/components/ui/Card';
  * have one place to look up "who can do what" without spelunking
  * through individual RLS policies and assert_role gates.
  *
- * The matrix reflects the AS-BUILT system, not an aspirational
- * design. When a capability moves (e.g. when Wave 4 admitted PMs
- * to baseline lock), update this table to match — the matrix is
- * the source of truth for what users should expect.
- *
- * Roles map to the projectcontrols.user_role enum:
- *   super_admin = "Super Controller"
- *   admin       = "Controller"
- *   pm          = "PM" (Auditor in Sandra's vocabulary)
- *   pc_reviewer = "PC Reviewer"
- *   editor      = "Editor"
- *   clerk       = "Clerk"
- *   viewer      = "Viewer" (CM / Superintendent in Sandra's vocabulary)
+ * ELL-62 + ELL-49 removed the deprecated `editor` role — former editor duties
+ * (progress writes, CO submit, auditor queue) sit on pc_reviewer+.
  */
 
 type Capability = {
   label: string;
   description?: string;
-  // Each role's level for this capability: 'full' = read+write, 'read' = view only,
-  // 'limited' = scoped write (e.g. own rows / own project), null = no access.
   byRole: Partial<Record<RoleKey, Cell>>;
 };
 
@@ -35,7 +22,6 @@ type RoleKey =
   | 'admin'
   | 'pm'
   | 'pc_reviewer'
-  | 'editor'
   | 'clerk'
   | 'viewer';
 
@@ -46,12 +32,10 @@ const ROLE_COLUMNS: { key: RoleKey; label: string }[] = [
   { key: 'admin', label: 'Controller' },
   { key: 'pm', label: 'PM' },
   { key: 'pc_reviewer', label: 'PC Reviewer' },
-  { key: 'editor', label: 'Editor' },
   { key: 'clerk', label: 'Clerk' },
   { key: 'viewer', label: 'Viewer' },
 ];
 
-// Shorthand for the capability rows.
 const F: Cell = 'full';
 const R: Cell = 'read';
 const L: Cell = 'limited';
@@ -68,12 +52,12 @@ const CAPABILITIES: { section: string; rows: Capability[] }[] = [
       {
         label: 'COA library — edit codes + U/R',
         description: 'Tenant-wide unit-rate baseline. Per-project PF override is on Project Setup.',
-        byRole: { super_admin: F, admin: F, pm: R, pc_reviewer: R, editor: R, clerk: R, viewer: R },
+        byRole: { super_admin: F, admin: F, pm: R, pc_reviewer: R, clerk: R, viewer: R },
       },
       {
         label: 'Rules of Credit (ROC) library — edit milestones',
         description: 'Variable 1–8 milestone weights per work type. Read-only for everyone below Controller.',
-        byRole: { super_admin: F, admin: F, pm: R, pc_reviewer: R, editor: R, clerk: R, viewer: R },
+        byRole: { super_admin: F, admin: F, pm: R, pc_reviewer: R, clerk: R, viewer: R },
       },
       {
         label: 'Assign clerk craft permissions',
@@ -91,7 +75,7 @@ const CAPABILITIES: { section: string; rows: Capability[] }[] = [
       },
       {
         label: 'Pick in-scope COA codes',
-        byRole: { super_admin: F, admin: L, pm: L },
+        byRole: { super_admin: F, admin: L, pm: L, pc_reviewer: L },
       },
       {
         label: 'Override per-project U/R (PF) — audit-logged',
@@ -100,7 +84,7 @@ const CAPABILITIES: { section: string; rows: Capability[] }[] = [
       },
       {
         label: 'Upload baseline (per-discipline zone)',
-        byRole: { super_admin: F, admin: L, pm: L },
+        byRole: { super_admin: F, admin: L, pm: L, pc_reviewer: L },
       },
       {
         label: 'Lock baseline (draft → active)',
@@ -118,25 +102,25 @@ const CAPABILITIES: { section: string; rows: Capability[] }[] = [
       {
         label: 'Submit progress file to auditor queue',
         description: 'Clerk-only entry point. File parses server-side, goes through heuristic + LLM checks, then waits for auditor review.',
-        byRole: { super_admin: F, admin: F, pm: F, pc_reviewer: F, editor: F, clerk: L },
+        byRole: { super_admin: F, admin: F, pm: F, pc_reviewer: F, clerk: L },
       },
       {
         label: 'Direct-import progress file (bypass queue)',
-        description: 'Editor+ skip the queue and write directly to progress_records.',
-        byRole: { super_admin: F, admin: F, pm: F, pc_reviewer: F, editor: F },
+        description: 'PC reviewer+ skip the queue and write directly to progress_records.',
+        byRole: { super_admin: F, admin: F, pm: F, pc_reviewer: F },
       },
       {
         label: 'Review / approve / reject queued files',
         description: 'Auditor inbox at /upload-queue. Each approve commits to live data.',
-        byRole: { super_admin: F, admin: F, pm: F, pc_reviewer: F, editor: F },
+        byRole: { super_admin: F, admin: F, pm: F, pc_reviewer: F },
       },
       {
         label: 'Edit milestone values on a record',
-        byRole: { super_admin: F, admin: F, pm: F, pc_reviewer: F, editor: F },
+        byRole: { super_admin: F, admin: F, pm: F, pc_reviewer: F },
       },
       {
         label: 'View progress records',
-        byRole: { super_admin: F, admin: F, pm: F, pc_reviewer: F, editor: F, clerk: R, viewer: R },
+        byRole: { super_admin: F, admin: F, pm: F, pc_reviewer: F, clerk: R, viewer: R },
       },
     ],
   },
@@ -145,7 +129,7 @@ const CAPABILITIES: { section: string; rows: Capability[] }[] = [
     rows: [
       {
         label: 'Submit a Change Order',
-        byRole: { super_admin: F, admin: F, pm: F, pc_reviewer: F, editor: F },
+        byRole: { super_admin: F, admin: F, pm: F, pc_reviewer: F },
       },
       {
         label: 'PC review (forward / reject pending COs)',
@@ -162,11 +146,11 @@ const CAPABILITIES: { section: string; rows: Capability[] }[] = [
     rows: [
       {
         label: 'View Reports / Variance Analysis / Earned Value',
-        byRole: { super_admin: R, admin: R, pm: R, pc_reviewer: R, editor: R, clerk: R, viewer: R },
+        byRole: { super_admin: R, admin: R, pm: R, pc_reviewer: R, clerk: R, viewer: R },
       },
       {
         label: 'Export client-facing PDF / CSV from Reports + QMR',
-        byRole: { super_admin: F, admin: F, pm: F, pc_reviewer: F, editor: F, clerk: R, viewer: R },
+        byRole: { super_admin: F, admin: F, pm: F, pc_reviewer: F, clerk: R, viewer: R },
       },
       {
         label: 'View audit log',
@@ -176,9 +160,6 @@ const CAPABILITIES: { section: string; rows: Capability[] }[] = [
   },
 ];
 
-// Pure helper, not a component — returns the icon + title + className
-// for a given cell state. Named camelCase so React's component-naming
-// heuristics don't mistake it for a renderer.
 function cellMeta(cell: Cell | undefined): {
   icon: LucideIcon | null;
   title: string;

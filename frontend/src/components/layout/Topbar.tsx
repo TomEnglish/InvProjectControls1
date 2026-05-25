@@ -1,10 +1,11 @@
 import { useQuery } from '@tanstack/react-query';
 import { useMatches } from 'react-router-dom';
-import { Moon, Sun, LogOut } from 'lucide-react';
+import { Info, Moon, Sun, LogOut } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth';
 import { useProjectStore } from '@/stores/project';
+import { ProjectMetadataModal } from '@/components/projects/ProjectMetadataModal';
 
 type Project = {
   id: string;
@@ -23,6 +24,7 @@ export function Topbar() {
   const [theme, setTheme] = useState<'light' | 'dark'>(
     (document.documentElement.getAttribute('data-theme') as 'light' | 'dark') ?? 'light',
   );
+  const [metadataOpen, setMetadataOpen] = useState(false);
 
   const { data: projects } = useQuery({
     queryKey: ['projects'],
@@ -35,6 +37,8 @@ export function Topbar() {
       return data as Project[];
     },
   });
+
+  const currentProject = projects?.find((p) => p.id === currentProjectId);
 
   useEffect(() => {
     if (projects && projects.length > 0 && !currentProjectId) {
@@ -61,20 +65,33 @@ export function Topbar() {
       </div>
 
       <div className="flex items-center gap-2">
-        <select
-          aria-label="Current project"
-          className="is-form-select text-sm h-9 min-h-0 py-0"
-          value={currentProjectId ?? ''}
-          onChange={(e) => setCurrentProjectId(e.target.value || null)}
-          style={{ minHeight: '36px' }}
-        >
-          <option value="">— Select project —</option>
-          {projects?.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.project_code} — {p.name}
-            </option>
-          ))}
-        </select>
+        <div className="flex items-center gap-1">
+          <select
+            aria-label="Current project"
+            className="is-form-select text-sm h-9 min-h-0 py-0"
+            value={currentProjectId ?? ''}
+            onChange={(e) => setCurrentProjectId(e.target.value || null)}
+            style={{ minHeight: '36px' }}
+          >
+            <option value="">— Select project —</option>
+            {projects?.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.project_code} — {p.name}
+              </option>
+            ))}
+          </select>
+          {currentProject && (
+            <button
+              type="button"
+              aria-label={`View details for ${currentProject.project_code}`}
+              title={`${currentProject.project_code} — ${currentProject.name}`}
+              onClick={() => setMetadataOpen(true)}
+              className="inline-flex items-center justify-center w-9 h-9 rounded-md border border-[color:var(--color-line)] text-[color:var(--color-text-muted)] hover:text-[color:var(--color-primary)] hover:border-[color:var(--color-primary)] transition-colors"
+            >
+              <Info size={16} />
+            </button>
+          )}
+        </div>
 
         <button
           type="button"
@@ -102,6 +119,12 @@ export function Topbar() {
           <LogOut size={16} />
         </button>
       </div>
+
+      <ProjectMetadataModal
+        open={metadataOpen}
+        onClose={() => setMetadataOpen(false)}
+        projectId={currentProjectId}
+      />
     </header>
   );
 }

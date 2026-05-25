@@ -26,7 +26,6 @@ const ROLE_LABEL: Record<UserRole, string> = {
   admin: 'Controller',
   pm: 'PM',
   pc_reviewer: 'PC Reviewer',
-  editor: 'Editor',
   clerk: 'Clerk',
   viewer: 'Viewer',
 };

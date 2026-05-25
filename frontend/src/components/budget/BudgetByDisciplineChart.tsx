@@ -23,7 +23,7 @@ export function BudgetByDisciplineChart({ disciplines, approvedHrs, pendingHrs }
 
   const labels = disciplines.map((d) => d.display_name);
   const original = disciplines.map((d) => d.budget_hrs);
-  const current = disciplines.map((d) => d.budget_hrs + proRata(approvedHrs, d.budget_hrs));
+  const current = disciplines.map((d) => d.current_budget_hrs ?? d.budget_hrs + proRata(approvedHrs, d.budget_hrs));
   const forecast = disciplines.map(
     (d) =>
       d.budget_hrs + proRata(approvedHrs, d.budget_hrs) + proRata(pendingHrs, d.budget_hrs),

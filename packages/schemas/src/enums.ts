@@ -11,7 +11,7 @@ export const DisciplineCode = z.enum([
 ]);
 export type DisciplineCode = z.infer<typeof DisciplineCode>;
 
-export const UserRole = z.enum(['admin', 'pm', 'pc_reviewer', 'editor', 'viewer']);
+export const UserRole = z.enum(['super_admin', 'admin', 'pm', 'pc_reviewer', 'clerk', 'viewer']);
 export type UserRole = z.infer<typeof UserRole>;
 
 export const ProjectStatus = z.enum(['draft', 'active', 'locked', 'closed']);

@@ -10,9 +10,9 @@
  * Tests are grouped: setup, read paths, library mutations, audit-record
  * lifecycle, change-order workflow, cleanup. Destructive one-way RPCs
  * (project_lock_baseline, period_close, admin_set_user_role) are skipped
- * by default; pass `--include-destructive` to include `admin_set_user_role`
- * (the others are still skipped because they can't be reversed without a
- * fresh seed).
+ * by default; pass `--include-destructive` to run admin_set_user_role and
+ * project_lock_baseline (uses KIS-2026-002, a one-way draft → active flip).
+ * period_close is still skipped because it locks a real reporting week.
  *
  * Test data uses identifiers prefixed `SMOKE-` so it's easy to spot and
  * clean up by hand if anything goes sideways.
@@ -22,7 +22,9 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 const COA_TEST_CODE = 'SMOKE-1';
+const COA_FIXTURE_CODE = '08212';
 const PROJECT_CODE = 'KIS-2026-001';
+const BASELINE_TEST_PROJECT = 'KIS-2026-002';
 
 const ANSI = {
   reset: '\x1b[0m',
@@ -175,12 +177,12 @@ async function main() {
   );
 
   await step(
-    'fetch a COA code (202 — Carbon Steel Pipe 2"-6")',
+    'fetch a COA code (08212 — Carbon Steel Field Run Pipe 3" to 10")',
     async () => {
       const { data, error } = await sb
         .from('coa_codes')
         .select('id, code, pf_rate')
-        .eq('code', '202')
+        .eq('code', COA_FIXTURE_CODE)
         .single();
       if (error) throw new Error(error.message);
       coaSpec = { id: data.id, code: data.code, pf_rate: Number(data.pf_rate) };
@@ -338,10 +340,18 @@ async function main() {
 
   if (includeDestructive) {
     await step('admin_set_user_role (round-trip)', async () => {
-      // Find ourselves; toggle role to admin (already admin) — no-op but
-      // exercises the RPC path. This is the safest "destructive" test.
       const { data: u, error: uErr } = await sb.auth.getUser();
       if (uErr || !u?.user) throw new Error(uErr?.message ?? 'no auth user');
+      const { data: me, error: meErr } = await sb
+        .from('app_users')
+        .select('role')
+        .eq('id', u.user.id)
+        .single();
+      if (meErr) throw new Error(meErr.message);
+      if (me.role === 'super_admin') {
+        // super_admin cannot self-modify; the RPC guard is working as designed.
+        return;
+      }
       const { error } = await sb.rpc('admin_set_user_role', {
         p_user_id: u.user.id,
         p_new_role: 'admin',
@@ -349,11 +359,44 @@ async function main() {
       });
       if (error) throw new Error(error.message);
     });
+
+    await step('project_lock_baseline (draft → active)', async () => {
+      const { data: proj, error: pErr } = await sb
+        .from('projects')
+        .select('id, status, baseline_locked_at')
+        .eq('project_code', BASELINE_TEST_PROJECT)
+        .maybeSingle();
+      if (pErr) throw new Error(pErr.message);
+      if (!proj) throw new Error(`${BASELINE_TEST_PROJECT} not found — run seed:demo`);
+
+      if (proj.status === 'draft') {
+        const { data: baselineId, error } = await sb.rpc('project_lock_baseline', {
+          p_project_id: proj.id,
+        });
+        if (error) throw new Error(error.message);
+        if (!baselineId) throw new Error('expected baseline id from project_lock_baseline');
+      } else if (proj.status !== 'active') {
+        throw new Error(`expected draft or active before/after lock, got ${proj.status}`);
+      }
+
+      const { data: after, error: aErr } = await sb
+        .from('projects')
+        .select('status, baseline_locked_at')
+        .eq('id', proj.id)
+        .single();
+      if (aErr) throw new Error(aErr.message);
+      if (after.status !== 'active') {
+        throw new Error(`status should be active after lock, got ${after.status}`);
+      }
+      if (!after.baseline_locked_at) {
+        throw new Error('baseline_locked_at should be set after lock');
+      }
+    });
   } else {
     skip('admin_set_user_role', 'pass --include-destructive to run');
+    skip('project_lock_baseline', 'pass --include-destructive to run');
   }
-  skip('project_lock_baseline', 'one-way; needs a draft project');
-  skip('period_close', 'one-way; locks a real period');
+  skip('period_close', 'one-way; locks a real reporting week');
 
   // ─────────────────────────────────────────────────────────────────
   // 7. Cleanup — best-effort. Failures here don't fail the run since the

@@ -10,18 +10,18 @@
 
 begin;
 
-select plan(9);
+select plan(11);
 
--- assert_role compares ranks: viewer < clerk < editor < pc_reviewer < pm < admin < super_admin.
--- Reading these via current_user_role() requires a session, so we test the
--- comparison logic by simulating the ranks directly.
+-- assert_role compares ranks: viewer < clerk < pc_reviewer < pm < admin < super_admin.
 
--- Sanity: the user_role enum has all seven expected values.
--- 'clerk' added in 20260515000000_clerk_role_enum.sql (A20 Wave 1).
-select set_eq(
-  $$ select unnest(enum_range(null::projectcontrols.user_role))::text $$,
-  $$ values ('super_admin'), ('admin'), ('pm'), ('pc_reviewer'), ('editor'), ('clerk'), ('viewer') $$,
-  'user_role enum has the seven expected values'
+select ok(
+  (select count(*)::int from projectcontrols.app_users where role::text = 'editor') = 0,
+  'no app_users rows retain editor role after ELL-62 migration'
+);
+
+select ok(
+  (select count(*)::int from projectcontrols.project_members where project_role::text = 'editor') = 0,
+  'no project_members rows retain editor project_role after ELL-62 migration'
 );
 
 -- Function existence + ownership.

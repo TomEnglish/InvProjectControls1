@@ -66,17 +66,17 @@ test.describe('Authenticated app', () => {
 
   test('every sidebar route mounts without crashing', async ({ page }) => {
     const routes = [
-      { name: 'Project Setup', heading: /project setup/i },
-      { name: 'COA & Unit Rates', heading: /coa|cost code/i },
-      { name: 'Rules of Credit', heading: /rules of credit|roc/i },
-      { name: 'Budget & Baseline', heading: /budget/i },
-      { name: 'Progress & EV', heading: /progress/i },
-      { name: 'Change Mgmt', heading: /change/i },
-      { name: 'Reports', heading: /report/i },
+      { link: 'Project Setup', heading: 'Project Setup' },
+      { link: 'COA & Unit Rates', heading: 'COA & Unit Rates' },
+      { link: 'Rules of Credit (ROC)', heading: 'Rules of Credit (ROC)' },
+      { link: 'Budget & Baseline', heading: 'Budget & Baseline' },
+      { link: 'Progress', heading: 'Progress & Earned Value' },
+      { link: 'Change Mgmt', heading: 'Change Management' },
+      { link: 'Reports', heading: 'Reports & Analytics' },
     ];
     for (const r of routes) {
-      await page.getByRole('link', { name: r.name }).click();
-      await expect(page.getByRole('heading', { name: r.heading })).toBeVisible({
+      await page.getByRole('link', { name: r.link }).click();
+      await expect(page.getByRole('heading', { name: r.heading, level: 2 })).toBeVisible({
         timeout: 10_000,
       });
     }

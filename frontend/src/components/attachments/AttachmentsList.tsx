@@ -35,7 +35,7 @@ function formatSize(bytes: number | null): string {
 export function AttachmentsList({ entity, entityId, compact }: Props) {
   const qc = useQueryClient();
   const { data: me } = useCurrentUser();
-  const canUpload = hasRole(me?.role, 'editor');
+  const canUpload = hasRole(me?.role, 'pc_reviewer');
   const canDelete = hasRole(me?.role, 'pm');
   const fileInput = useRef<HTMLInputElement>(null);
 

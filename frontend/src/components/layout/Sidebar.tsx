@@ -59,7 +59,7 @@ const sections: NavSection[] = [
       // Auditor inbox — review queued clerk submissions. Hidden from
       // viewer/clerk; clerks see their own submissions inline on the
       // /progress/upload page instead.
-      { to: '/upload-queue', label: 'Upload Queue', icon: Inbox, minRole: 'editor' },
+      { to: '/upload-queue', label: 'Upload Queue', icon: Inbox, minRole: 'pc_reviewer' },
       { to: '/snapshots', label: 'Snapshots', icon: Camera },
       { to: '/changes', label: 'Change Mgmt', icon: ArrowLeftRight },
     ],

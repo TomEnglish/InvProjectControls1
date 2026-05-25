@@ -138,7 +138,7 @@ export function ClerkUploadPanel() {
               setFile(f);
             }}
             selected={file}
-            hint="CSV / XLSX — auditor uses the same parse as the editor direct path"
+            hint="CSV / XLSX — auditor uses the same parse as the reviewer direct path"
           />
         </Field>
 
@@ -181,27 +181,37 @@ export function ClerkUploadPanel() {
 
         {pendingWarnings && (
           <div className="is-toast is-toast-warn">
-            <strong>Possible discipline mismatch</strong>
-            <div className="mt-1 text-xs">
-              The file may not be a <strong>{declaredCraft}</strong> audit:
-            </div>
-            <ul className="mt-1 text-xs list-disc ml-5">
-              {pendingWarnings.disciplineMismatch.slice(0, 3).map((w, i) => (
-                <li key={`d${i}`}>
-                  Row {w.rowIndex + 1}: DISCIPLINE column says
-                  <code className="ml-1">{w.rowValue}</code>
-                </li>
-              ))}
-              {pendingWarnings.workTypeMismatch.slice(0, 3).map((w, i) => (
-                <li key={`w${i}`}>
-                  Row {w.rowIndex + 1}: WORK_TYPE{' '}
-                  <code className="mx-1">{w.code}</code> belongs to {w.codeCraft}
-                </li>
-              ))}
-              {pendingWarnings.disciplineMismatch.length +
-                pendingWarnings.workTypeMismatch.length >
-                6 && <li>…and more.</li>}
-            </ul>
+            <strong>Review before submitting</strong>
+            {pendingWarnings.filenameMismatch && (
+              <div className="mt-1 text-xs">{pendingWarnings.filenameMismatch}</div>
+            )}
+            {(pendingWarnings.disciplineMismatch.length > 0 ||
+              pendingWarnings.workTypeMismatch.length > 0) && (
+              <>
+                <div className="mt-1 text-xs">
+                  The file may not be a <strong>{declaredCraft}</strong> audit:
+                </div>
+                <ul className="mt-1 text-xs list-disc ml-5">
+                  {pendingWarnings.disciplineMismatch.slice(0, 3).map((w, i) => (
+                    <li key={`d${i}`}>
+                      Row {w.rowIndex + 1}: DISCIPLINE column says
+                      <code className="ml-1">{w.rowValue}</code>
+                    </li>
+                  ))}
+                  {pendingWarnings.workTypeMismatch.slice(0, 3).map((w, i) => (
+                    <li key={`w${i}`}>
+                      Row {w.rowIndex + 1}: WORK_TYPE{' '}
+                      <code className="mx-1">{w.code}</code> belongs to {w.codeCraft}
+                    </li>
+                  ))}
+                </ul>
+                {pendingWarnings.disciplineMismatch.length +
+                  pendingWarnings.workTypeMismatch.length >
+                  6 && (
+                  <div className="mt-1 text-xs">…and more row mismatches.</div>
+                )}
+              </>
+            )}
             <div className="mt-2 flex gap-2">
               <Button
                 type="button"

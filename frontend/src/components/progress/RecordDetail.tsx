@@ -37,7 +37,7 @@ export function RecordDetail({ record, projectId, onClose }: Props) {
     mutationFn: async (milestones: { seq: number; value: number }[]) => {
       // Upsert each milestone row directly. progress_record_milestones has a
       // unique (progress_record_id, seq) constraint that lets us upsert; the
-      // RLS policy `prm_editor_write` covers editor+ roles.
+      // RLS policy `prm_reviewer_write` covers pc_reviewer+ roles.
       const rows = milestones.map((m) => ({
         tenant_id: undefined as unknown as string, // server fills via current_tenant_id() default
         progress_record_id: record.id,
@@ -165,7 +165,11 @@ export function RecordDetail({ record, projectId, onClose }: Props) {
           </>
         }
       />
-      <div className="mb-4 grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+      <div className="mb-4 grid grid-cols-1 md:grid-cols-4 gap-4 text-sm">
+        <div>
+          <div className="is-stat-label">Account code</div>
+          <div className="font-mono font-semibold mt-1">{record.code ?? '—'}</div>
+        </div>
         <div>
           <div className="is-stat-label">Discipline</div>
           <div className="font-medium mt-1">{record.discipline_name ?? '—'}</div>
@@ -212,7 +216,10 @@ export function RecordDetail({ record, projectId, onClose }: Props) {
               <div className="text-[10px] uppercase tracking-wide font-bold text-[color:var(--color-text-muted)]">
                 M{seq}
               </div>
-              <div className="text-[11px] mt-0.5 h-8 overflow-hidden text-[color:var(--color-text)]">
+              <div
+                className="text-[11px] mt-0.5 h-8 overflow-hidden text-[color:var(--color-text)] is-tip cursor-help"
+                data-tip={meta.label}
+              >
                 {meta.label}
               </div>
               <div className="text-[10px] text-[color:var(--color-text-subtle)] font-mono">
@@ -334,7 +341,7 @@ function AuditDetails({ record }: { record: ProgressRow }) {
           <DetailGroup
             label="Schedule & Package"
             fields={[
-              ['COA code', record.code],
+              ['Account code', record.code],
               ['Schedule ID', record.sched_id],
               ['CWP', record.cwp],
               ['Test package', record.test_pkg],

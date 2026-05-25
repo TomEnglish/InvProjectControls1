@@ -20,10 +20,9 @@ type Props = { projectId: string };
 export function ProjectCoaPickerCard({ projectId }: Props) {
   const qc = useQueryClient();
   const { data: me } = useCurrentUser();
-  // A18 — auditors (pm role in our model) need to pick which COA codes are
-  // in scope for the project they own. This was admin-only before; the
-  // role matrix (app_review_todo item 17) explicitly admits auditors here.
-  const canEdit = hasRole(me?.role, 'pm');
+  // Sandra UAT #18 — auditors (pc_reviewer+) pick in-scope COA codes on
+  // Project Setup. Clerks never see this card's edit controls.
+  const canEdit = hasRole(me?.role, 'pc_reviewer');
   // A2 — per-project U/R (PF adjustment) editing is admin-only per
   // Sandra's tight scoping. The pencil button shows only for admins;
   // the RPC re-asserts on the server.

@@ -8,7 +8,7 @@
 // Body shape:
 //   { queueId, action: 'approve' | 'reject', rejectionReason? }
 //
-// Authorization: editor+. The state-transition RPC re-asserts role.
+// Authorization: pc_reviewer+. The state-transition RPC re-asserts role.
 
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 import {
@@ -29,7 +29,7 @@ function json(body: unknown, status = 200) {
   });
 }
 
-const ALLOWED_ROLES = new Set(['super_admin', 'admin', 'pm', 'pc_reviewer', 'editor']);
+const ALLOWED_ROLES = new Set(['super_admin', 'admin', 'pm', 'pc_reviewer']);
 
 type Payload = {
   queueId?: string;

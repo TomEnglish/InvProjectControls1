@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { Modal } from '@/components/ui/Modal';
@@ -21,6 +21,13 @@ const TYPES = [
 
 const UOMS = ['LF', 'CY', 'EA', 'TONS', 'SF', 'HR', 'LS'];
 
+type ReviewerRow = {
+  id: string;
+  email: string;
+  display_name: string | null;
+  role: string;
+};
+
 export function NewChangeOrderModal({ open, onClose, projectId }: Props) {
   const qc = useQueryClient();
 
@@ -38,6 +45,20 @@ export function NewChangeOrderModal({ open, onClose, projectId }: Props) {
     },
   });
 
+  const { data: reviewers } = useQuery({
+    queryKey: ['co-eligible-reviewers'] as const,
+    enabled: open,
+    queryFn: async (): Promise<ReviewerRow[]> => {
+      const { data, error } = await supabase
+        .from('app_users')
+        .select('id, email, display_name, role')
+        .in('role', ['pc_reviewer', 'pm', 'admin', 'super_admin'])
+        .order('email');
+      if (error) throw error;
+      return (data ?? []) as ReviewerRow[];
+    },
+  });
+
   const todayISO = new Date().toISOString().slice(0, 10);
   const [form, setForm] = useState({
     discipline_id: '',
@@ -48,12 +69,45 @@ export function NewChangeOrderModal({ open, onClose, projectId }: Props) {
     qty_change: 0,
     uom: 'EA',
     requested_by: '',
+    assigned_pc_reviewer_id: '',
+    assigned_pm_id: '',
   });
+
+  useEffect(() => {
+    if (!open || !form.discipline_id) return;
+    (async () => {
+      const { data } = await supabase
+        .from('project_co_reviewers')
+        .select('pc_reviewer_id, pm_id')
+        .eq('project_id', projectId)
+        .eq('discipline_id', form.discipline_id)
+        .maybeSingle();
+      if (data) {
+        setForm((prev) => ({
+          ...prev,
+          assigned_pc_reviewer_id: data.pc_reviewer_id ?? prev.assigned_pc_reviewer_id,
+          assigned_pm_id: data.pm_id ?? prev.assigned_pm_id,
+        }));
+      }
+    })();
+  }, [open, form.discipline_id, projectId]);
+
+  const pcReviewers = (reviewers ?? []).filter((r) =>
+    ['pc_reviewer', 'admin', 'super_admin'].includes(r.role),
+  );
+  const pms = (reviewers ?? []).filter((r) =>
+    ['pm', 'admin', 'super_admin'].includes(r.role),
+  );
 
   const submit = useMutation({
     mutationFn: async () => {
       const { data, error } = await supabase.rpc('co_submit', {
-        p_payload: { ...form, project_id: projectId },
+        p_payload: {
+          ...form,
+          project_id: projectId,
+          assigned_pc_reviewer_id: form.assigned_pc_reviewer_id || null,
+          assigned_pm_id: form.assigned_pm_id || null,
+        },
       });
       if (error) throw error;
       return data as string | null;
@@ -61,8 +115,6 @@ export function NewChangeOrderModal({ open, onClose, projectId }: Props) {
     onSuccess: (newCoId) => {
       qc.invalidateQueries({ queryKey: ['change-orders', projectId] });
       qc.invalidateQueries({ queryKey: ['budget-rollup', projectId] });
-      // Notify PC reviewers — fire and forget; failures must never block the
-      // submission workflow.
       if (newCoId) {
         void supabase.functions
           .invoke('co-notify', { body: { co_id: newCoId, event: 'submitted' } })
@@ -114,6 +166,34 @@ export function NewChangeOrderModal({ open, onClose, projectId }: Props) {
             {TYPES.map((t) => (
               <option key={t.v} value={t.v}>
                 {t.l}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field label="Assigned PC reviewer" hint="Routes the approval email to this auditor.">
+          <select
+            className={inputClass}
+            value={form.assigned_pc_reviewer_id}
+            onChange={(e) => setForm({ ...form, assigned_pc_reviewer_id: e.target.value })}
+          >
+            <option value="">— any PC reviewer —</option>
+            {pcReviewers.map((r) => (
+              <option key={r.id} value={r.id}>
+                {r.display_name ?? r.email}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field label="Assigned PM" hint="Routes the forward email after PC review.">
+          <select
+            className={inputClass}
+            value={form.assigned_pm_id}
+            onChange={(e) => setForm({ ...form, assigned_pm_id: e.target.value })}
+          >
+            <option value="">— any PM —</option>
+            {pms.map((r) => (
+              <option key={r.id} value={r.id}>
+                {r.display_name ?? r.email}
               </option>
             ))}
           </select>

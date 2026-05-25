@@ -18,6 +18,7 @@ import {
   DateRangeFilter,
   ALL_TIME_RANGE,
   isInRange,
+  snapshotFilterDate,
   type DateRange,
 } from '@/components/ui/DateRangeFilter';
 import { fmt } from '@/lib/format';
@@ -106,7 +107,7 @@ export function BudgetPage() {
     const list = (snapshots.data ?? [])
       .slice()
       .sort((a, b) => b.snapshot_date.localeCompare(a.snapshot_date));
-    return list.find((s) => isInRange(s.snapshot_date, dateRange)) ?? null;
+    return list.find((s) => isInRange(snapshotFilterDate(s), dateRange)) ?? null;
   }, [snapshots.data, dateRange]);
 
   // A10 — when an in-range snapshot exists and the user has narrowed the
@@ -171,27 +172,27 @@ export function BudgetPage() {
     const date = new Date().toISOString().slice(0, 10);
     const headers = [
       'Discipline',
-      'Original budget hrs',
-      'Current budget hrs',
-      'Forecast budget hrs',
-      'Earned hrs (snapshot)',
-      'Snapshot date',
+      'Budget hrs (current)',
+      'Earned hrs',
+      'Remaining hrs',
+      'Baseline budget hrs',
+      'Snapshot week ending',
     ];
     const rows = s.disciplines.map((d) => [
       d.display_name,
-      d.budget_hrs.toFixed(0),
-      d.budget_hrs.toFixed(0), // current==original at discipline level today
-      d.budget_hrs.toFixed(0),
+      d.current_budget_hrs.toFixed(0),
       d.earned_hrs.toFixed(0),
-      earnedSnapshot?.snapshot_date ?? 'live',
+      d.remaining_hrs.toFixed(0),
+      d.budget_hrs.toFixed(0),
+      earnedSnapshot ? snapshotFilterDate(earnedSnapshot) : 'live',
     ]);
     rows.push([
       'PROJECT TOTAL',
-      r.original_budget.toFixed(0),
       r.current_budget.toFixed(0),
-      r.forecast_budget.toFixed(0),
       s.total_earned_hrs.toFixed(0),
-      earnedSnapshot?.snapshot_date ?? 'live',
+      s.disciplines.reduce((acc, d) => acc + d.remaining_hrs, 0).toFixed(0),
+      r.original_budget.toFixed(0),
+      earnedSnapshot ? snapshotFilterDate(earnedSnapshot) : 'live',
     ]);
     downloadCsv(`budget-${date}-${dateRange.label.replace(/\s+/g, '-').toLowerCase()}.csv`, headers, rows);
   };
@@ -200,12 +201,12 @@ export function BudgetPage() {
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <div className="flex items-center gap-2 flex-wrap">
-          <span className="is-eyebrow">Reporting period</span>
+          <span className="is-eyebrow">Week ending</span>
           <DateRangeFilter value={dateRange} onChange={setDateRange} />
           {rangeIsFiltered && earnedSnapshot && (
             <span className="text-xs text-[color:var(--color-text-muted)]">
-              Chart + disciplines from snapshot{' '}
-              <span className="font-mono">{earnedSnapshot.snapshot_date}</span>
+              Chart + disciplines from week ending{' '}
+              <span className="font-mono">{snapshotFilterDate(earnedSnapshot)}</span>
               {' — '}
               {earnedSnapshot.label}
             </span>
@@ -297,6 +298,59 @@ export function BudgetPage() {
             onLock={() => setLockModalOpen(true)}
           />
           <ThreeBudgetPrimer />
+        </div>
+      </div>
+
+      <div className="is-surface overflow-hidden">
+        <div className="px-6 py-4 border-b border-[color:var(--color-line)]">
+          <h3 className="text-sm font-semibold">Budget by discipline</h3>
+          <p className="text-xs text-[color:var(--color-text-muted)] mt-0.5">
+            Current budget includes approved change orders. Earned and remaining respect the over-budget cap until scope expands.
+          </p>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="is-table">
+            <thead>
+              <tr>
+                <th>Discipline</th>
+                <th className="text-right">Budget hrs</th>
+                <th className="text-right">Earned hrs</th>
+                <th className="text-right">Remaining hrs</th>
+                <th className="text-right">Records</th>
+              </tr>
+            </thead>
+            <tbody>
+              {s.disciplines.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="text-center text-[color:var(--color-text-muted)] py-8">
+                    No active disciplines yet.
+                  </td>
+                </tr>
+              )}
+              {s.disciplines.map((d) => (
+                <tr key={d.discipline_id}>
+                  <td className="font-semibold">{d.display_name}</td>
+                  <td className="text-right font-mono">{fmt.int(d.current_budget_hrs)}</td>
+                  <td className="text-right font-mono">{fmt.int(d.earned_hrs)}</td>
+                  <td className="text-right font-mono">{fmt.int(d.remaining_hrs)}</td>
+                  <td className="text-right font-mono">{d.records}</td>
+                </tr>
+              ))}
+              {s.disciplines.length > 0 && (
+                <tr style={{ background: 'var(--color-raised)' }}>
+                  <td className="font-bold">Project total</td>
+                  <td className="text-right font-mono font-bold">{fmt.int(r.current_budget)}</td>
+                  <td className="text-right font-mono font-bold">{fmt.int(s.total_earned_hrs)}</td>
+                  <td className="text-right font-mono font-bold">
+                    {fmt.int(s.disciplines.reduce((acc, d) => acc + d.remaining_hrs, 0))}
+                  </td>
+                  <td className="text-right font-mono font-bold">
+                    {s.disciplines.reduce((acc, d) => acc + d.records, 0)}
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
 

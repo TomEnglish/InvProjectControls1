@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Download, FileBarChart, X } from 'lucide-react';
+import { Download, FileBarChart } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useProjectStore } from '@/stores/project';
 import {
@@ -15,7 +15,7 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { fmt } from '@/lib/format';
 import { downloadCsv } from '@/lib/export';
-import { FilterDropdown } from '@/components/progress/FilterDropdown';
+import { QmrFilterPanel } from '@/components/qmr/QmrFilterPanel';
 
 // Per-craft, per-code rollup matching the column layout of Sandra's
 // 9999.pdf QMR (Quantity Work-Hour Summary Report). Auto-calculated
@@ -487,7 +487,7 @@ export function QmrPage() {
       : new Date().toLocaleDateString();
 
   return (
-    <div className="space-y-4">
+    <div className="is-qmr-page space-y-4">
       {/* Wave E — print-only header so the PDF carries its own context
           (Sandra's 9999.pdf style). Hidden on screen. */}
       <div className="is-print-only is-print-header">
@@ -514,10 +514,9 @@ export function QmrPage() {
             <h2 className="text-base font-semibold">Per-craft progress rollup</h2>
             <p className="text-xs text-[color:var(--color-text-muted)] mt-1 max-w-2xl">
               Auto-calculated from active progress records grouped by COA code.
-              % Complete is hours-weighted (Σ Earned ÷ Σ Budget). Cur U/R is
-              the planning rate from the COA library; Act/Ern U/R is the
-              productivity rate (Spent ÷ Earned). Subcontract spent hours
-              are not included.
+              % Complete is hours-weighted (Σ Earned ÷ Σ Budget). Use the side
+              panel to toggle crafts and account codes. Cur U/R and Act/Ern U/R
+              are internal-only — stripped from PDF and CSV exports.
             </p>
           </div>
           <div className="flex gap-2">
@@ -535,121 +534,120 @@ export function QmrPage() {
             </Button>
           </div>
         </div>
-
-        {/* A8 — craft + description filters. Empty selection = show all. */}
-        {allCrafts.length > 0 && (
-          <div className="mt-4 flex items-center gap-2 flex-wrap">
-            <span className="is-eyebrow">Filters</span>
-            <FilterDropdown
-              label="Craft"
-              options={craftOptions}
-              selected={craftFilter}
-              onChange={setCraftFilter}
-            />
-            <FilterDropdown
-              label="Description"
-              options={descriptionOptions}
-              selected={descriptionFilter}
-              onChange={setDescriptionFilter}
-            />
-            {filtersActive && (
-              <Button variant="ghost" size="sm" onClick={clearFilters}>
-                <X size={14} /> Clear filters
-              </Button>
-            )}
-            {filtersActive && (
-              <span className="text-xs text-[color:var(--color-text-muted)]">
-                Showing {crafts.length} of {allCrafts.length} craft
-                {allCrafts.length === 1 ? '' : 's'}
-              </span>
-            )}
-          </div>
-        )}
       </Card>
 
-      {crafts.length === 0 ? (
+      {allCrafts.length === 0 ? (
         <div className="is-surface is-empty">
           <div className="is-empty-icon">
             <FileBarChart size={28} />
           </div>
-          <div className="is-empty-title">
-            {filtersActive ? 'No rows match the current filters' : 'No QMR data yet'}
-          </div>
+          <div className="is-empty-title">No QMR data yet</div>
           <p className="is-empty-caption">
-            {filtersActive
-              ? 'Loosen the craft or description filter above, or clear them entirely to see every code.'
-              : 'Once progress records are tagged with COA codes (via upload or the New Record modal) they\'ll roll up here automatically. Records with unrecognised codes are dropped — fix the code or add it on the COA page to include them.'}
+            Once progress records are tagged with COA codes (via upload or the New Record modal)
+            they&apos;ll roll up here automatically. Records with unrecognised codes are dropped —
+            fix the code or add it on the COA page to include them.
           </p>
         </div>
       ) : (
-        <div className="is-surface overflow-hidden">
-          <div style={{ overflow: 'auto' }} className="is-qmr-scroll">
-            <table className="is-table is-qmr-table" style={{ width: '100%' }}>
-              <thead>
-                <tr>
-                  <th style={{ minWidth: 80 }}>Code</th>
-                  <th>Description</th>
-                  <th>UM</th>
-                  <th style={{ textAlign: 'right' }}>% Cmp</th>
-                  <th style={{ textAlign: 'right' }}>Budget Qty</th>
-                  <th style={{ textAlign: 'right' }}>Earned Qty</th>
-                  <th style={{ textAlign: 'right' }}>Installed Qty</th>
-                  <th style={{ textAlign: 'right' }}>Rem Qty</th>
-                  <th style={{ textAlign: 'right' }}>Budget Hrs</th>
-                  <th style={{ textAlign: 'right' }}>Spent Hrs</th>
-                  <th style={{ textAlign: 'right' }}>Earned Hrs</th>
-                  <th style={{ textAlign: 'right' }}>Rem Hrs</th>
-                  <th style={{ textAlign: 'right' }}>Cur U/R</th>
-                  <th style={{ textAlign: 'right' }}>Act/Ern U/R</th>
-                </tr>
-              </thead>
-              <tbody>
-                {crafts.map((craft) => (
-                  <CraftBlock key={craft.prime} craft={craft} />
-                ))}
-                <tr style={{ background: 'var(--color-primary-soft)' }}>
-                  <td className="font-bold" colSpan={3}>
-                    PROJECT TOTAL
-                  </td>
-                  <td className="text-right font-mono font-bold">{grandPct.toFixed(1)}%</td>
-                  <td className="text-right font-mono font-bold">
-                    {fmt.int(grandTotals.budget_qty)}
-                  </td>
-                  <td className="text-right font-mono font-bold">
-                    {fmt.int(grandTotals.earned_qty)}
-                  </td>
-                  <td className="text-right font-mono font-bold">
-                    {fmt.int(grandTotals.installed_qty)}
-                  </td>
-                  <td className="text-right font-mono font-bold">
-                    {fmt.int(Math.max(0, grandTotals.budget_qty - grandTotals.earned_qty))}
-                  </td>
-                  <td className="text-right font-mono font-bold">
-                    {fmt.int(grandTotals.budget_hrs)}
-                  </td>
-                  <td className="text-right font-mono font-bold">
-                    {fmt.int(grandTotals.spent_hrs)}
-                  </td>
-                  <td className="text-right font-mono font-bold">
-                    {fmt.int(grandTotals.earned_hrs)}
-                  </td>
-                  <td className="text-right font-mono font-bold">
-                    {fmt.int(Math.max(0, grandTotals.budget_hrs - grandTotals.earned_hrs))}
-                  </td>
-                  <td className="text-right font-mono font-bold">
-                    {grandTotals.budget_qty > 0
-                      ? (grandTotals.budget_hrs / grandTotals.budget_qty).toFixed(2)
-                      : '—'}
-                  </td>
-                  <td className="text-right font-mono font-bold">
-                    {grandTotals.earned_hrs > 0
-                      ? (grandTotals.spent_hrs / grandTotals.earned_hrs).toFixed(2)
-                      : '—'}
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
+        <div className="flex gap-4 items-start">
+          {crafts.length === 0 ? (
+            <div className="is-surface is-empty flex-1 min-w-0">
+              <div className="is-empty-icon">
+                <FileBarChart size={28} />
+              </div>
+              <div className="is-empty-title">No rows match the current filters</div>
+              <p className="is-empty-caption">
+                Loosen the craft or description checkboxes on the right, or clear them entirely.
+              </p>
+            </div>
+          ) : (
+            <div className="is-surface overflow-hidden flex-1 min-w-0">
+              <div style={{ overflow: 'auto' }} className="is-qmr-scroll">
+                <table className="is-table is-qmr-table" style={{ width: '100%' }}>
+                  <thead>
+                    <tr>
+                      <th style={{ minWidth: 80 }}>Code</th>
+                      <th>Description</th>
+                      <th>UM</th>
+                      <th style={{ textAlign: 'right' }}>% Cmp</th>
+                      <th style={{ textAlign: 'right' }}>Budget Qty</th>
+                      <th style={{ textAlign: 'right' }}>Earned Qty</th>
+                      <th style={{ textAlign: 'right' }}>Installed Qty</th>
+                      <th style={{ textAlign: 'right' }}>Rem Qty</th>
+                      <th style={{ textAlign: 'right' }}>Budget Hrs</th>
+                      <th style={{ textAlign: 'right' }}>Spent Hrs</th>
+                      <th style={{ textAlign: 'right' }}>Earned Hrs</th>
+                      <th style={{ textAlign: 'right' }}>Rem Hrs</th>
+                      <th className="is-internal-col" style={{ textAlign: 'right' }}>
+                        Cur U/R
+                      </th>
+                      <th className="is-internal-col" style={{ textAlign: 'right' }}>
+                        Act/Ern U/R
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {crafts.map((craft) => (
+                      <CraftBlock key={craft.prime} craft={craft} />
+                    ))}
+                    <tr style={{ background: 'var(--color-primary-soft)' }}>
+                      <td className="font-bold" colSpan={3}>
+                        PROJECT TOTAL
+                      </td>
+                      <td className="text-right font-mono font-bold">{grandPct.toFixed(1)}%</td>
+                      <td className="text-right font-mono font-bold">
+                        {fmt.int(grandTotals.budget_qty)}
+                      </td>
+                      <td className="text-right font-mono font-bold">
+                        {fmt.int(grandTotals.earned_qty)}
+                      </td>
+                      <td className="text-right font-mono font-bold">
+                        {fmt.int(grandTotals.installed_qty)}
+                      </td>
+                      <td className="text-right font-mono font-bold">
+                        {fmt.int(Math.max(0, grandTotals.budget_qty - grandTotals.earned_qty))}
+                      </td>
+                      <td className="text-right font-mono font-bold">
+                        {fmt.int(grandTotals.budget_hrs)}
+                      </td>
+                      <td className="text-right font-mono font-bold">
+                        {fmt.int(grandTotals.spent_hrs)}
+                      </td>
+                      <td className="text-right font-mono font-bold">
+                        {fmt.int(grandTotals.earned_hrs)}
+                      </td>
+                      <td className="text-right font-mono font-bold">
+                        {fmt.int(Math.max(0, grandTotals.budget_hrs - grandTotals.earned_hrs))}
+                      </td>
+                      <td className="is-internal-col text-right font-mono font-bold">
+                        {grandTotals.budget_qty > 0
+                          ? (grandTotals.budget_hrs / grandTotals.budget_qty).toFixed(2)
+                          : '—'}
+                      </td>
+                      <td className="is-internal-col text-right font-mono font-bold">
+                        {grandTotals.earned_hrs > 0
+                          ? (grandTotals.spent_hrs / grandTotals.earned_hrs).toFixed(2)
+                          : '—'}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          <QmrFilterPanel
+            craftOptions={craftOptions}
+            descriptionOptions={descriptionOptions}
+            craftFilter={craftFilter}
+            descriptionFilter={descriptionFilter}
+            onCraftChange={setCraftFilter}
+            onDescriptionChange={setDescriptionFilter}
+            onClear={clearFilters}
+            filtersActive={filtersActive}
+            visibleCraftCount={crafts.length}
+            totalCraftCount={allCrafts.length}
+          />
         </div>
       )}
 
@@ -694,10 +692,10 @@ function CraftBlock({ craft }: { craft: QmrCraft }) {
             <td className="text-right font-mono">{fmt.int(leaf.spent_hrs)}</td>
             <td className="text-right font-mono">{fmt.int(leaf.earned_hrs)}</td>
             <td className="text-right font-mono">{fmt.int(remHrs)}</td>
-            <td className="text-right font-mono">
+            <td className="is-internal-col text-right font-mono">
               {curUr != null ? curUr.toFixed(2) : '—'}
             </td>
-            <td className="text-right font-mono">
+            <td className="is-internal-col text-right font-mono">
               {actErnUr != null ? actErnUr.toFixed(2) : '—'}
             </td>
           </tr>
@@ -742,10 +740,10 @@ function CraftBlock({ craft }: { craft: QmrCraft }) {
               {fmt.int(craft.totals.earned_hrs)}
             </td>
             <td className="text-right font-mono font-semibold">{fmt.int(remHrs)}</td>
-            <td className="text-right font-mono font-semibold">
+            <td className="is-internal-col text-right font-mono font-semibold">
               {curUr != null ? curUr.toFixed(2) : '—'}
             </td>
-            <td className="text-right font-mono font-semibold">
+            <td className="is-internal-col text-right font-mono font-semibold">
               {actErnUr != null ? actErnUr.toFixed(2) : '—'}
             </td>
           </tr>

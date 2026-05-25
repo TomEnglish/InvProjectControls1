@@ -3,13 +3,8 @@ import { VarianceCell } from '@/components/ui/VarianceCell';
 import type { DisciplineRollup, ProjectSummary } from '@/lib/queries';
 
 /**
- * Per-discipline variance: BCWP / ACWP / CV / CPI / EAC. Bottom row totals
- * the project, including SPI from the period rollup.
- *
- * BCWS at the discipline level requires time-phased planning data we don't
- * have yet (only the project-level S-curve has BCWS), so SV/SPI are
- * project-level only. When BCWS gets per-discipline-period coverage, add
- * the columns here.
+ * Client-facing variance table: Budget / Earned / Actual / Buffer / CPI / EAC.
+ * Raw signed CV is internal-only — buffer shows max(0, earned − actual).
  */
 export function VarianceAnalysisTable({
   disciplines,
@@ -30,15 +25,18 @@ export function VarianceAnalysisTable({
 
   const rows = disciplines.map((d) => {
     const cv = d.earned_hrs - d.actual_hrs;
+    const buffer = Math.max(0, cv);
     const cpi = d.actual_hrs > 0 ? d.earned_hrs / d.actual_hrs : null;
-    const eac = cpi && cpi > 0 ? d.budget_hrs / cpi : null;
-    return { d, cv, cpi, eac };
+    const eac = cpi && cpi > 0 ? d.current_budget_hrs / cpi : null;
+    return { d, cv, buffer, cpi, eac };
   });
 
   const totalBudget = summary.total_budget_hrs;
   const totalEarned = summary.total_earned_hrs;
   const totalActual = summary.total_actual_hrs;
   const totalCv = totalEarned - totalActual;
+  const totalBuffer = Math.max(0, totalCv);
+  const totalUnbudgeted = Math.max(0, totalActual - totalEarned);
   const totalSv = totalEarned - projectBcws;
   const totalCpi = summary.cpi;
   const totalSpi = summary.spi;
@@ -53,60 +51,58 @@ export function VarianceAnalysisTable({
             <th
               className="is-tip"
               style={{ textAlign: 'right', cursor: 'help' }}
-              data-tip="Budget hours — total planned work for the discipline."
+              data-tip="Current budget hours for the discipline (baseline + approved change orders)."
             >
               Budget
             </th>
             <th
               className="is-tip"
               style={{ textAlign: 'right', cursor: 'help' }}
-              data-tip="Budgeted Cost of Work Performed — earned hours, computed from milestone progress × ROC weights × budget hours."
+              data-tip="Earned hours from milestone progress × budget."
             >
-              BCWP
+              Earned
             </th>
             <th
               className="is-tip"
               style={{ textAlign: 'right', cursor: 'help' }}
-              data-tip="Actual Cost of Work Performed — actual hours booked against the discipline."
+              data-tip="Actual hours booked against the discipline."
             >
-              ACWP
+              Actual
             </th>
             <th
               className="is-tip"
               style={{ textAlign: 'right', cursor: 'help' }}
-              data-tip="Cost Variance = BCWP − ACWP. Positive = under budget on work done."
+              data-tip="Buffer remaining = max(0, Earned − Actual). Never shown negative on client reports."
             >
-              CV
+              Buffer
             </th>
             <th
               className="is-tip"
               style={{ textAlign: 'right', cursor: 'help' }}
-              data-tip="Cost Performance Index = BCWP ÷ ACWP. ≥1 favourable; <1 over budget."
+              data-tip="Cost Performance Index = Earned ÷ Actual. Target ≥ 1.00."
             >
               CPI
             </th>
             <th
               className="is-tip"
               style={{ textAlign: 'right', cursor: 'help' }}
-              data-tip="Estimate at Completion = Budget ÷ CPI. Projected total hours at finish if the current cost trend continues."
+              data-tip="Forecast at Completion = Budget ÷ CPI."
             >
-              EAC
+              FAC
             </th>
           </tr>
         </thead>
         <tbody>
-          {rows.map(({ d, cv, cpi, eac }) => (
+          {rows.map(({ d, buffer, cpi, eac }) => (
             <tr key={d.discipline_id}>
               <td className="font-semibold">{d.display_name}</td>
-              <td className="text-right font-mono">{fmt.int(d.budget_hrs)}</td>
+              <td className="text-right font-mono">{fmt.int(d.current_budget_hrs)}</td>
               <td className="text-right font-mono">{fmt.int(d.earned_hrs)}</td>
               <td className="text-right font-mono">{fmt.int(d.actual_hrs)}</td>
-              <td className="text-right font-mono">
-                <VarianceCell value={cv} format={(v) => `${v >= 0 ? '+' : ''}${fmt.int(v)}`} />
-              </td>
+              <td className="text-right font-mono">{fmt.int(buffer)}</td>
               <td className="text-right font-mono">
                 {cpi != null ? (
-                  <VarianceCell value={cpi} neutral={1} format={(v) => v.toFixed(3)} />
+                  <VarianceCell value={cpi} neutral={1} variant="ratio" format={(v) => v.toFixed(3)} />
                 ) : (
                   '—'
                 )}
@@ -119,12 +115,10 @@ export function VarianceAnalysisTable({
             <td className="text-right font-mono font-bold">{fmt.int(totalBudget)}</td>
             <td className="text-right font-mono font-bold">{fmt.int(totalEarned)}</td>
             <td className="text-right font-mono font-bold">{fmt.int(totalActual)}</td>
-            <td className="text-right font-mono font-bold">
-              <VarianceCell value={totalCv} format={(v) => `${v >= 0 ? '+' : ''}${fmt.int(v)}`} />
-            </td>
+            <td className="text-right font-mono font-bold">{fmt.int(totalBuffer)}</td>
             <td className="text-right font-mono font-bold">
               {totalCpi != null ? (
-                <VarianceCell value={totalCpi} neutral={1} format={(v) => v.toFixed(3)} />
+                <VarianceCell value={totalCpi} neutral={1} variant="ratio" format={(v) => v.toFixed(3)} />
               ) : (
                 '—'
               )}
@@ -134,18 +128,27 @@ export function VarianceAnalysisTable({
           {projectBcws > 0 && (
             <tr style={{ background: 'var(--color-raised)' }}>
               <td className="font-semibold text-[color:var(--color-text-muted)]" colSpan={4}>
-                Schedule variance (BCWS = {fmt.int(projectBcws)})
+                Schedule variance (planned = {fmt.int(projectBcws)} hrs)
               </td>
-              <td className="text-right font-mono">
-                <VarianceCell value={totalSv} format={(v) => `${v >= 0 ? '+' : ''}${fmt.int(v)}`} />
-              </td>
-              <td className="text-right font-mono" colSpan={2}>
-                SPI{' '}
+              <td className="text-right font-mono" colSpan={3}>
+                {totalSv >= 0
+                  ? `${fmt.int(totalSv)} hrs ahead · SPI `
+                  : `${fmt.int(Math.abs(totalSv))} hrs behind · SPI `}
                 {totalSpi != null ? (
-                  <VarianceCell value={totalSpi} neutral={1} format={(v) => v.toFixed(3)} />
+                  <VarianceCell value={totalSpi} neutral={1} variant="ratio" format={(v) => v.toFixed(3)} />
                 ) : (
                   '—'
                 )}
+              </td>
+            </tr>
+          )}
+          {totalUnbudgeted > 0 && (
+            <tr className="is-internal-only" style={{ background: 'var(--color-raised)' }}>
+              <td className="font-semibold text-[color:var(--color-text-muted)]" colSpan={4}>
+                Internal — unbudgeted actuals
+              </td>
+              <td className="text-right font-mono font-semibold" colSpan={3}>
+                {fmt.int(totalUnbudgeted)} hrs (actual exceeds earned budget — CO required)
               </td>
             </tr>
           )}
