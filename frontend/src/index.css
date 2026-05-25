@@ -558,16 +558,46 @@ a:hover { color: var(--color-primary-hover); }
 .is-qmr-table {
   width: max-content;
   min-width: 100%;
+  table-layout: auto;
 }
-.is-qmr-col-code { min-width: 72px; white-space: nowrap; }
-.is-qmr-col-desc { min-width: 160px; max-width: 280px; }
-.is-qmr-col-um { min-width: 44px; white-space: nowrap; }
-.is-qmr-col-num { min-width: 72px; white-space: nowrap; }
+.is-qmr-table thead th {
+  font-size: 10px;
+  letter-spacing: 0.35px;
+  padding: 5px 6px;
+  white-space: nowrap;
+  line-height: 1.2;
+}
+.is-qmr-table tbody td {
+  font-size: 12px;
+  padding: 5px 6px;
+  line-height: 1.25;
+  vertical-align: top;
+}
+.is-qmr-table tbody tr.is-qmr-craft-row td {
+  font-size: 10px;
+  letter-spacing: 0.4px;
+  padding: 4px 6px;
+}
+.is-qmr-col-code { min-width: 52px; white-space: nowrap; }
+.is-qmr-col-desc {
+  min-width: 100px;
+  max-width: 180px;
+  font-size: 11px;
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.is-qmr-col-um { min-width: 32px; white-space: nowrap; }
+.is-qmr-col-num {
+  min-width: 52px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
 .is-qmr-scroll-expanded {
   overflow: auto;
   max-height: min(75vh, 820px);
 }
-.is-qmr-expanded .is-qmr-table { min-width: 1320px; }
+.is-qmr-expanded .is-qmr-table { min-width: 1080px; }
 
 /* Print stylesheet — strip chrome, force black-on-white */
 @media print {
@@ -646,10 +676,11 @@ a:hover { color: var(--color-primary-hover); }
   /* Wave E — QMR print layout. Sandra's 9999.pdf is landscape with a
      dense table; force landscape and shrink the type so the table fits
      without horizontal scroll on a single sheet. */
-  .is-qmr-table { font-size: 7pt !important; width: 100% !important; min-width: 0 !important; }
+  .is-qmr-table { font-size: 6.5pt !important; width: 100% !important; min-width: 0 !important; }
   .is-qmr-table th, .is-qmr-table td {
-    padding: 2pt 3pt !important;
+    padding: 1.5pt 2.5pt !important;
     white-space: nowrap;
+    line-height: 1.15 !important;
   }
   .is-qmr-col-desc {
     white-space: normal !important;

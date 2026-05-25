@@ -24,25 +24,25 @@ export function QmrTable({ crafts, grandTotals, grandPct, scrollClassName = '' }
               % Cmp
             </th>
             <th className="is-qmr-col-num" style={{ textAlign: 'right' }}>
-              Budget Qty
+              Bdgt Qty
             </th>
             <th className="is-qmr-col-num" style={{ textAlign: 'right' }}>
-              Earned Qty
+              Ern Qty
             </th>
             <th className="is-qmr-col-num" style={{ textAlign: 'right' }}>
-              Installed Qty
+              Inst Qty
             </th>
             <th className="is-qmr-col-num" style={{ textAlign: 'right' }}>
               Rem Qty
             </th>
             <th className="is-qmr-col-num" style={{ textAlign: 'right' }}>
-              Budget Hrs
+              Bdgt Hrs
             </th>
             <th className="is-qmr-col-num" style={{ textAlign: 'right' }}>
-              Spent Hrs
+              Spent
             </th>
             <th className="is-qmr-col-num" style={{ textAlign: 'right' }}>
-              Earned Hrs
+              Ern Hrs
             </th>
             <th className="is-qmr-col-num" style={{ textAlign: 'right' }}>
               Rem Hrs
@@ -96,8 +96,8 @@ export function QmrTable({ crafts, grandTotals, grandPct, scrollClassName = '' }
 function CraftBlock({ craft }: { craft: QmrCraft }) {
   return (
     <>
-      <tr style={{ background: 'var(--color-raised)' }}>
-        <td className="font-bold uppercase tracking-wide text-[11px]" colSpan={COL_COUNT}>
+      <tr className="is-qmr-craft-row" style={{ background: 'var(--color-raised)' }}>
+        <td className="font-bold uppercase" colSpan={COL_COUNT}>
           {craft.prime} {craft.display_name}
         </td>
       </tr>
