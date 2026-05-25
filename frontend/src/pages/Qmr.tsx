@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Download, FileBarChart } from 'lucide-react';
+import { Download, FileBarChart, Maximize2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useProjectStore } from '@/stores/project';
 import {
@@ -13,9 +13,11 @@ import {
 } from '@/lib/queries';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
-import { fmt } from '@/lib/format';
 import { downloadCsv } from '@/lib/export';
+import type { QmrCraft, QmrLeaf, QmrTotals } from '@/lib/qmrTypes';
 import { QmrFilterPanel } from '@/components/qmr/QmrFilterPanel';
+import { QmrTable } from '@/components/qmr/QmrTable';
+import { Modal } from '@/components/ui/Modal';
 
 // Per-craft, per-code rollup matching the column layout of Sandra's
 // 9999.pdf QMR (Quantity Work-Hour Summary Report). Auto-calculated
@@ -28,46 +30,6 @@ import { QmrFilterPanel } from '@/components/qmr/QmrFilterPanel';
 // plus two productivity ratios (Cur U/R and Act/Ern U/R). The period
 // delta machinery is removed; it can come back as a separate report
 // if needed.
-
-type QmrLeaf = {
-  code: string;
-  description: string;
-  uom: string;
-  /** Tenant pf_rate for the "Cur U/R" column. */
-  pf_rate: number;
-  /** Budget quantity (Curr Est Qty in Sandra's column language). */
-  budget_qty: number;
-  /** Earned quantity = Σ budget_qty × percent_complete (BCWP qty). */
-  earned_qty: number;
-  /** Installed quantity = Σ actual_qty (what's physically in place). */
-  installed_qty: number;
-  /** Budget hours (Curr Est Hrs). */
-  budget_hrs: number;
-  /** Spent hours = Σ actual_hrs (timesheet). */
-  spent_hrs: number;
-  /** Earned hours = Σ budget_hrs × percent_complete (BCWP). */
-  earned_hrs: number;
-  percent_complete: number;
-  record_count: number;
-};
-
-type QmrTotals = {
-  budget_qty: number;
-  earned_qty: number;
-  installed_qty: number;
-  budget_hrs: number;
-  spent_hrs: number;
-  earned_hrs: number;
-  percent_complete: number;
-  record_count: number;
-};
-
-type QmrCraft = {
-  prime: string;
-  display_name: string;
-  leaves: QmrLeaf[];
-  totals: QmrTotals;
-};
 
 const PRIME_DISPLAY: Record<string, string> = {
   '01': 'Sitework',
@@ -222,6 +184,7 @@ export function QmrPage() {
   // labels still surface the description so the user can scan by name.
   const [craftFilter, setCraftFilter] = useState<Set<string>>(() => new Set());
   const [descriptionFilter, setDescriptionFilter] = useState<Set<string>>(() => new Set());
+  const [tableExpanded, setTableExpanded] = useState(false);
 
   // Reset filters when the user switches projects — the previous project's
   // craft codes don't match the new one's, so leaving filters set would
@@ -515,17 +478,27 @@ export function QmrPage() {
             <p className="text-xs text-[color:var(--color-text-muted)] mt-1 max-w-2xl">
               Auto-calculated from active progress records grouped by COA code.
               % Complete is hours-weighted (Σ Earned ÷ Σ Budget). Use the side
-              panel to toggle crafts and account codes. Cur U/R and Act/Ern U/R
-              are internal-only — stripped from PDF and CSV exports.
+              panel to toggle crafts and account codes. Scroll horizontally or
+              open the full table view for all columns. PDF includes every column
+              in the table; CSV export omits Cur U/R and Act/Ern U/R.
             </p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
             <Button
               variant="outline"
               size="sm"
-              disabled={project.isLoading}
+              disabled={crafts.length === 0}
+              onClick={() => setTableExpanded(true)}
+              title="Open the QMR table in a wide scrollable window with all columns visible."
+            >
+              <Maximize2 size={14} /> Full table
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={project.isLoading || crafts.length === 0}
               onClick={() => window.print()}
-              title="Opens the browser print dialog. Pick 'Save as PDF' to get the client-facing report."
+              title="Landscape PDF with all table columns, including Cur U/R and Act/Ern U/R."
             >
               <Download size={14} /> Export PDF
             </Button>
@@ -561,78 +534,8 @@ export function QmrPage() {
               </p>
             </div>
           ) : (
-            <div className="is-surface overflow-hidden flex-1 min-w-0">
-              <div style={{ overflow: 'auto' }} className="is-qmr-scroll">
-                <table className="is-table is-qmr-table" style={{ width: '100%' }}>
-                  <thead>
-                    <tr>
-                      <th style={{ minWidth: 80 }}>Code</th>
-                      <th>Description</th>
-                      <th>UM</th>
-                      <th style={{ textAlign: 'right' }}>% Cmp</th>
-                      <th style={{ textAlign: 'right' }}>Budget Qty</th>
-                      <th style={{ textAlign: 'right' }}>Earned Qty</th>
-                      <th style={{ textAlign: 'right' }}>Installed Qty</th>
-                      <th style={{ textAlign: 'right' }}>Rem Qty</th>
-                      <th style={{ textAlign: 'right' }}>Budget Hrs</th>
-                      <th style={{ textAlign: 'right' }}>Spent Hrs</th>
-                      <th style={{ textAlign: 'right' }}>Earned Hrs</th>
-                      <th style={{ textAlign: 'right' }}>Rem Hrs</th>
-                      <th className="is-internal-col" style={{ textAlign: 'right' }}>
-                        Cur U/R
-                      </th>
-                      <th className="is-internal-col" style={{ textAlign: 'right' }}>
-                        Act/Ern U/R
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {crafts.map((craft) => (
-                      <CraftBlock key={craft.prime} craft={craft} />
-                    ))}
-                    <tr style={{ background: 'var(--color-primary-soft)' }}>
-                      <td className="font-bold" colSpan={3}>
-                        PROJECT TOTAL
-                      </td>
-                      <td className="text-right font-mono font-bold">{grandPct.toFixed(1)}%</td>
-                      <td className="text-right font-mono font-bold">
-                        {fmt.int(grandTotals.budget_qty)}
-                      </td>
-                      <td className="text-right font-mono font-bold">
-                        {fmt.int(grandTotals.earned_qty)}
-                      </td>
-                      <td className="text-right font-mono font-bold">
-                        {fmt.int(grandTotals.installed_qty)}
-                      </td>
-                      <td className="text-right font-mono font-bold">
-                        {fmt.int(Math.max(0, grandTotals.budget_qty - grandTotals.earned_qty))}
-                      </td>
-                      <td className="text-right font-mono font-bold">
-                        {fmt.int(grandTotals.budget_hrs)}
-                      </td>
-                      <td className="text-right font-mono font-bold">
-                        {fmt.int(grandTotals.spent_hrs)}
-                      </td>
-                      <td className="text-right font-mono font-bold">
-                        {fmt.int(grandTotals.earned_hrs)}
-                      </td>
-                      <td className="text-right font-mono font-bold">
-                        {fmt.int(Math.max(0, grandTotals.budget_hrs - grandTotals.earned_hrs))}
-                      </td>
-                      <td className="is-internal-col text-right font-mono font-bold">
-                        {grandTotals.budget_qty > 0
-                          ? (grandTotals.budget_hrs / grandTotals.budget_qty).toFixed(2)
-                          : '—'}
-                      </td>
-                      <td className="is-internal-col text-right font-mono font-bold">
-                        {grandTotals.earned_hrs > 0
-                          ? (grandTotals.spent_hrs / grandTotals.earned_hrs).toFixed(2)
-                          : '—'}
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
+            <div className="is-surface overflow-hidden flex-1 min-w-0 is-qmr-table-panel">
+              <QmrTable crafts={crafts} grandTotals={grandTotals} grandPct={grandPct} />
             </div>
           )}
 
@@ -651,6 +554,23 @@ export function QmrPage() {
         </div>
       )}
 
+      <Modal
+        open={tableExpanded}
+        onClose={() => setTableExpanded(false)}
+        title="QMR table — full view"
+        caption="All columns with horizontal scroll. Export PDF from the main page to include every column."
+        width={1600}
+      >
+        <div className="is-qmr-expanded">
+          <QmrTable
+            crafts={crafts}
+            grandTotals={grandTotals}
+            grandPct={grandPct}
+            scrollClassName="is-qmr-scroll-expanded"
+          />
+        </div>
+      </Modal>
+
       {/* Print-only footer note — mirrors Sandra's 9999.pdf "Notes" block. */}
       <div className="is-print-only is-print-footer">
         <strong>Notes:</strong> 1) All quantities are job-to-date (JTD).
@@ -658,97 +578,5 @@ export function QmrPage() {
         3) Subcontract spent hours are not included on this report.
       </div>
     </div>
-  );
-}
-
-function CraftBlock({ craft }: { craft: QmrCraft }) {
-  const COL_COUNT = 14;
-  return (
-    <>
-      <tr style={{ background: 'var(--color-raised)' }}>
-        <td
-          className="font-bold uppercase tracking-wide text-[11px]"
-          colSpan={COL_COUNT}
-        >
-          {craft.prime} {craft.display_name}
-        </td>
-      </tr>
-      {craft.leaves.map((leaf) => {
-        const remQty = Math.max(0, leaf.budget_qty - leaf.earned_qty);
-        const remHrs = Math.max(0, leaf.budget_hrs - leaf.earned_hrs);
-        const curUr = leaf.budget_qty > 0 ? leaf.budget_hrs / leaf.budget_qty : null;
-        const actErnUr = leaf.earned_hrs > 0 ? leaf.spent_hrs / leaf.earned_hrs : null;
-        return (
-          <tr key={leaf.code}>
-            <td className="font-mono">{leaf.code}</td>
-            <td>{leaf.description}</td>
-            <td>{leaf.uom}</td>
-            <td className="text-right font-mono">{leaf.percent_complete.toFixed(1)}%</td>
-            <td className="text-right font-mono">{fmt.int(leaf.budget_qty)}</td>
-            <td className="text-right font-mono">{fmt.int(leaf.earned_qty)}</td>
-            <td className="text-right font-mono">{fmt.int(leaf.installed_qty)}</td>
-            <td className="text-right font-mono">{fmt.int(remQty)}</td>
-            <td className="text-right font-mono">{fmt.int(leaf.budget_hrs)}</td>
-            <td className="text-right font-mono">{fmt.int(leaf.spent_hrs)}</td>
-            <td className="text-right font-mono">{fmt.int(leaf.earned_hrs)}</td>
-            <td className="text-right font-mono">{fmt.int(remHrs)}</td>
-            <td className="is-internal-col text-right font-mono">
-              {curUr != null ? curUr.toFixed(2) : '—'}
-            </td>
-            <td className="is-internal-col text-right font-mono">
-              {actErnUr != null ? actErnUr.toFixed(2) : '—'}
-            </td>
-          </tr>
-        );
-      })}
-      {(() => {
-        const remQty = Math.max(0, craft.totals.budget_qty - craft.totals.earned_qty);
-        const remHrs = Math.max(0, craft.totals.budget_hrs - craft.totals.earned_hrs);
-        const curUr =
-          craft.totals.budget_qty > 0
-            ? craft.totals.budget_hrs / craft.totals.budget_qty
-            : null;
-        const actErnUr =
-          craft.totals.earned_hrs > 0
-            ? craft.totals.spent_hrs / craft.totals.earned_hrs
-            : null;
-        return (
-          <tr style={{ background: 'var(--color-surface)' }}>
-            <td className="font-semibold" colSpan={3}>
-              {craft.display_name} subtotal
-            </td>
-            <td className="text-right font-mono font-semibold">
-              {craft.totals.percent_complete.toFixed(1)}%
-            </td>
-            <td className="text-right font-mono font-semibold">
-              {fmt.int(craft.totals.budget_qty)}
-            </td>
-            <td className="text-right font-mono font-semibold">
-              {fmt.int(craft.totals.earned_qty)}
-            </td>
-            <td className="text-right font-mono font-semibold">
-              {fmt.int(craft.totals.installed_qty)}
-            </td>
-            <td className="text-right font-mono font-semibold">{fmt.int(remQty)}</td>
-            <td className="text-right font-mono font-semibold">
-              {fmt.int(craft.totals.budget_hrs)}
-            </td>
-            <td className="text-right font-mono font-semibold">
-              {fmt.int(craft.totals.spent_hrs)}
-            </td>
-            <td className="text-right font-mono font-semibold">
-              {fmt.int(craft.totals.earned_hrs)}
-            </td>
-            <td className="text-right font-mono font-semibold">{fmt.int(remHrs)}</td>
-            <td className="is-internal-col text-right font-mono font-semibold">
-              {curUr != null ? curUr.toFixed(2) : '—'}
-            </td>
-            <td className="is-internal-col text-right font-mono font-semibold">
-              {actErnUr != null ? actErnUr.toFixed(2) : '—'}
-            </td>
-          </tr>
-        );
-      })()}
-    </>
   );
 }

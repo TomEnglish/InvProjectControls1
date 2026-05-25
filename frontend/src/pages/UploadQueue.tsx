@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
-import { Search, AlertTriangle, Bot, Flag } from 'lucide-react';
+import { AlertTriangle, Bot, Flag } from 'lucide-react';
+import { SearchInput } from '@/components/ui/SearchInput';
 import {
   useCurrentUser,
   useUploadQueue,
@@ -9,7 +10,6 @@ import {
 } from '@/lib/queries';
 import { Card, CardHeader } from '@/components/ui/Card';
 import { StatusChip } from '@/components/ui/StatusChip';
-import { inputClass } from '@/components/ui/FormField';
 import { QueueReviewModal } from '@/components/upload-queue/QueueReviewModal';
 
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
@@ -192,18 +192,12 @@ export function UploadQueuePage() {
               </button>
             ))}
           </div>
-          <div className="relative">
-            <Search
-              size={14}
-              className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[color:var(--color-text-muted)]"
-            />
-            <input
-              className={`${inputClass} pl-8 w-64`}
-              placeholder="Search filename, project, clerk…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-          </div>
+          <SearchInput
+            width={256}
+            placeholder="Search filename, project, clerk…"
+            value={search}
+            onChange={setSearch}
+          />
         </div>
 
         <div className="overflow-x-auto rounded-md border border-[color:var(--color-line)]">

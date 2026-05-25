@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Pencil, Search, ListTree, Upload } from 'lucide-react';
+import { Plus, Pencil, ListTree, Upload } from 'lucide-react';
+import { SearchInput } from '@/components/ui/SearchInput';
 import { supabase } from '@/lib/supabase';
 import {
   useCoaCodes,
@@ -165,19 +166,12 @@ export function CoaPage() {
               </option>
             ))}
           </select>
-          <div className="relative">
-            <Search
-              size={14}
-              className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[color:var(--color-text-muted)]"
-            />
-            <input
-              className="is-form-input pl-8"
-              style={{ width: 280 }}
-              placeholder="Search code or description…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-          </div>
+          <SearchInput
+            width={280}
+            placeholder="Search code or description…"
+            value={search}
+            onChange={setSearch}
+          />
           {projectId && (projectCoa.data?.size ?? 0) > 0 && (
             // A14 — single-checkbox toggle replaces the All/In-scope button
             // pair so the COA header stays on one line on narrower viewports.

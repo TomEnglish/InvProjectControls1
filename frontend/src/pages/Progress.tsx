@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Search, X } from 'lucide-react';
+import { X } from 'lucide-react';
+import { SearchInput } from '@/components/ui/SearchInput';
 import { supabase } from '@/lib/supabase';
 import { useProjectStore } from '@/stores/project';
 import { useProgressRows, useIwps, useCurrentUser, useWorkTypes, hasRole } from '@/lib/queries';
@@ -213,18 +214,12 @@ export function ProgressPage() {
             onChange={(e) => setLineArea(e.target.value)}
             style={{ width: 180 }}
           />
-          <div className="relative">
-            <Search
-              size={14}
-              className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[color:var(--color-text-muted)]"
-            />
-            <input
-              className={`${inputClass} pl-8 w-64`}
-              placeholder="Search DWG, account code, description…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-          </div>
+          <SearchInput
+            width={256}
+            placeholder="Search DWG, account code, description…"
+            value={search}
+            onChange={setSearch}
+          />
           {activeFilterCount > 0 && (
             <Button variant="ghost" size="sm" onClick={clearAll}>
               <X size={14} /> Clear filters

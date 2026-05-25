@@ -1,10 +1,10 @@
 import { useMemo, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Search, Pencil } from 'lucide-react';
+import { Pencil } from 'lucide-react';
+import { SearchInput } from '@/components/ui/SearchInput';
 import { supabase } from '@/lib/supabase';
 import { Card, CardHeader } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
-import { inputClass } from '@/components/ui/FormField';
 import {
   useCurrentUser,
   useCoaCodes,
@@ -139,18 +139,12 @@ export function ProjectCoaPickerCard({ projectId }: Props) {
       </div>
 
       <div className="px-6 pb-3 flex items-center gap-2 flex-wrap">
-        <div className="relative">
-          <Search
-            size={14}
-            className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[color:var(--color-text-muted)]"
-          />
-          <input
-            className={`${inputClass} pl-8 w-72`}
-            placeholder="Search code, description, or prime…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-        </div>
+        <SearchInput
+          width={288}
+          placeholder="Search code, description, or prime…"
+          value={search}
+          onChange={setSearch}
+        />
 
         <label className="text-xs flex items-center gap-1.5 text-[color:var(--color-text-muted)] cursor-pointer">
           <input

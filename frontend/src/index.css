@@ -382,6 +382,31 @@ a:hover { color: var(--color-primary-hover); }
 }
 .is-form-textarea { min-height: 88px; resize: vertical; }
 .is-form-helper { font-size: 13px; color: var(--color-text-muted); }
+
+/* Search inputs — `.is-form-input` padding shorthand wins over Tailwind
+   `pl-*`, so icon+text overlap unless left padding is set here. */
+.is-search-wrap {
+  position: relative;
+  display: inline-block;
+  max-width: 100%;
+}
+.is-search-wrap .is-search-icon {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--color-text-muted);
+  pointer-events: none;
+}
+.is-search-wrap .is-form-input {
+  padding-left: 36px;
+}
+.is-search-wrap.is-search-sm .is-search-icon {
+  left: 10px;
+}
+.is-search-wrap.is-search-sm .is-form-input {
+  padding-left: 30px;
+}
 .is-form-error { font-size: 13px; color: var(--color-danger); }
 .is-form-select {
   appearance: none;
@@ -524,10 +549,30 @@ a:hover { color: var(--color-primary-hover); }
 .is-reports-page { page: reports-portrait; }
 .is-qmr-page { page: qmr-landscape; }
 
+/* QMR — wide table; horizontal scroll on screen so columns are not clipped
+   beside the filter panel. */
+.is-qmr-table-panel .is-qmr-scroll {
+  overflow: auto;
+  max-width: 100%;
+}
+.is-qmr-table {
+  width: max-content;
+  min-width: 100%;
+}
+.is-qmr-col-code { min-width: 72px; white-space: nowrap; }
+.is-qmr-col-desc { min-width: 160px; max-width: 280px; }
+.is-qmr-col-um { min-width: 44px; white-space: nowrap; }
+.is-qmr-col-num { min-width: 72px; white-space: nowrap; }
+.is-qmr-scroll-expanded {
+  overflow: auto;
+  max-height: min(75vh, 820px);
+}
+.is-qmr-expanded .is-qmr-table { min-width: 1320px; }
+
 /* Print stylesheet — strip chrome, force black-on-white */
 @media print {
   body { background: #fff; color: #000; font-size: 11pt; }
-  .is-no-print, nav, aside, header.is-topbar { display: none !important; }
+  .is-no-print, nav, aside, header.is-topbar, .is-modal-backdrop { display: none !important; }
   main { padding: 0 !important; max-width: 100% !important; }
   .is-surface, .is-stat-card {
     background: #fff !important;
@@ -593,12 +638,22 @@ a:hover { color: var(--color-primary-hover); }
     display: none !important;
   }
 
+  /* QMR PDF — include every column in the web table (incl. Cur/Act U/R). */
+  .is-qmr-page .is-internal-col {
+    display: table-cell !important;
+  }
+
   /* Wave E — QMR print layout. Sandra's 9999.pdf is landscape with a
      dense table; force landscape and shrink the type so the table fits
      without horizontal scroll on a single sheet. */
-  .is-qmr-table { font-size: 8pt !important; }
+  .is-qmr-table { font-size: 7pt !important; width: 100% !important; min-width: 0 !important; }
   .is-qmr-table th, .is-qmr-table td {
-    padding: 2pt 4pt !important;
+    padding: 2pt 3pt !important;
+    white-space: nowrap;
+  }
+  .is-qmr-col-desc {
+    white-space: normal !important;
+    max-width: 120pt;
   }
   /* The on-screen container forces horizontal scrolling at typical
      screen widths; in print we let the table breathe across the full

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { ChevronDown, Search, X } from 'lucide-react';
+import { ChevronDown, X } from 'lucide-react';
+import { SearchInput } from '@/components/ui/SearchInput';
 import { inputClass } from '@/components/ui/FormField';
 
 type Option = { value: string; label: string };
@@ -92,19 +93,14 @@ export function FilterDropdown({ label, options, selected, onChange, searchable 
         >
           {searchable && options.length > 8 && (
             <div className="p-2 border-b border-[color:var(--color-line)]">
-              <div className="relative">
-                <Search
-                  size={12}
-                  className="absolute left-2 top-1/2 -translate-y-1/2 text-[color:var(--color-text-muted)]"
-                />
-                <input
-                  ref={searchRef}
-                  className={`${inputClass} pl-7`}
-                  placeholder={`Search ${label.toLowerCase()}…`}
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                />
-              </div>
+              <SearchInput
+                size="sm"
+                width="100%"
+                inputRef={searchRef}
+                placeholder={`Search ${label.toLowerCase()}…`}
+                value={search}
+                onChange={setSearch}
+              />
             </div>
           )}
 
