@@ -12,6 +12,7 @@ import { AddDisciplineModal } from '@/components/projects/AddDisciplineModal';
 import { RollupModeCard } from '@/components/projects/RollupModeCard';
 import { ProjectCoaPickerCard } from '@/components/projects/ProjectCoaPickerCard';
 import { PerDisciplineBaselineCard } from '@/components/projects/PerDisciplineBaselineCard';
+import { CoReviewerDefaultsCard } from '@/components/projects/CoReviewerDefaultsCard';
 
 type Project = {
   id: string;
@@ -256,6 +257,8 @@ export function ProjectSetupPage() {
       <RollupModeCard projectId={projectId} />
 
       <ProjectCoaPickerCard projectId={projectId} />
+
+      <CoReviewerDefaultsCard projectId={projectId} />
 
       <AddDisciplineModal
         open={addDisciplineOpen}
