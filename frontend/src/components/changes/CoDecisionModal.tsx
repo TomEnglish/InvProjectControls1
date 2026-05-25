@@ -27,12 +27,8 @@ export function CoDecisionModal({ open, onClose, coNumber, verb, decision, onCon
   const rejectMode = decision === 'reject';
   const confirmDisabled = busy || (rejectMode && notes.trim().length === 0);
 
-  // A3 — Sandra's spec: "approved, and then say something, and then
-  // forward." The row button verb stays as the user opened it ("Approve"
-  // for PM, "Forward" for PC reviewer), but the modal's confirm button
-  // always reads "Forward" on the advance path so the sequence ends
-  // explicitly with a forward action. Reject path keeps "Reject".
-  const confirmVerb = rejectMode ? 'Reject' : 'Forward';
+  // Match the modal title / row action: Forward (PC review) or Approve (PM).
+  const confirmVerb = rejectMode ? 'Reject' : verb;
 
   return (
     <Modal open={open} onClose={onClose} title={`${verb} ${coNumber}`} width={520}>
