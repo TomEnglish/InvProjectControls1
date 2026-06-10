@@ -476,17 +476,6 @@ export async function parseProgressFile(file: File): Promise<ParseResult> {
   return parseProgressWorkbook(workbook);
 }
 
-export function detectProgressDiscipline(
-  filename: string,
-  disciplines: { id: string; name: string }[],
-): string | undefined {
-  const lower = filename.toLowerCase();
-  for (const d of disciplines) {
-    if (lower.includes(d.name.toLowerCase())) return d.id;
-  }
-  return undefined;
-}
-
 export function recentSundayISO(): string {
   const now = new Date();
   const day = now.getDay();

@@ -15,9 +15,20 @@ type Props = {
   decision: CoDecisionKind;
   onConfirm: (notes: string | null) => void;
   busy?: boolean;
+  /** Failure from the underlying RPC — shown inline so a failed decision is never silent. */
+  error?: Error | null;
 };
 
-export function CoDecisionModal({ open, onClose, coNumber, verb, decision, onConfirm, busy }: Props) {
+export function CoDecisionModal({
+  open,
+  onClose,
+  coNumber,
+  verb,
+  decision,
+  onConfirm,
+  busy,
+  error,
+}: Props) {
   const [notes, setNotes] = useState('');
 
   useEffect(() => {
@@ -31,7 +42,13 @@ export function CoDecisionModal({ open, onClose, coNumber, verb, decision, onCon
   const confirmVerb = rejectMode ? 'Reject' : verb;
 
   return (
-    <Modal open={open} onClose={onClose} title={`${verb} ${coNumber}`} width={520}>
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={`${verb} ${coNumber}`}
+      width={520}
+      dirty={notes.trim().length > 0}
+    >
       <Field
         label={rejectMode ? 'Rejection reason (required)' : 'Notes (optional)'}
         hint={rejectMode ? 'Explain why this CO is being rejected — visible in the audit log.' : undefined}
@@ -44,6 +61,8 @@ export function CoDecisionModal({ open, onClose, coNumber, verb, decision, onCon
           placeholder={rejectMode ? 'e.g. Out of scope — re-submit under CO-N+1 with revised drawing ref.' : ''}
         />
       </Field>
+
+      {error && <div className="is-toast is-toast-danger mt-3">{error.message}</div>}
 
       <div className="mt-4 flex gap-2 justify-end">
         <Button variant="outline" onClick={onClose}>

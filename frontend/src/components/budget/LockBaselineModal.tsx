@@ -42,7 +42,8 @@ export function LockBaselineModal({
       qc.invalidateQueries({ queryKey: ['project', projectId] });
       qc.invalidateQueries({ queryKey: ['projects'] });
       qc.invalidateQueries({ queryKey: ['budget-rollup', projectId] });
-      qc.invalidateQueries({ queryKey: ['project-summary', projectId] });
+      qc.invalidateQueries({ queryKey: ['project-metrics', projectId] });
+      qc.invalidateQueries({ queryKey: ['discipline-metrics', projectId] });
       setConfirm('');
       onClose();
     },

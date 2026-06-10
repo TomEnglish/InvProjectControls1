@@ -1,7 +1,10 @@
 import { z } from 'zod';
 
+// Must match the discipline_code values accepted by the DB (see migration
+// 20260511000000_add_foundations_discipline.sql).
 export const DisciplineCode = z.enum([
   'CIVIL',
+  'FOUNDATIONS',
   'PIPE',
   'STEEL',
   'ELEC',

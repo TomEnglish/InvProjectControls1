@@ -7,21 +7,7 @@ import { ChartCard, ChartCardSkeleton } from '@/components/dashboard/ChartCard';
 import { EarnedValueByDisciplineChart } from '@/components/dashboard/EarnedValueByDisciplineChart';
 import { SCurveChart } from '@/components/dashboard/SCurveChart';
 import { DisciplineSummaryTable } from '@/components/dashboard/DisciplineSummaryTable';
-import { FolderOpen } from 'lucide-react';
-
-function NoProjectSelected() {
-  return (
-    <div className="is-surface is-empty">
-      <div className="is-empty-icon">
-        <FolderOpen size={28} />
-      </div>
-      <div className="is-empty-title">No project selected</div>
-      <p className="is-empty-caption">
-        Pick a project from the top bar, or create one in Project Setup.
-      </p>
-    </div>
-  );
-}
+import { NoProjectSelected } from '@/components/ui/NoProjectSelected';
 
 function LoadingSkeleton() {
   return (
@@ -50,12 +36,12 @@ export function DashboardPage() {
   const isLoading = summary.isLoading || periods.isLoading;
   if (isLoading) return <LoadingSkeleton />;
 
-  if (summary.error) {
+  if (summary.error || periods.error) {
     return (
       <div className="is-toast is-toast-danger">
         <div>
           <div className="font-semibold">Failed to load dashboard</div>
-          <div className="opacity-90 mt-0.5">{summary.error.message}</div>
+          <div className="opacity-90 mt-0.5">{(summary.error ?? periods.error)?.message}</div>
         </div>
       </div>
     );
@@ -120,6 +106,8 @@ export function DashboardPage() {
               />
             )}
           </>
+        ) : qtyRollup.error ? (
+          <KpiCard label="Composite %" value="—" subtext="Failed to load" tone="unfavourable" />
         ) : (
           <KpiCardSkeleton />
         )}

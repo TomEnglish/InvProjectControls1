@@ -5,21 +5,13 @@ import { useDashboardSummary, useProgressRows } from '@/lib/queries';
 import type { ProgressRow } from '@/lib/queries';
 import { Card, CardHeader } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
+import { NoProjectSelected } from '@/components/ui/NoProjectSelected';
 import { KpiCard, KpiCardSkeleton } from '@/components/dashboard/KpiCard';
 import { EarnedValueByDisciplineChart } from '@/components/dashboard/EarnedValueByDisciplineChart';
 import { FilterDropdown } from '@/components/progress/FilterDropdown';
 import { fmt } from '@/lib/format';
 import { downloadCsv } from '@/lib/export';
 
-function NoProject() {
-  return (
-    <Card>
-      <p className="text-sm text-[color:var(--color-text-muted)]">
-        Pick a project in the top bar to view earned-value details.
-      </p>
-    </Card>
-  );
-}
 
 type SortKey = 'dwg' | 'code' | 'description' | 'discipline' | 'budget' | 'earned' | 'remaining' | 'percent';
 type SortDir = 'asc' | 'desc';
@@ -110,8 +102,13 @@ export function EarnedValuePage() {
     setSort((s) => (s.key === key ? { key, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'desc' }));
   };
 
-  if (!projectId) return <NoProject />;
-  if (summary.isLoading) {
+  if (!projectId) {
+    return <NoProjectSelected message="Pick a project in the top bar to view earned-value details." />;
+  }
+  // Gate on the rows query too — otherwise the table renders its "no
+  // records" empty state while records are still in flight, and renders
+  // permanently empty if that query fails.
+  if (summary.isLoading || rows.isLoading) {
     return (
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {Array.from({ length: 4 }).map((_, i) => (
@@ -120,15 +117,17 @@ export function EarnedValuePage() {
       </div>
     );
   }
-  if (summary.error) {
+  if (summary.error || rows.error) {
     return (
       <div className="is-toast is-toast-danger">
-        Failed to load earned value: {summary.error.message}
+        Failed to load earned value: {(summary.error ?? rows.error)?.message}
       </div>
     );
   }
   const s = summary.data;
-  if (!s) return <NoProject />;
+  if (!s) {
+    return <NoProjectSelected message="Pick a project in the top bar to view earned-value details." />;
+  }
 
   const cpiTone = s.cpi == null ? 'neutral' : s.cpi >= 1 ? 'favourable' : 'unfavourable';
   const spiTone = s.spi == null ? 'neutral' : s.spi >= 1 ? 'favourable' : 'unfavourable';

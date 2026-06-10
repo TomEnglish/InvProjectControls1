@@ -11,6 +11,11 @@
 // Trigger-based invocation can be added later once Database Webhooks are
 // configured.
 //
+// Authorization: callers must be either (a) the service role (trigger /
+// webhook path) or (b) a signed-in pc_reviewer+ user in the CO's tenant.
+// The claimed event must also match the CO's current status, so a caller
+// can't fire an "approved" email for a CO that is still pending.
+//
 // Failure here MUST NOT block the calling RPC's success — return 200 with
 // `{ ok: false, reason }` rather than throwing on configuration gaps.
 //
@@ -92,17 +97,31 @@ const eventCopy: Record<EventKind, { subject: (n: string) => string; lead: (n: s
   },
 };
 
+// The DB status a CO must be in for each claimed event. The frontend fires
+// this function only after the corresponding RPC commits, so a mismatch means
+// the caller is spoofing an event (e.g. an "approved" email for a pending CO).
+const eventRequiresStatus: Record<EventKind, string[]> = {
+  submitted: ['pending'],
+  pc_reviewed: ['pc_reviewed'],
+  approved: ['approved'],
+  rejected: ['rejected'],
+  reopened: ['pending'],
+};
+
+const NOTIFIER_ROLES = new Set(['super_admin', 'admin', 'pm', 'pc_reviewer']);
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
   if (req.method !== 'POST') return json({ error: 'method not allowed' }, 405);
 
   const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
+  const ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY');
   const SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
   const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY');
   const FROM_EMAIL = Deno.env.get('NOTIFY_FROM_EMAIL') ?? 'controls@invenio.app';
   const SITE_URL = Deno.env.get('PUBLIC_SITE_URL');
 
-  if (!SUPABASE_URL || !SERVICE_KEY) {
+  if (!SUPABASE_URL || !SERVICE_KEY || !ANON_KEY) {
     return json({ ok: false, reason: 'edge function misconfigured' }, 200);
   }
 
@@ -112,11 +131,40 @@ Deno.serve(async (req) => {
   } catch {
     return json({ ok: false, reason: 'invalid json' }, 200);
   }
-  if (!body.co_id || !body.event) return json({ ok: false, reason: 'co_id and event required' }, 200);
+  if (!body.co_id || !body.event || !(body.event in eventCopy)) {
+    return json({ ok: false, reason: 'co_id and valid event required' }, 200);
+  }
+
+  // Authenticate the caller. Anyone holding the public anon key can reach
+  // this function, so without this gate any internet caller could fire
+  // spoofed CO emails at real users. Two trusted caller shapes:
+  //   1. service-role bearer — trigger/webhook invocation (no user JWT)
+  //   2. a signed-in user with pc_reviewer+ role in the CO's tenant
+  const bearer = (req.headers.get('Authorization') ?? '').replace(/^Bearer\s+/i, '');
+  const isServiceCaller = bearer === SERVICE_KEY;
+  let callerTenantId: string | null = null;
+  if (!isServiceCaller) {
+    const callerClient = createClient(SUPABASE_URL, ANON_KEY, {
+      global: { headers: { Authorization: `Bearer ${bearer}` } },
+      auth: { persistSession: false },
+      db: { schema: 'projectcontrols' },
+    });
+    const { data: userResult, error: userErr } = await callerClient.auth.getUser();
+    if (userErr || !userResult?.user) return json({ error: 'invalid session' }, 401);
+    const { data: caller, error: callerErr } = await callerClient
+      .from('app_users')
+      .select('id, tenant_id, role')
+      .eq('id', userResult.user.id)
+      .maybeSingle();
+    if (callerErr || !caller) return json({ error: 'caller not bound to a tenant' }, 403);
+    if (!NOTIFIER_ROLES.has(caller.role)) {
+      return json({ error: `role ${caller.role} cannot send CO notifications` }, 403);
+    }
+    callerTenantId = caller.tenant_id;
+  }
 
   // Service-role client — needs to read across the tenant boundary to
-  // gather recipient emails. Trigger-fired callers don't have a JWT, so
-  // we authoritatively look up tenant from the CO row itself.
+  // gather recipient emails.
   const adminClient = createClient(SUPABASE_URL, SERVICE_KEY, {
     auth: { persistSession: false, autoRefreshToken: false },
     db: { schema: 'projectcontrols' },
@@ -128,6 +176,13 @@ Deno.serve(async (req) => {
     .eq('id', body.co_id)
     .maybeSingle();
   if (coErr || !co) return json({ ok: false, reason: 'co not found' }, 200);
+
+  if (callerTenantId !== null && co.tenant_id !== callerTenantId) {
+    return json({ error: 'co not in your tenant' }, 403);
+  }
+  if (!eventRequiresStatus[body.event].includes(co.status)) {
+    return json({ ok: false, reason: `event ${body.event} does not match CO status ${co.status}` }, 200);
+  }
 
   const { data: project } = await adminClient
     .from('projects')

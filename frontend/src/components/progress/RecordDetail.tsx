@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
@@ -34,26 +34,23 @@ export function RecordDetail({ record, projectId, onClose }: Props) {
   }, [record.id, record.milestones]);
 
   const save = useMutation({
-    mutationFn: async (milestones: { seq: number; value: number }[]) => {
+    mutationFn: async (vars: { recordId: string; milestones: { seq: number; value: number }[] }) => {
       // Upsert each milestone row directly. progress_record_milestones has a
       // unique (progress_record_id, seq) constraint that lets us upsert; the
       // RLS policy `prm_reviewer_write` covers pc_reviewer+ roles.
-      const rows = milestones.map((m) => ({
-        tenant_id: undefined as unknown as string, // server fills via current_tenant_id() default
-        progress_record_id: record.id,
+      // tenant_id is omitted so the server default (current_tenant_id()) fills it.
+      const rows = vars.milestones.map((m) => ({
+        progress_record_id: vars.recordId,
         seq: m.seq,
         value: m.value,
         updated_at: new Date().toISOString(),
       }));
-      // Drop tenant_id so the trigger / default fills it. We don't have a
-      // local tenant_id at hand here without an extra read.
-      for (const r of rows) delete (r as Record<string, unknown>).tenant_id;
       const { error } = await supabase
         .from('progress_record_milestones')
         .upsert(rows, { onConflict: 'progress_record_id,seq' });
       if (error) throw error;
     },
-    onMutate: async (milestones) => {
+    onMutate: async (vars) => {
       await qc.cancelQueries({ queryKey: ['progress-rows', projectId] });
       const prev = qc.getQueryData<ProgressRow[]>(['progress-rows', projectId]);
       // Optimistic update mirrors exactly what was sent — work types can
@@ -61,10 +58,10 @@ export function RecordDetail({ record, projectId, onClose }: Props) {
       // persisted shape for any work_type with <8 entries (e.g. CIV-COMP).
       qc.setQueryData<ProgressRow[]>(['progress-rows', projectId], (old) =>
         (old ?? []).map((r) =>
-          r.id === record.id
+          r.id === vars.recordId
             ? {
                 ...r,
-                milestones: milestones.map((m) => ({ seq: m.seq, value: m.value })),
+                milestones: vars.milestones.map((m) => ({ seq: m.seq, value: m.value })),
               }
             : r,
         ),
@@ -79,28 +76,47 @@ export function RecordDetail({ record, projectId, onClose }: Props) {
       qc.invalidateQueries({ queryKey: ['project-metrics', projectId] });
     },
   });
+  // useMutation's `mutate` is referentially stable, so callbacks below can
+  // depend on it without re-arming effects every render.
+  const saveMutate = save.mutate;
 
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const flush = (next: Record<number, number>) => {
+  // Debounced edits waiting to be written, tagged with the record they belong
+  // to — kept in a ref so unmount / record-switch / beforeunload can flush
+  // them without racing React's render cycle.
+  const pending = useRef<{ recordId: string; values: Record<number, number> } | null>(null);
+
+  const commitPending = useCallback(() => {
+    if (timer.current) {
+      clearTimeout(timer.current);
+      timer.current = null;
+    }
+    const p = pending.current;
+    if (!p) return;
+    pending.current = null;
+    saveMutate({
+      recordId: p.recordId,
+      milestones: Object.entries(p.values).map(([seq, value]) => ({ seq: Number(seq), value })),
+    });
+  }, [saveMutate]);
+
+  const queueSave = (next: Record<number, number>) => {
+    pending.current = { recordId: record.id, values: next };
     if (timer.current) clearTimeout(timer.current);
-    timer.current = setTimeout(() => {
-      save.mutate(Object.entries(next).map(([seq, value]) => ({ seq: Number(seq), value })));
-    }, 400);
+    timer.current = setTimeout(commitPending, 400);
   };
 
+  // Flush (never drop) pending edits when the panel closes or the user
+  // switches to a different record.
   useEffect(() => {
-    const handler = () => {
-      if (timer.current) {
-        clearTimeout(timer.current);
-        save.mutate(Object.entries(draft).map(([seq, value]) => ({ seq: Number(seq), value })));
-      }
-    };
-    window.addEventListener('beforeunload', handler);
-    return () => {
-      window.removeEventListener('beforeunload', handler);
-      if (timer.current) clearTimeout(timer.current);
-    };
-  }, [draft, save]);
+    return () => commitPending();
+  }, [record.id, commitPending]);
+
+  // Best-effort flush if the tab is closed mid-debounce.
+  useEffect(() => {
+    window.addEventListener('beforeunload', commitPending);
+    return () => window.removeEventListener('beforeunload', commitPending);
+  }, [commitPending]);
 
   const weights = useMemo(() => rocMilestones ?? [], [rocMilestones]);
   // weights[i].weight sums to 1.0; draft values are 0..100.
@@ -132,14 +148,14 @@ export function RecordDetail({ record, projectId, onClose }: Props) {
     const next = { ...draft };
     for (const o of orphans) next[o.seq] = 0;
     setDraft(next);
-    flush(next);
+    queueSave(next);
   };
 
   const setMilestone = (seq: number, raw: number) => {
     const clamped = Math.min(100, Math.max(0, raw));
     const next = { ...draft, [seq]: clamped };
     setDraft(next);
-    flush(next);
+    queueSave(next);
   };
 
   return (

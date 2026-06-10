@@ -8,6 +8,8 @@ type Props = {
   selectedId: string | null;
   onSelect: (id: string) => void;
   getMilestones: (record: ProgressRow) => WorkTypeMilestone[];
+  /** Unfiltered record count — distinguishes "no records yet" from "filters match nothing". */
+  totalCount: number;
 };
 
 function milestoneTooltip(meta: WorkTypeMilestone, seq: number): string {
@@ -42,7 +44,7 @@ const headers: { label: string; key: SortKey | null; align?: 'right' }[] = [
   { label: 'Earned Hrs', key: null },
 ];
 
-export function ProgressTable({ records, selectedId, onSelect, getMilestones }: Props) {
+export function ProgressTable({ records, selectedId, onSelect, getMilestones, totalCount }: Props) {
   const [sort, setSort] = useState<{ key: SortKey; dir: SortDir }>({ key: 'record_no', dir: 'asc' });
 
   const sorted = useMemo(() => {
@@ -116,6 +118,14 @@ export function ProgressTable({ records, selectedId, onSelect, getMilestones }: 
               <tr
                 key={r.id}
                 onClick={() => onSelect(r.id)}
+                tabIndex={0}
+                aria-selected={isSelected}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    onSelect(r.id);
+                  }
+                }}
                 className="cursor-pointer"
                 style={isSelected ? { background: 'var(--color-primary-soft)' } : undefined}
               >
@@ -148,7 +158,6 @@ export function ProgressTable({ records, selectedId, onSelect, getMilestones }: 
                       style={{ padding: '8px 10px', color, fontSize: 12, textAlign: 'center' }}
                       className={`font-mono ${tip ? 'is-tip cursor-help' : ''}`}
                       data-tip={tip}
-                      onClick={(e) => e.stopPropagation()}
                     >
                       {val >= 100 ? '100' : val > 0 ? val.toFixed(0) : '—'}
                     </td>
@@ -176,7 +185,9 @@ export function ProgressTable({ records, selectedId, onSelect, getMilestones }: 
                 className="text-center text-[color:var(--color-text-muted)]"
                 style={{ padding: '32px 16px' }}
               >
-                No records match your filters.
+                {totalCount === 0
+                  ? 'No records yet — add one with “+ New Record” or import an audit file on the Upload page.'
+                  : 'No records match your filters.'}
               </td>
             </tr>
           )}

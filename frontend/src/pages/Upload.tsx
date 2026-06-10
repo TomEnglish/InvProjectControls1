@@ -8,6 +8,7 @@ import { Card, CardHeader } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Field, inputClass } from '@/components/ui/FormField';
 import { FileDropzone } from '@/components/ui/FileDropzone';
+import { NoProjectSelected } from '@/components/ui/NoProjectSelected';
 import {
   parseProgressFile,
   recentSundayISO,
@@ -16,15 +17,6 @@ import {
 import { ClerkUploadPanel } from '@/components/upload-queue/ClerkUploadPanel';
 import { MySubmissionsCard } from '@/components/upload-queue/MySubmissionsCard';
 
-function NoProject() {
-  return (
-    <Card>
-      <p className="text-sm text-[color:var(--color-text-muted)]">
-        Pick a project in the top bar before uploading progress data.
-      </p>
-    </Card>
-  );
-}
 
 type ImportResponse = { inserted?: number; snapshot_id?: string; error?: string };
 
@@ -212,7 +204,9 @@ function ReviewerDirectUploadPage() {
     },
   });
 
-  if (!projectId) return <NoProject />;
+  if (!projectId) {
+    return <NoProjectSelected message="Pick a project in the top bar before uploading progress data." />;
+  }
 
   const onSubmit = (e: FormEvent) => {
     e.preventDefault();

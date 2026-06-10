@@ -16,6 +16,11 @@ const pct = new Intl.NumberFormat('en-US', {
   minimumFractionDigits: 1,
   maximumFractionDigits: 1,
 });
+const dateFmt = new Intl.DateTimeFormat('en-US', {
+  year: 'numeric',
+  month: 'short',
+  day: 'numeric',
+});
 
 export const fmt = {
   int(n: number | null | undefined) {
@@ -39,5 +44,17 @@ export const fmt = {
   rate(n: number | null | undefined) {
     if (n == null) return '—';
     return fourDp.format(n);
+  },
+  /**
+   * "Mar 14, 2026" from an ISO date or timestamp string. Date-only strings
+   * are parsed as local dates — `new Date('2026-03-14')` is UTC midnight,
+   * which renders as the previous day in any negative-offset timezone.
+   */
+  date(iso: string | null | undefined) {
+    if (!iso) return '—';
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+    const d = m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : new Date(iso);
+    if (Number.isNaN(d.getTime())) return iso;
+    return dateFmt.format(d);
   },
 };

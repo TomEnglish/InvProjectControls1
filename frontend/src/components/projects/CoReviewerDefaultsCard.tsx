@@ -1,17 +1,17 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
-import { useCurrentUser, hasRole } from '@/lib/queries';
+import {
+  useCoEligibleReviewers,
+  useCurrentUser,
+  hasRole,
+  type CoEligibleReviewer,
+} from '@/lib/queries';
 import { Card, CardHeader } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { selectClass } from '@/components/ui/FormField';
 
-type ReviewerRow = {
-  id: string;
-  email: string;
-  display_name: string | null;
-  role: string;
-};
+type ReviewerRow = CoEligibleReviewer;
 
 type DisciplineRow = {
   id: string;
@@ -72,18 +72,7 @@ export function CoReviewerDefaultsCard({ projectId }: Props) {
     },
   });
 
-  const reviewers = useQuery({
-    queryKey: ['co-eligible-reviewers'] as const,
-    queryFn: async (): Promise<ReviewerRow[]> => {
-      const { data, error } = await supabase
-        .from('app_users')
-        .select('id, email, display_name, role')
-        .in('role', ['pc_reviewer', 'pm', 'admin', 'super_admin'])
-        .order('email');
-      if (error) throw error;
-      return (data ?? []) as ReviewerRow[];
-    },
-  });
+  const reviewers = useCoEligibleReviewers();
 
   const pcReviewers = useMemo(
     () =>

@@ -4,6 +4,7 @@ import { useProjectStore } from '@/stores/project';
 import { useSnapshotComparison, useSnapshots, type Snapshot } from '@/lib/queries';
 import { Card, CardHeader } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
+import { NoProjectSelected } from '@/components/ui/NoProjectSelected';
 import { fmt } from '@/lib/format';
 import { downloadCsv } from '@/lib/export';
 
@@ -34,15 +35,6 @@ function HowToCard() {
   );
 }
 
-function NoProject() {
-  return (
-    <Card>
-      <p className="text-sm text-[color:var(--color-text-muted)]">
-        Pick a project in the top bar to view its snapshot history.
-      </p>
-    </Card>
-  );
-}
 
 function snapshotOrderDate(s: Snapshot): string {
   return s.week_ending ?? s.snapshot_date;
@@ -72,7 +64,9 @@ export function SnapshotsPage() {
 
   const comparison = useSnapshotComparison(projectId, a, b);
 
-  if (!projectId) return <NoProject />;
+  if (!projectId) {
+    return <NoProjectSelected message="Pick a project in the top bar to view its snapshot history." />;
+  }
 
   if (snapshots.isLoading) {
     return (
@@ -183,9 +177,9 @@ export function SnapshotsPage() {
                       aria-label={`Mark ${snapshotPickerLabel(s)} as B`}
                     />
                   </td>
-                  <td className="font-mono">{s.snapshot_date}</td>
+                  <td className="font-mono whitespace-nowrap">{fmt.date(s.snapshot_date)}</td>
                   <td>{KIND_LABEL[s.kind]}</td>
-                  <td className="font-mono">{s.week_ending ?? '—'}</td>
+                  <td className="font-mono whitespace-nowrap">{fmt.date(s.week_ending)}</td>
                   <td>{s.label}</td>
                   <td className="text-right font-mono">
                     {s.total_budget_hrs != null ? fmt.int(s.total_budget_hrs) : '—'}

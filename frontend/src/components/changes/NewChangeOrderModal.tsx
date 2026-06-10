@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
+import { useCoEligibleReviewers, useProjectDisciplinesSimple } from '@/lib/queries';
 import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import { Field, inputClass } from '@/components/ui/FormField';
@@ -21,57 +22,33 @@ const TYPES = [
 
 const UOMS = ['LF', 'CY', 'EA', 'TONS', 'SF', 'HR', 'LS'];
 
-type ReviewerRow = {
-  id: string;
-  email: string;
-  display_name: string | null;
-  role: string;
-};
+const emptyForm = () => ({
+  discipline_id: '',
+  type: 'scope_add',
+  drawing: '',
+  date: new Date().toISOString().slice(0, 10),
+  description: '',
+  qty_change: 0,
+  uom: 'EA',
+  requested_by: '',
+  assigned_pc_reviewer_id: '',
+  assigned_pm_id: '',
+});
 
 export function NewChangeOrderModal({ open, onClose, projectId }: Props) {
   const qc = useQueryClient();
 
-  const { data: disciplines } = useQuery({
-    queryKey: ['project-disciplines-simple', projectId] as const,
-    enabled: open,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('project_disciplines')
-        .select('id, discipline_code, display_name')
-        .eq('project_id', projectId)
-        .order('discipline_code');
-      if (error) throw error;
-      return data;
-    },
-  });
+  const { data: disciplines } = useProjectDisciplinesSimple(projectId, open);
+  const { data: reviewers } = useCoEligibleReviewers(open);
 
-  const { data: reviewers } = useQuery({
-    queryKey: ['co-eligible-reviewers'] as const,
-    enabled: open,
-    queryFn: async (): Promise<ReviewerRow[]> => {
-      const { data, error } = await supabase
-        .from('app_users')
-        .select('id, email, display_name, role')
-        .in('role', ['pc_reviewer', 'pm', 'admin', 'super_admin'])
-        .order('email');
-      if (error) throw error;
-      return (data ?? []) as ReviewerRow[];
-    },
-  });
+  const [form, setForm] = useState(emptyForm);
 
-  const todayISO = new Date().toISOString().slice(0, 10);
-  const [form, setForm] = useState({
-    discipline_id: '',
-    type: 'scope_add',
-    drawing: '',
-    date: todayISO,
-    description: '',
-    qty_change: 0,
-    uom: 'EA',
-    requested_by: '',
-    assigned_pc_reviewer_id: '',
-    assigned_pm_id: '',
-  });
+  // Start from a clean slate (and today's date) each time the modal opens —
+  // otherwise a previously submitted CO's fields leak into the next one and
+  // the default date stays frozen at whenever the app was first loaded.
+  useEffect(() => {
+    if (open) setForm(emptyForm());
+  }, [open]);
 
   useEffect(() => {
     if (!open || !form.discipline_id) return;
@@ -124,8 +101,15 @@ export function NewChangeOrderModal({ open, onClose, projectId }: Props) {
     },
   });
 
+  const dirty =
+    form.description !== '' ||
+    form.drawing !== '' ||
+    form.requested_by !== '' ||
+    form.discipline_id !== '' ||
+    form.qty_change !== 0;
+
   return (
-    <Modal open={open} onClose={onClose} title="New Change Order">
+    <Modal open={open} onClose={onClose} title="New Change Order" dirty={dirty}>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <Field label="Drawing #" hint="Drawing affected by the change.">
           <input

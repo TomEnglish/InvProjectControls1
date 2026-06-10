@@ -2,30 +2,18 @@ import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { useProjectStore } from '@/stores/project';
-import { useCurrentUser, hasRole } from '@/lib/queries';
+import { useCurrentUser, useProject, hasRole, type Project } from '@/lib/queries';
 import { Card, CardHeader } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Field, inputClass } from '@/components/ui/FormField';
 import { StatusChip } from '@/components/ui/StatusChip';
 import { fmt } from '@/lib/format';
+import { NoProjectSelected } from '@/components/ui/NoProjectSelected';
 import { AddDisciplineModal } from '@/components/projects/AddDisciplineModal';
 import { RollupModeCard } from '@/components/projects/RollupModeCard';
 import { ProjectCoaPickerCard } from '@/components/projects/ProjectCoaPickerCard';
 import { PerDisciplineBaselineCard } from '@/components/projects/PerDisciplineBaselineCard';
 import { CoReviewerDefaultsCard } from '@/components/projects/CoReviewerDefaultsCard';
-
-type Project = {
-  id: string;
-  tenant_id: string;
-  project_code: string;
-  name: string;
-  client: string;
-  status: string;
-  start_date: string;
-  end_date: string;
-  manager_id: string | null;
-  baseline_locked_at: string | null;
-};
 
 type Discipline = {
   id: string;
@@ -37,15 +25,6 @@ type Discipline = {
   work_types: { work_type_code: string; description: string } | null;
 };
 
-function NoProjectSelected() {
-  return (
-    <Card>
-      <p className="text-sm text-[color:var(--color-text-muted)]">
-        Pick a project in the top bar to view its setup.
-      </p>
-    </Card>
-  );
-}
 
 export function ProjectSetupPage() {
   const projectId = useProjectStore((s) => s.currentProjectId);
@@ -53,19 +32,7 @@ export function ProjectSetupPage() {
   const { data: me } = useCurrentUser();
   const canSetupEdit = hasRole(me?.role, 'pc_reviewer');
 
-  const { data: project, isLoading: loadingProject } = useQuery({
-    queryKey: ['project', projectId] as const,
-    enabled: !!projectId,
-    queryFn: async (): Promise<Project | null> => {
-      const { data, error } = await supabase
-        .from('projects')
-        .select('*')
-        .eq('id', projectId!)
-        .maybeSingle();
-      if (error) throw error;
-      return data as Project | null;
-    },
-  });
+  const { data: project, isLoading: loadingProject } = useProject(projectId);
 
   const { data: disciplines } = useQuery({
     queryKey: ['disciplines', projectId] as const,
@@ -112,7 +79,9 @@ export function ProjectSetupPage() {
     },
   });
 
-  if (!projectId) return <NoProjectSelected />;
+  if (!projectId) {
+    return <NoProjectSelected message="Pick a project in the top bar to view its setup." />;
+  }
   if (loadingProject || !project || !draft) {
     return (
       <Card>

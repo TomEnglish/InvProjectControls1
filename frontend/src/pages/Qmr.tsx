@@ -1,17 +1,17 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
 import { Download, FileBarChart, Maximize2 } from 'lucide-react';
-import { supabase } from '@/lib/supabase';
 import { useProjectStore } from '@/stores/project';
 import {
   useCoaCodes,
   useProgressRows,
   useProjectCoaCodes,
+  useProjectMeta,
   useSnapshots,
   type CoaCodeRow,
   type ProgressRow,
 } from '@/lib/queries';
 import { Button } from '@/components/ui/Button';
+import { NoProjectSelected } from '@/components/ui/NoProjectSelected';
 import { Card } from '@/components/ui/Card';
 import { downloadCsv } from '@/lib/export';
 import type { QmrCraft, QmrLeaf, QmrTotals } from '@/lib/qmrTypes';
@@ -149,19 +149,6 @@ function rollUp(
   return crafts;
 }
 
-function NoProject() {
-  return (
-    <div className="is-surface is-empty">
-      <div className="is-empty-icon">
-        <FileBarChart size={28} />
-      </div>
-      <div className="is-empty-title">No project selected</div>
-      <p className="is-empty-caption">
-        Pick a project in the top bar to view the QMR report.
-      </p>
-    </div>
-  );
-}
 
 export function QmrPage() {
   const projectId = useProjectStore((s) => s.currentProjectId);
@@ -199,19 +186,7 @@ export function QmrPage() {
   // Wave E — project meta drives the print-only header that anchors the
   // PDF. Without this the export reads as a styled-but-anonymous dump
   // and a client receiving it doesn't know which job it represents.
-  const project = useQuery({
-    queryKey: ['project-meta', projectId] as const,
-    enabled: !!projectId,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('projects')
-        .select('project_code, name, client')
-        .eq('id', projectId!)
-        .maybeSingle();
-      if (error) throw error;
-      return data as { project_code: string; name: string; client: string | null } | null;
-    },
-  });
+  const project = useProjectMeta(projectId);
 
   const isLoading =
     codes.isLoading ||
@@ -313,7 +288,9 @@ export function QmrPage() {
     setDescriptionFilter(new Set());
   };
 
-  if (!projectId) return <NoProject />;
+  if (!projectId) {
+    return <NoProjectSelected message="Pick a project in the top bar to view the QMR report." />;
+  }
 
   if (isLoading) {
     return (

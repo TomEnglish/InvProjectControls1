@@ -21,12 +21,14 @@ export function Topbar() {
 
   const { user, signOut } = useAuth();
   const { currentProjectId, setCurrentProjectId } = useProjectStore();
-  const [theme, setTheme] = useState<'light' | 'dark'>(
-    (document.documentElement.getAttribute('data-theme') as 'light' | 'dark') ?? 'light',
-  );
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+    const stored = localStorage.getItem('pc-theme');
+    if (stored === 'light' || stored === 'dark') return stored;
+    return (document.documentElement.getAttribute('data-theme') as 'light' | 'dark') ?? 'light';
+  });
   const [metadataOpen, setMetadataOpen] = useState(false);
 
-  const { data: projects } = useQuery({
+  const { data: projects, error: projectsError } = useQuery({
     queryKey: ['projects'],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -48,6 +50,7 @@ export function Topbar() {
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('pc-theme', theme);
   }, [theme]);
 
   const initials = (user?.email ?? 'U').slice(0, 2).toUpperCase();
@@ -65,6 +68,14 @@ export function Topbar() {
       </div>
 
       <div className="flex items-center gap-2">
+        {projectsError && (
+          <span
+            className="text-xs text-[color:var(--color-variance-unfavourable)]"
+            title={projectsError.message}
+          >
+            Couldn't load projects — check your connection.
+          </span>
+        )}
         <div className="flex items-center gap-1">
           <select
             aria-label="Current project"

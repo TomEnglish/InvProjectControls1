@@ -1,13 +1,19 @@
 import { useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
 import { X } from 'lucide-react';
 import { SearchInput } from '@/components/ui/SearchInput';
-import { supabase } from '@/lib/supabase';
 import { useProjectStore } from '@/stores/project';
-import { useProgressRows, useIwps, useCurrentUser, useWorkTypes, hasRole } from '@/lib/queries';
+import {
+  useProgressRows,
+  useIwps,
+  useCurrentUser,
+  useProjectDisciplinesSimple,
+  useWorkTypes,
+  hasRole,
+} from '@/lib/queries';
 import type { ProgressRow, WorkTypeMilestone } from '@/lib/queries';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
+import { NoProjectSelected } from '@/components/ui/NoProjectSelected';
 import { inputClass } from '@/components/ui/FormField';
 import { ProgressTable } from '@/components/progress/ProgressTable';
 import { RecordDetail } from '@/components/progress/RecordDetail';
@@ -15,15 +21,6 @@ import { NewRecordModal } from '@/components/progress/NewRecordModal';
 import { FilterDropdown } from '@/components/progress/FilterDropdown';
 import { downloadCsv } from '@/lib/export';
 
-function NoProject() {
-  return (
-    <Card>
-      <p className="text-sm text-[color:var(--color-text-muted)]">
-        Pick a project in the top bar to view records.
-      </p>
-    </Card>
-  );
-}
 
 const emptySet = (): Set<string> => new Set();
 
@@ -48,24 +45,7 @@ export function ProgressPage() {
   const { data: iwps } = useIwps(projectId);
   const { data: workTypes } = useWorkTypes();
 
-  const { data: disciplines } = useQuery({
-    queryKey: ['project-disciplines-simple', projectId] as const,
-    enabled: !!projectId,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('project_disciplines')
-        .select('id, discipline_code, display_name, default_work_type_id')
-        .eq('project_id', projectId!)
-        .order('discipline_code');
-      if (error) throw error;
-      return data as {
-        id: string;
-        discipline_code: string;
-        display_name: string;
-        default_work_type_id: string | null;
-      }[];
-    },
-  });
+  const { data: disciplines } = useProjectDisciplinesSimple(projectId);
 
   const getMilestones = useMemo(() => {
     const byWorkTypeId = new Map(
@@ -145,7 +125,9 @@ export function ProgressPage() {
     setLineArea('');
   };
 
-  if (!projectId) return <NoProject />;
+  if (!projectId) {
+    return <NoProjectSelected message="Pick a project in the top bar to view records." />;
+  }
 
   if (isLoading) {
     return (
@@ -230,6 +212,7 @@ export function ProgressPage() {
           <Button
             variant="primary"
             disabled={!canAddRecord}
+            title={canAddRecord ? undefined : 'PC Reviewer role or above required to add records.'}
             onClick={() => setNewRecordOpen(true)}
           >
             + New Record
@@ -360,6 +343,7 @@ export function ProgressPage() {
 
       <ProgressTable
         records={filtered}
+        totalCount={records?.length ?? 0}
         selectedId={selectedId}
         onSelect={setSelectedId}
         getMilestones={getMilestones}

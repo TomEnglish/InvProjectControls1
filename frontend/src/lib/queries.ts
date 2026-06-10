@@ -59,6 +59,114 @@ export function hasRole(current: UserRole | undefined | null, min: UserRole): bo
   return roleRank[current] >= roleRank[min];
 }
 
+export type Project = {
+  id: string;
+  tenant_id: string;
+  project_code: string;
+  name: string;
+  client: string;
+  status: string;
+  start_date: string;
+  end_date: string;
+  manager_id: string | null;
+  baseline_locked_at: string | null;
+};
+
+/**
+ * Canonical project row. Budget and Project Setup share the
+ * ['project', projectId] cache entry, so there must be exactly one column
+ * list — a narrower select on one page would poison the cache for the other.
+ */
+export function useProject(projectId: string | null) {
+  return useQuery({
+    queryKey: ['project', projectId] as const,
+    enabled: !!projectId,
+    queryFn: async (): Promise<Project | null> => {
+      const { data, error } = await supabase
+        .from('projects')
+        .select(
+          'id, tenant_id, project_code, name, client, status, start_date, end_date, manager_id, baseline_locked_at',
+        )
+        .eq('id', projectId!)
+        .maybeSingle();
+      if (error) throw error;
+      return (data ?? null) as Project | null;
+    },
+  });
+}
+
+export type ProjectMeta = { project_code: string; name: string; client: string | null };
+
+/** Header metadata for printable exports (Reports, QMR). */
+export function useProjectMeta(projectId: string | null) {
+  return useQuery({
+    queryKey: ['project-meta', projectId] as const,
+    enabled: !!projectId,
+    queryFn: async (): Promise<ProjectMeta | null> => {
+      const { data, error } = await supabase
+        .from('projects')
+        .select('project_code, name, client')
+        .eq('id', projectId!)
+        .maybeSingle();
+      if (error) throw error;
+      return data as ProjectMeta | null;
+    },
+  });
+}
+
+export type ProjectDisciplineSimple = {
+  id: string;
+  discipline_code: string;
+  display_name: string;
+  default_work_type_id: string | null;
+};
+
+/**
+ * Lightweight discipline list shared by Progress and the CO modal — one
+ * canonical column list for the ['project-disciplines-simple'] cache key.
+ * Progress relies on default_work_type_id for its milestone fallback, so
+ * that column must stay in the select even for consumers that ignore it.
+ */
+export function useProjectDisciplinesSimple(projectId: string | null, enabled = true) {
+  return useQuery({
+    queryKey: ['project-disciplines-simple', projectId] as const,
+    enabled: enabled && !!projectId,
+    queryFn: async (): Promise<ProjectDisciplineSimple[]> => {
+      const { data, error } = await supabase
+        .from('project_disciplines')
+        .select('id, discipline_code, display_name, default_work_type_id')
+        .eq('project_id', projectId!)
+        .order('discipline_code');
+      if (error) throw error;
+      return (data ?? []) as ProjectDisciplineSimple[];
+    },
+  });
+}
+
+export type CoEligibleReviewer = {
+  id: string;
+  email: string;
+  display_name: string | null;
+  role: UserRole;
+};
+
+/** Users eligible to be assigned as CO reviewers / approvers (pc_reviewer+). */
+export function useCoEligibleReviewers(enabled = true) {
+  return useQuery({
+    queryKey: ['co-eligible-reviewers'] as const,
+    enabled,
+    queryFn: async (): Promise<CoEligibleReviewer[]> => {
+      const { data, error } = await supabase
+        .from('app_users')
+        .select('id, email, display_name, role')
+        .in('role', ['pc_reviewer', 'pm', 'admin', 'super_admin'])
+        .order('email');
+      if (error) throw error;
+      return (data ?? []) as CoEligibleReviewer[];
+    },
+  });
+}
+
 export type DisciplineRollup = {
   discipline_id: string;
   discipline_code: string;

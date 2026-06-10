@@ -1,16 +1,16 @@
 import '@/lib/charts';
 import { useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
 import { Lock, Info, Download } from 'lucide-react';
-import { supabase } from '@/lib/supabase';
 import { useProjectStore } from '@/stores/project';
 import {
   useBudgetRollup,
   useDashboardSummary,
   useDashboardSummaryAtSnapshot,
   useCurrentUser,
+  useProject,
   useSnapshots,
   hasRole,
+  type Project,
 } from '@/lib/queries';
 import { Button } from '@/components/ui/Button';
 import { ChartCard, ChartCardSkeleton } from '@/components/dashboard/ChartCard';
@@ -25,14 +25,6 @@ import { fmt } from '@/lib/format';
 import { downloadCsv } from '@/lib/export';
 import { LockBaselineModal } from '@/components/budget/LockBaselineModal';
 import { BudgetByDisciplineChart } from '@/components/budget/BudgetByDisciplineChart';
-
-type Project = {
-  id: string;
-  project_code: string;
-  name: string;
-  status: string;
-  baseline_locked_at: string | null;
-};
 
 function ThreeBudgetPrimer() {
   return (
@@ -81,19 +73,7 @@ export function BudgetPage() {
   const canLock = hasRole(me?.role, 'pm');
   const [lockModalOpen, setLockModalOpen] = useState(false);
 
-  const { data: project } = useQuery({
-    queryKey: ['project', projectId] as const,
-    enabled: !!projectId,
-    queryFn: async (): Promise<Project | null> => {
-      const { data, error } = await supabase
-        .from('projects')
-        .select('id, project_code, name, status, baseline_locked_at')
-        .eq('id', projectId!)
-        .maybeSingle();
-      if (error) throw error;
-      return data as Project | null;
-    },
-  });
+  const { data: project } = useProject(projectId);
 
   const rollup = useBudgetRollup(projectId);
   const summary = useDashboardSummary(projectId);

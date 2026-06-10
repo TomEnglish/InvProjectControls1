@@ -34,7 +34,8 @@ export function PeriodCloseCard({ projectId, periods }: Props) {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['progress-periods', projectId] });
-      qc.invalidateQueries({ queryKey: ['project-summary', projectId] });
+      qc.invalidateQueries({ queryKey: ['project-metrics', projectId] });
+      qc.invalidateQueries({ queryKey: ['discipline-metrics', projectId] });
       setConfirmOpen(false);
       setConfirmPhrase('');
     },
@@ -59,7 +60,7 @@ export function PeriodCloseCard({ projectId, periods }: Props) {
   // period_number is kept inside the confirmation phrase so the typed
   // guard doesn't collide if two weeks share a Sunday (e.g. partial
   // re-close).
-  const weekEndingLabel = new Date(open.end_date).toLocaleDateString();
+  const weekEndingLabel = fmt.date(open.end_date);
   const expected = `CLOSE WEEK ${open.end_date}`;
   const canSubmit = confirmPhrase.trim() === expected;
 
@@ -68,7 +69,7 @@ export function PeriodCloseCard({ projectId, periods }: Props) {
       <div className="is-eyebrow mb-1.5">Week ending</div>
       <h3 className="text-base font-semibold">Week ending {weekEndingLabel} is open</h3>
       <p className="text-sm text-[color:var(--color-text-muted)] mt-1.5 leading-relaxed">
-        {new Date(open.start_date).toLocaleDateString()} — {weekEndingLabel}.
+        {fmt.date(open.start_date)} — {weekEndingLabel}.
         Mon–Sun week; closing snapshots BCWP / ACWP onto this week and seeds the next one.
       </p>
 

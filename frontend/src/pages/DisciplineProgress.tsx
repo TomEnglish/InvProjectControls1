@@ -1,23 +1,16 @@
 import { useProjectStore } from '@/stores/project';
 import { useDashboardSummary } from '@/lib/queries';
 import { Card, CardHeader } from '@/components/ui/Card';
+import { NoProjectSelected } from '@/components/ui/NoProjectSelected';
 import { fmt } from '@/lib/format';
 
-function NoProject() {
-  return (
-    <Card>
-      <p className="text-sm text-[color:var(--color-text-muted)]">
-        Pick a project in the top bar to view discipline progress.
-      </p>
-    </Card>
-  );
-}
+const NO_PROJECT_MESSAGE = 'Pick a project in the top bar to view discipline progress.';
 
 export function DisciplineProgressPage() {
   const projectId = useProjectStore((s) => s.currentProjectId);
   const summary = useDashboardSummary(projectId);
 
-  if (!projectId) return <NoProject />;
+  if (!projectId) return <NoProjectSelected message={NO_PROJECT_MESSAGE} />;
   if (summary.isLoading) {
     return (
       <Card>
@@ -33,7 +26,7 @@ export function DisciplineProgressPage() {
     );
   }
   const s = summary.data;
-  if (!s) return <NoProject />;
+  if (!s) return <NoProjectSelected message={NO_PROJECT_MESSAGE} />;
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

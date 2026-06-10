@@ -11,6 +11,7 @@ import {
 } from '@/lib/queries';
 import { Card, CardHeader } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
+import { NoProjectSelected } from '@/components/ui/NoProjectSelected';
 import { selectClass } from '@/components/ui/FormField';
 import { StatusChip } from '@/components/ui/StatusChip';
 import { fmt } from '@/lib/format';
@@ -18,15 +19,6 @@ import { ApprovalStepper } from '@/components/changes/ApprovalStepper';
 import { NewChangeOrderModal } from '@/components/changes/NewChangeOrderModal';
 import { CoDecisionModal, type CoDecisionKind } from '@/components/changes/CoDecisionModal';
 
-function NoProject() {
-  return (
-    <Card>
-      <p className="text-sm text-[color:var(--color-text-muted)]">
-        Pick a project in the top bar to view change orders.
-      </p>
-    </Card>
-  );
-}
 
 export function ChangeManagementPage() {
   const projectId = useProjectStore((s) => s.currentProjectId);
@@ -101,13 +93,16 @@ export function ChangeManagementPage() {
     onSuccess: ({ id, decision }) => {
       qc.invalidateQueries({ queryKey: ['change-orders', projectId] });
       qc.invalidateQueries({ queryKey: ['budget-rollup', projectId] });
-      qc.invalidateQueries({ queryKey: ['project-summary', projectId] });
+      qc.invalidateQueries({ queryKey: ['project-metrics', projectId] });
+      qc.invalidateQueries({ queryKey: ['discipline-metrics', projectId] });
       notify(id, decision === 'forward' ? 'approved' : 'rejected');
       setDecision(null);
     },
   });
 
-  if (!projectId) return <NoProject />;
+  if (!projectId) {
+    return <NoProjectSelected message="Pick a project in the top bar to view change orders." />;
+  }
   if (isLoading) {
     return (
       <Card>
@@ -153,6 +148,11 @@ export function ChangeManagementPage() {
         <Button
           variant="primary"
           disabled={!hasRole(me?.role, 'pc_reviewer')}
+          title={
+            hasRole(me?.role, 'pc_reviewer')
+              ? undefined
+              : 'PC Reviewer role or above required to submit change orders.'
+          }
           onClick={() => setModalOpen(true)}
         >
           + New Change Order
@@ -195,12 +195,14 @@ export function ChangeManagementPage() {
                   pcBusy={pcReview.isPending}
                   approveBusy={approve.isPending}
                   onSelect={() => setSelectedId(co.id === selectedId ? null : co.id)}
-                  onPcReview={(kind) =>
-                    setDecision({ kind, stage: 'pc_review', coId: co.id, coNumber: co.co_number })
-                  }
-                  onApprove={(kind) =>
-                    setDecision({ kind, stage: 'approve', coId: co.id, coNumber: co.co_number })
-                  }
+                  onPcReview={(kind) => {
+                    pcReview.reset();
+                    setDecision({ kind, stage: 'pc_review', coId: co.id, coNumber: co.co_number });
+                  }}
+                  onApprove={(kind) => {
+                    approve.reset();
+                    setDecision({ kind, stage: 'approve', coId: co.id, coNumber: co.co_number });
+                  }}
                 />
               ))}
               {filtered.length === 0 && (
@@ -290,7 +292,12 @@ export function ChangeManagementPage() {
       {decision && (
         <CoDecisionModal
           open
-          onClose={() => setDecision(null)}
+          onClose={() => {
+            setDecision(null);
+            pcReview.reset();
+            approve.reset();
+          }}
+          error={decision.stage === 'pc_review' ? pcReview.error : approve.error}
           coNumber={decision.coNumber}
           verb={
             decision.kind === 'reject'
@@ -355,7 +362,7 @@ function CoRow({
       style={selected ? { background: 'var(--color-primary-soft)' } : undefined}
     >
       <td className="font-mono font-semibold">{co.co_number}</td>
-      <td>{co.date}</td>
+      <td className="whitespace-nowrap">{fmt.date(co.date)}</td>
       <td className="font-mono">{co.drawing ?? '—'}</td>
       <td>{co.discipline_name ?? '—'}</td>
       <td className="capitalize">{co.type.replace(/_/g, ' ')}</td>

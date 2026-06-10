@@ -31,8 +31,7 @@ export function Field({
   );
 }
 
-// Drop-in classes for raw inputs/selects/textareas. Prefer importing these
-// over re-styling each field by hand.
+// Drop-in classes for raw inputs/selects. Prefer importing these over
+// re-styling each field by hand.
 export const inputClass = 'is-form-input';
 export const selectClass = 'is-form-select';
-export const textareaClass = 'is-form-textarea';

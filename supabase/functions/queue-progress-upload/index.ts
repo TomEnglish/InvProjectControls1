@@ -236,6 +236,20 @@ Deno.serve(async (req) => {
     db: { schema: 'projectcontrols' },
   });
 
+  // Validate the target project belongs to the caller's tenant BEFORE any
+  // storage write. upload_queue_submit re-checks this, but by then the
+  // objects are already uploaded — a bogus projectId would leave orphaned
+  // objects under an arbitrary folder inside the tenant prefix.
+  const { data: project, error: projectErr } = await admin
+    .from('projects')
+    .select('id')
+    .eq('id', projectId)
+    .eq('tenant_id', caller.tenant_id)
+    .maybeSingle();
+  if (projectErr || !project) {
+    return json({ error: 'project not found in your tenant' }, 404);
+  }
+
   // Parse the file. xlsx handles csv/xlsx/xls uniformly via the workbook
   // interface — read the buffer once and dispatch by extension hint.
   const ext = file.name.toLowerCase().split('.').pop() ?? '';

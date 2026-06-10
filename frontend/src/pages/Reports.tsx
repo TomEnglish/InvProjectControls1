@@ -1,13 +1,12 @@
 import '@/lib/charts';
 import { useEffect, useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { FileBarChart, Download, Calendar, Info, Printer } from 'lucide-react';
-import { supabase } from '@/lib/supabase';
+import { Download, Calendar, Info, Printer } from 'lucide-react';
 import { useProjectStore } from '@/stores/project';
 import {
   useDashboardSummary,
   useDashboardSummaryAtSnapshot,
   useProgressPeriods,
+  useProjectMeta,
   useSnapshots,
 } from '@/lib/queries';
 import { ChartCard, ChartCardSkeleton } from '@/components/dashboard/ChartCard';
@@ -16,6 +15,7 @@ import { CpiSpiTrendChart } from '@/components/reports/CpiSpiTrendChart';
 import { VarianceAnalysisTable } from '@/components/reports/VarianceAnalysisTable';
 import { PeriodCloseCard } from '@/components/reports/PeriodCloseCard';
 import { Button } from '@/components/ui/Button';
+import { NoProjectSelected } from '@/components/ui/NoProjectSelected';
 import { Card } from '@/components/ui/Card';
 import {
   DateRangeFilter,
@@ -28,19 +28,6 @@ import { selectClass } from '@/components/ui/FormField';
 import { fmt } from '@/lib/format';
 import { downloadCsv } from '@/lib/export';
 
-function NoProject() {
-  return (
-    <div className="is-surface is-empty">
-      <div className="is-empty-icon">
-        <FileBarChart size={28} />
-      </div>
-      <div className="is-empty-title">No project selected</div>
-      <p className="is-empty-caption">
-        Pick a project in the top bar to view earned-value reports.
-      </p>
-    </div>
-  );
-}
 
 export function ReportsPage() {
   const projectId = useProjectStore((s) => s.currentProjectId);
@@ -51,19 +38,7 @@ export function ReportsPage() {
   // A4 — current project info for the print-only header. Without this the
   // PDF reads as a styled-but-anonymous dump; clients need to know which
   // job the variance table represents at a glance.
-  const project = useQuery({
-    queryKey: ['project-meta', projectId] as const,
-    enabled: !!projectId,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('projects')
-        .select('project_code, name, client')
-        .eq('id', projectId!)
-        .maybeSingle();
-      if (error) throw error;
-      return data as { project_code: string; name: string; client: string | null } | null;
-    },
-  });
+  const project = useProjectMeta(projectId);
 
   const [snapshotId, setSnapshotId] = useState<string | null>(null);
   const [dateRange, setDateRange] = useState<DateRange>(ALL_TIME_RANGE);
@@ -102,7 +77,9 @@ export function ReportsPage() {
       .sort((a, b) => (b.snapshot_date.localeCompare(a.snapshot_date)));
   }, [snapshots.data, dateRange]);
 
-  if (!projectId) return <NoProject />;
+  if (!projectId) {
+    return <NoProjectSelected message="Pick a project in the top bar to view earned-value reports." />;
+  }
 
   if (summary.isLoading || periods.isLoading) {
     return (

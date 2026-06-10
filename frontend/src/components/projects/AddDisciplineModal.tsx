@@ -77,7 +77,9 @@ export function AddDisciplineModal({ open, onClose, projectId, existingCodes }: 
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['disciplines', projectId] });
-      qc.invalidateQueries({ queryKey: ['project-summary', projectId] });
+      qc.invalidateQueries({ queryKey: ['project-disciplines-simple', projectId] });
+      qc.invalidateQueries({ queryKey: ['project-metrics', projectId] });
+      qc.invalidateQueries({ queryKey: ['discipline-metrics', projectId] });
       setCode('');
       setDisplayName('');
       setBudget(0);
