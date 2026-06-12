@@ -13,6 +13,7 @@ import {
   type Project,
 } from '@/lib/queries';
 import { Button } from '@/components/ui/Button';
+import { QueryError } from '@/components/ui/QueryError';
 import { ChartCard, ChartCardSkeleton } from '@/components/dashboard/ChartCard';
 import {
   DateRangeFilter,
@@ -137,9 +138,11 @@ export function BudgetPage() {
 
   if (rollup.error || activeSummary.error) {
     return (
-      <div className="is-toast is-toast-danger">
-        Failed to load budget: {(rollup.error ?? activeSummary.error)!.message}
-      </div>
+      <QueryError
+        title="Couldn't load the budget"
+        error={rollup.error ?? activeSummary.error}
+        onRetry={() => Promise.all([rollup.refetch(), activeSummary.refetch()])}
+      />
     );
   }
 

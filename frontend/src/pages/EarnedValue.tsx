@@ -6,6 +6,7 @@ import type { ProgressRow } from '@/lib/queries';
 import { Card, CardHeader } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { NoProjectSelected } from '@/components/ui/NoProjectSelected';
+import { QueryError } from '@/components/ui/QueryError';
 import { KpiCard, KpiCardSkeleton } from '@/components/dashboard/KpiCard';
 import { EarnedValueByDisciplineChart } from '@/components/dashboard/EarnedValueByDisciplineChart';
 import { FilterDropdown } from '@/components/progress/FilterDropdown';
@@ -119,9 +120,11 @@ export function EarnedValuePage() {
   }
   if (summary.error || rows.error) {
     return (
-      <div className="is-toast is-toast-danger">
-        Failed to load earned value: {(summary.error ?? rows.error)?.message}
-      </div>
+      <QueryError
+        title="Couldn't load earned value"
+        error={summary.error ?? rows.error}
+        onRetry={() => Promise.all([summary.refetch(), rows.refetch()])}
+      />
     );
   }
   const s = summary.data;

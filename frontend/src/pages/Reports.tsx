@@ -16,6 +16,7 @@ import { VarianceAnalysisTable } from '@/components/reports/VarianceAnalysisTabl
 import { PeriodCloseCard } from '@/components/reports/PeriodCloseCard';
 import { Button } from '@/components/ui/Button';
 import { NoProjectSelected } from '@/components/ui/NoProjectSelected';
+import { QueryError } from '@/components/ui/QueryError';
 import { Card } from '@/components/ui/Card';
 import {
   DateRangeFilter,
@@ -102,9 +103,11 @@ export function ReportsPage() {
 
   if (summary.error) {
     return (
-      <div className="is-toast is-toast-danger">
-        Failed to load report data: {summary.error.message}
-      </div>
+      <QueryError
+        title="Couldn't load report data"
+        error={summary.error}
+        onRetry={() => (snapshotId ? snapshotSummary.refetch() : liveSummary.refetch())}
+      />
     );
   }
 

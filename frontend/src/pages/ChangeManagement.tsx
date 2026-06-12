@@ -12,10 +12,12 @@ import {
 import { Card, CardHeader } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { NoProjectSelected } from '@/components/ui/NoProjectSelected';
+import { QueryError } from '@/components/ui/QueryError';
 import { selectClass } from '@/components/ui/FormField';
 import { StatusChip } from '@/components/ui/StatusChip';
 import { fmt } from '@/lib/format';
 import { ApprovalStepper } from '@/components/changes/ApprovalStepper';
+import { AttachmentsList } from '@/components/attachments/AttachmentsList';
 import { NewChangeOrderModal } from '@/components/changes/NewChangeOrderModal';
 import { CoDecisionModal, type CoDecisionKind } from '@/components/changes/CoDecisionModal';
 
@@ -34,7 +36,7 @@ export function ChangeManagementPage() {
     | null
   >(null);
 
-  const { data: cos, isLoading, error } = useChangeOrders(projectId);
+  const { data: cos, isLoading, error, refetch } = useChangeOrders(projectId);
   const { data: rollup } = useBudgetRollup(projectId);
 
   const filtered = useMemo(() => {
@@ -111,9 +113,7 @@ export function ChangeManagementPage() {
     );
   }
   if (error) {
-    return (
-      <div className="is-toast is-toast-danger">{(error as Error).message}</div>
-    );
+    return <QueryError title="Couldn't load change orders" error={error} onRetry={refetch} />;
   }
 
   const approvedHrs = rollup?.approved_changes_hrs ?? 0;
@@ -279,6 +279,12 @@ export function ChangeManagementPage() {
             <p className="mt-3 text-xs text-[color:var(--color-text-muted)]">
               Click a CO above to view its stage.
             </p>
+          )}
+          {selected && (
+            <div className="mt-4 border-t border-[color:var(--color-line)] pt-4">
+              <h4 className="text-sm font-semibold mb-3">Supporting documents</h4>
+              <AttachmentsList entity="change_order" entityId={selected.id} compact />
+            </div>
           )}
         </Card>
       </div>

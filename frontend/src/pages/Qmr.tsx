@@ -12,6 +12,7 @@ import {
 } from '@/lib/queries';
 import { Button } from '@/components/ui/Button';
 import { NoProjectSelected } from '@/components/ui/NoProjectSelected';
+import { QueryError } from '@/components/ui/QueryError';
 import { Card } from '@/components/ui/Card';
 import { downloadCsv } from '@/lib/export';
 import type { QmrCraft, QmrLeaf, QmrTotals } from '@/lib/qmrTypes';
@@ -305,9 +306,13 @@ export function QmrPage() {
 
   if (error) {
     return (
-      <div className="is-toast is-toast-danger">
-        Failed to load QMR data: {(error as Error).message}
-      </div>
+      <QueryError
+        title="Couldn't load QMR data"
+        error={error}
+        onRetry={() =>
+          Promise.all([codes.refetch(), rows.refetch(), projectCoa.refetch(), snapshots.refetch()])
+        }
+      />
     );
   }
 

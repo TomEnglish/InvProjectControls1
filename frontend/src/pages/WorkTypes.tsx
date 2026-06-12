@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Pencil, Printer, SlidersHorizontal, Star } from 'lucide-react';
 import { useWorkTypes, useCurrentUser, hasRole, type WorkTypeRow } from '@/lib/queries';
+import { QueryError } from '@/components/ui/QueryError';
 import { WorkTypeModal } from '@/components/work-types/WorkTypeModal';
 import { printWorkType } from '@/components/work-types/printWorkType';
 
@@ -18,7 +19,7 @@ const DISCIPLINE_DISPLAY: Record<string, string> = {
 const DISCIPLINE_ORDER = ['CIVIL', 'FOUNDATIONS', 'STEEL', 'PIPE', 'ELEC', 'MECH', 'INST', 'SITE'];
 
 export function WorkTypesPage() {
-  const { data: workTypes, isLoading, error } = useWorkTypes();
+  const { data: workTypes, isLoading, error, refetch } = useWorkTypes();
   const { data: me } = useCurrentUser();
   const canEdit = hasRole(me?.role, 'admin');
 
@@ -51,9 +52,7 @@ export function WorkTypesPage() {
 
   if (error) {
     return (
-      <div className="is-toast is-toast-danger">
-        Failed to load Rules of Credit (ROC): {(error as Error).message}
-      </div>
+      <QueryError title="Couldn't load Rules of Credit (ROC)" error={error} onRetry={refetch} />
     );
   }
 

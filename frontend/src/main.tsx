@@ -16,6 +16,9 @@ const queryClient = new QueryClient({
       staleTime: 30_000,
       retry: 1,
       refetchOnWindowFocus: false,
+      // Field connections drop constantly — refresh stale data as soon as
+      // the connection returns so the OfflineBanner's promise holds true.
+      refetchOnReconnect: true,
     },
   },
 });

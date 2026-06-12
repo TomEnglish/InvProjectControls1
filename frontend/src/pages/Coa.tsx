@@ -13,6 +13,7 @@ import {
 import { useProjectStore } from '@/stores/project';
 import { Button } from '@/components/ui/Button';
 import { selectClass } from '@/components/ui/FormField';
+import { QueryError } from '@/components/ui/QueryError';
 import { CoaCodeModal } from '@/components/coa/CoaCodeModal';
 import { fmt } from '@/lib/format';
 
@@ -28,7 +29,7 @@ async function fileToBase64(file: File): Promise<string> {
 }
 
 export function CoaPage() {
-  const { data: codes, isLoading, error } = useCoaCodes();
+  const { data: codes, isLoading, error, refetch } = useCoaCodes();
   const { data: me } = useCurrentUser();
   const canEdit = hasRole(me?.role, 'admin');
 
@@ -97,11 +98,7 @@ export function CoaPage() {
   }
 
   if (error) {
-    return (
-      <div className="is-toast is-toast-danger">
-        Failed to load COA: {(error as Error).message}
-      </div>
-    );
+    return <QueryError title="Couldn't load the COA" error={error} onRetry={refetch} />;
   }
 
   if ((codes ?? []).length === 0) {

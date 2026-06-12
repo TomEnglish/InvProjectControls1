@@ -2,6 +2,7 @@ import { Suspense } from 'react';
 import { Outlet } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
 import { Topbar } from './Topbar';
+import { OfflineBanner } from './OfflineBanner';
 
 function RouteFallback() {
   return (
@@ -18,6 +19,7 @@ export function AppShell() {
       <Sidebar />
       <div className="flex-1 min-w-0" style={{ marginLeft: 'var(--sidebar-w)' }}>
         <Topbar />
+        <OfflineBanner />
         <main className="px-8 py-8 max-w-[1280px] mx-auto">
           {/*
             Lazy-loaded routes (Reports, QMR, Snapshots, EarnedValue, Budget,

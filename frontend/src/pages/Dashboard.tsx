@@ -8,6 +8,7 @@ import { EarnedValueByDisciplineChart } from '@/components/dashboard/EarnedValue
 import { SCurveChart } from '@/components/dashboard/SCurveChart';
 import { DisciplineSummaryTable } from '@/components/dashboard/DisciplineSummaryTable';
 import { NoProjectSelected } from '@/components/ui/NoProjectSelected';
+import { QueryError } from '@/components/ui/QueryError';
 
 function LoadingSkeleton() {
   return (
@@ -38,12 +39,11 @@ export function DashboardPage() {
 
   if (summary.error || periods.error) {
     return (
-      <div className="is-toast is-toast-danger">
-        <div>
-          <div className="font-semibold">Failed to load dashboard</div>
-          <div className="opacity-90 mt-0.5">{(summary.error ?? periods.error)?.message}</div>
-        </div>
-      </div>
+      <QueryError
+        title="Couldn't load the dashboard"
+        error={summary.error ?? periods.error}
+        onRetry={() => Promise.all([summary.refetch(), periods.refetch()])}
+      />
     );
   }
 

@@ -14,6 +14,7 @@ import type { ProgressRow, WorkTypeMilestone } from '@/lib/queries';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { NoProjectSelected } from '@/components/ui/NoProjectSelected';
+import { QueryError } from '@/components/ui/QueryError';
 import { inputClass } from '@/components/ui/FormField';
 import { ProgressTable } from '@/components/progress/ProgressTable';
 import { RecordDetail } from '@/components/progress/RecordDetail';
@@ -41,7 +42,7 @@ export function ProgressPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [newRecordOpen, setNewRecordOpen] = useState(false);
 
-  const { data: records, isLoading, error } = useProgressRows(projectId);
+  const { data: records, isLoading, error, refetch } = useProgressRows(projectId);
   const { data: iwps } = useIwps(projectId);
   const { data: workTypes } = useWorkTypes();
 
@@ -139,11 +140,7 @@ export function ProgressPage() {
   }
 
   if (error) {
-    return (
-      <div className="is-toast is-toast-danger">
-        Failed to load records: {(error as Error).message}
-      </div>
-    );
+    return <QueryError title="Couldn't load progress records" error={error} onRetry={refetch} />;
   }
 
   return (

@@ -2,6 +2,7 @@ import { useProjectStore } from '@/stores/project';
 import { useDashboardSummary } from '@/lib/queries';
 import { Card, CardHeader } from '@/components/ui/Card';
 import { NoProjectSelected } from '@/components/ui/NoProjectSelected';
+import { QueryError } from '@/components/ui/QueryError';
 import { fmt } from '@/lib/format';
 
 const NO_PROJECT_MESSAGE = 'Pick a project in the top bar to view discipline progress.';
@@ -20,9 +21,11 @@ export function DisciplineProgressPage() {
   }
   if (summary.error) {
     return (
-      <div className="is-toast is-toast-danger">
-        Failed to load discipline progress: {summary.error.message}
-      </div>
+      <QueryError
+        title="Couldn't load discipline progress"
+        error={summary.error}
+        onRetry={() => summary.refetch()}
+      />
     );
   }
   const s = summary.data;

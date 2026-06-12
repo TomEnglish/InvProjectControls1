@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Paperclip, Upload, Download, Trash2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
@@ -7,7 +7,10 @@ import {
   useCurrentUser,
   hasRole,
   type AttachmentEntity,
+  type AttachmentRow,
 } from '@/lib/queries';
+import { Modal } from '@/components/ui/Modal';
+import { Button } from '@/components/ui/Button';
 
 type Props = {
   entity: AttachmentEntity;
@@ -36,8 +39,13 @@ export function AttachmentsList({ entity, entityId, compact }: Props) {
   const qc = useQueryClient();
   const { data: me } = useCurrentUser();
   const canUpload = hasRole(me?.role, 'pc_reviewer');
-  const canDelete = hasRole(me?.role, 'pm');
+  // Mirrors RLS `attachments_reviewer_delete`: pc_reviewer+ may delete only
+  // their own uploads — showing the button more broadly would just produce
+  // server-side no-ops.
+  const canDelete = (a: AttachmentRow) =>
+    !!me && a.uploaded_by === me.id && hasRole(me.role, 'pc_reviewer');
   const fileInput = useRef<HTMLInputElement>(null);
+  const [confirmDelete, setConfirmDelete] = useState<AttachmentRow | null>(null);
 
   const { data: items, isLoading } = useAttachments(entity, entityId);
 
@@ -82,12 +90,24 @@ export function AttachmentsList({ entity, entityId, compact }: Props) {
 
   const del = useMutation({
     mutationFn: async (att: { id: string; path: string }) => {
+      // Row first: RLS makes deletes owner-only, and a filtered-out delete is
+      // a silent 0-row no-op — removing the storage object first would orphan
+      // the metadata row. A storage failure after the row delete leaves an
+      // orphaned object instead, which the orphan-sweep covers.
+      const { data, error: rowErr } = await supabase
+        .from('attachments')
+        .delete()
+        .eq('id', att.id)
+        .select('id');
+      if (rowErr) throw rowErr;
+      if (!data || data.length === 0) {
+        throw new Error('You can only delete files you uploaded.');
+      }
       const { error: storageErr } = await supabase.storage.from('attachments').remove([att.path]);
       if (storageErr) throw storageErr;
-      const { error: rowErr } = await supabase.from('attachments').delete().eq('id', att.id);
-      if (rowErr) throw rowErr;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['attachments', entity, entityId] }),
+    onSuccess: () => setConfirmDelete(null),
+    onSettled: () => qc.invalidateQueries({ queryKey: ['attachments', entity, entityId] }),
   });
 
   return (
@@ -165,13 +185,14 @@ export function AttachmentsList({ entity, entityId, compact }: Props) {
               >
                 <Download size={14} />
               </button>
-              {canDelete && (
+              {canDelete(a) && (
                 <button
                   type="button"
                   aria-label="Delete"
                   className="inline-flex items-center justify-center w-7 h-7 rounded-md text-[color:var(--color-text-muted)] hover:text-[color:var(--color-danger)] hover:bg-[color:var(--color-danger-soft)] transition-colors"
                   onClick={() => {
-                    if (confirm(`Delete ${a.original_filename}?`)) del.mutate({ id: a.id, path: a.path });
+                    del.reset();
+                    setConfirmDelete(a);
                   }}
                   disabled={del.isPending}
                 >
@@ -193,8 +214,36 @@ export function AttachmentsList({ entity, entityId, compact }: Props) {
           {(download.error as Error).message}
         </div>
       )}
-      {del.error && (
-        <div className="is-toast is-toast-danger mt-2">{(del.error as Error).message}</div>
+
+      {confirmDelete && (
+        <Modal
+          open
+          onClose={() => setConfirmDelete(null)}
+          title="Delete file"
+          width={440}
+        >
+          <p className="text-sm text-[color:var(--color-text-muted)] mt-1">
+            <span className="font-medium text-[color:var(--color-text)]">
+              {confirmDelete.original_filename}
+            </span>{' '}
+            will be removed for everyone with access. This can't be undone.
+          </p>
+          {del.error && (
+            <div className="is-toast is-toast-danger mt-3">{(del.error as Error).message}</div>
+          )}
+          <div className="mt-4 flex gap-2 justify-end">
+            <Button variant="outline" onClick={() => setConfirmDelete(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              disabled={del.isPending}
+              onClick={() => del.mutate({ id: confirmDelete.id, path: confirmDelete.path })}
+            >
+              {del.isPending ? 'Deleting…' : 'Delete'}
+            </Button>
+          </div>
+        </Modal>
       )}
     </div>
   );

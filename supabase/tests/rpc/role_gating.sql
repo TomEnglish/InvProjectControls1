@@ -10,7 +10,7 @@
 
 begin;
 
-select plan(11);
+select plan(10);
 
 -- assert_role compares ranks: viewer < clerk < pc_reviewer < pm < admin < super_admin.
 

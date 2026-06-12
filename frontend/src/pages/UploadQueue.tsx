@@ -10,6 +10,7 @@ import {
 } from '@/lib/queries';
 import { Card, CardHeader } from '@/components/ui/Card';
 import { StatusChip } from '@/components/ui/StatusChip';
+import { QueryError } from '@/components/ui/QueryError';
 import { QueueReviewModal } from '@/components/upload-queue/QueueReviewModal';
 
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
@@ -80,7 +81,7 @@ function WarningChips({ row }: { row: UploadQueueRow }) {
 
 export function UploadQueuePage() {
   const { data: me } = useCurrentUser();
-  const { data, isLoading, error } = useUploadQueue();
+  const { data, isLoading, error, refetch } = useUploadQueue();
   const [tab, setTab] = useState<UploadQueueStatus>('queued');
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<UploadQueueRow | null>(null);
@@ -155,11 +156,7 @@ export function UploadQueuePage() {
     );
   }
   if (error) {
-    return (
-      <div className="is-toast is-toast-danger">
-        Failed to load queue: {(error as Error).message}
-      </div>
-    );
+    return <QueryError title="Couldn't load the upload queue" error={error} onRetry={refetch} />;
   }
 
   return (

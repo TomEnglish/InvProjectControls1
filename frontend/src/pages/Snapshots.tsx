@@ -5,6 +5,7 @@ import { useSnapshotComparison, useSnapshots, type Snapshot } from '@/lib/querie
 import { Card, CardHeader } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { NoProjectSelected } from '@/components/ui/NoProjectSelected';
+import { QueryError } from '@/components/ui/QueryError';
 import { fmt } from '@/lib/format';
 import { downloadCsv } from '@/lib/export';
 
@@ -79,9 +80,11 @@ export function SnapshotsPage() {
 
   if (snapshots.error) {
     return (
-      <div className="is-toast is-toast-danger">
-        Failed to load snapshots: {(snapshots.error as Error).message}
-      </div>
+      <QueryError
+        title="Couldn't load snapshots"
+        error={snapshots.error}
+        onRetry={() => snapshots.refetch()}
+      />
     );
   }
 
@@ -251,9 +254,12 @@ export function SnapshotsPage() {
             </div>
           )}
           {comparison.error && (
-            <div className="px-6 pb-6 is-toast is-toast-danger">
-              {(comparison.error as Error).message}
-            </div>
+            <QueryError
+              title="Couldn't load the comparison"
+              error={comparison.error}
+              onRetry={() => comparison.refetch()}
+              className="mx-6 mb-6"
+            />
           )}
           {comparison.data && (
             <div className="overflow-x-auto">

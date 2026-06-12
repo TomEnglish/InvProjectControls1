@@ -1000,6 +1000,7 @@ export function useDashboardSummary(projectId: string | null) {
   return {
     isLoading: metrics.isLoading || disciplines.isLoading,
     error: (metrics.error ?? disciplines.error) as Error | null,
+    refetch: () => Promise.all([metrics.refetch(), disciplines.refetch()]),
     data:
       metrics.data && disciplines.data
         ? ({
@@ -1045,6 +1046,7 @@ export function useDashboardSummaryAtSnapshot(
   return {
     isLoading: disciplines.isLoading,
     error: disciplines.error as Error | null,
+    refetch: () => disciplines.refetch(),
     data:
       snapshot && disciplines.data && projectId
         ? ({

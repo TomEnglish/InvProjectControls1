@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase';
 import { useWorkTypeMilestonesForRecord, type ProgressRow } from '@/lib/queries';
 import { Card, CardHeader } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
+import { AttachmentsList } from '@/components/attachments/AttachmentsList';
 import { fmt } from '@/lib/format';
 
 type Props = {
@@ -296,6 +297,13 @@ export function RecordDetail({ record, projectId, onClose }: Props) {
           <div className="is-stat-label">Earned Hrs</div>
           <div className="font-mono text-base mt-0.5">{liveEarnHrs.toFixed(2)}</div>
         </div>
+      </div>
+
+      <div className="mt-4 border-t border-[color:var(--color-line)] pt-4">
+        <h4 className="text-sm font-semibold mb-3">Attachments</h4>
+        {/* progress_records rows are the "audit records" of ARCHITECTURE.md —
+            drawing files and mark-ups attach against the record id. */}
+        <AttachmentsList entity="audit_record" entityId={record.id} compact />
       </div>
 
       <AuditDetails record={record} />

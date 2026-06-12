@@ -41,7 +41,7 @@ begin;
 --   mutating: project_co_reviewer_set (admin/pm setter, audit-logged)
 --   change_orders gains assigned_pc_reviewer_id + assigned_pm_id columns
 --   co_pc_review signature changed to admit a re-assignment parameter
-select plan(64);
+select plan(65);
 
 -- ─────────────────────────────────────────────────────────────────────
 -- 1. Existence checks for every RPC the frontend depends on.
