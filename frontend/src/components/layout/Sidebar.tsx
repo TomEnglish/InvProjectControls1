@@ -43,7 +43,7 @@ const sections: NavSection[] = [
   {
     label: 'Setup',
     items: [
-      { to: '/projects', label: 'Project Setup', icon: FolderCog },
+      { to: '/projects', label: 'Project Setup & Baseline', icon: FolderCog },
       // Post-import reconciliation: did everything in the uploaded QMR
       // workbook actually land in the database?
       { to: '/data-check', label: 'Data Check', icon: ClipboardCheck },
@@ -57,7 +57,7 @@ const sections: NavSection[] = [
   {
     label: 'Execution',
     items: [
-      { to: '/budget', label: 'Budget & Baseline', icon: Lock },
+      { to: '/budget', label: 'Budget', icon: Lock },
       { to: '/progress', label: 'Progress', icon: Play },
       { to: '/progress/upload', label: 'Upload', icon: UploadIcon },
       // Auditor inbox — review queued clerk submissions. Hidden from

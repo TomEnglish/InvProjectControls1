@@ -62,7 +62,7 @@ export const router = createBrowserRouter([
     ),
     children: [
       { index: true, element: <DashboardPage />, handle: { title: 'Executive Dashboard' } },
-      { path: '/projects', element: <ProjectSetupPage />, handle: { title: 'Project Setup' } },
+      { path: '/projects', element: <ProjectSetupPage />, handle: { title: 'Project Setup & Baseline' } },
       { path: '/coa', element: <CoaPage />, handle: { title: 'COA & Unit Rates' } },
       { path: '/work-types', element: <WorkTypesPage />, handle: { title: 'Rules of Credit (ROC)' } },
       {
@@ -72,7 +72,7 @@ export const router = createBrowserRouter([
             <BudgetPage />
           </ProjectScopeGuard>
         ),
-        handle: { title: 'Budget & Baseline' },
+        handle: { title: 'Budget' },
       },
       {
         path: '/progress',

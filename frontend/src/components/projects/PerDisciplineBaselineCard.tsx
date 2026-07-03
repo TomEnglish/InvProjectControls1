@@ -11,7 +11,7 @@ import { supabase } from '@/lib/supabase';
 import { Card, CardHeader } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { FileDropzone } from '@/components/ui/FileDropzone';
-import { parseProgressFile, type ParsedRow } from '@/lib/progressParser';
+import { parseProgressFile, parseQmrFile, type ParsedRow } from '@/lib/progressParser';
 import { useBaselineByDiscipline } from '@/lib/queries';
 
 /**
@@ -163,6 +163,18 @@ function DisciplineSlot({
     setFile(f);
     if (!f) return;
     try {
+      // A zone declares ONE discipline for every row it imports — dropping
+      // the multi-discipline QMR workbook here would flatten all seven
+      // trades into this zone. Detect and redirect instead.
+      const qmr = await parseQmrFile(f);
+      if (qmr.auditSheets.length > 0) {
+        setParseErr(
+          'This is a unified QMR workbook (multiple audit tabs). Use the ' +
+            '"Load baseline from QMR workbook" card above so each tab lands in ' +
+            'its own discipline — this zone would put every record under one.',
+        );
+        return;
+      }
       const result = await parseProgressFile(f);
       setParsed(result.rows);
       setUnmapped(result.unmappedHeaders);

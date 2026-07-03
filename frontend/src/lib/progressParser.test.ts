@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import * as XLSX from 'xlsx';
-import { parseProgressWorkbook, parseQmrWorkbook } from './progressParser';
+import { parseProgressWorkbook, parseProgressWorkbookAuto, parseQmrWorkbook } from './progressParser';
 
 function workbookFromRows(rows: Record<string, unknown>[]): XLSX.WorkBook {
   const ws = XLSX.utils.json_to_sheet(rows);
@@ -72,10 +72,10 @@ describe('parseProgressWorkbook', () => {
       },
     ]);
     const { rows } = parseProgressWorkbook(wb);
-    expect(rows[0]!.percent_complete).toBe(0.85);
-    // The auto-scale logic only fires for milestone pct values, not the
-    // top-level percent_complete column. Document that behavior here so we
-    // catch any unintended changes.
+    // Record-level percent now follows the same fraction heuristic as
+    // milestone pcts (changed for QMR support — its PCT_EARNED column is a
+    // 0..1 fraction). Previously the top-level column was exempt.
+    expect(rows[0]!.percent_complete).toBe(85);
   });
 
   it('auto-scales fractional milestone pct values', () => {
@@ -410,5 +410,65 @@ describe('parseQmrWorkbook', () => {
     const wb = workbookFromRows([{ DWG: 'P-2001', Description: 'pipe run' }]);
     const { auditSheets } = parseQmrWorkbook(wb);
     expect(auditSheets).toEqual([]);
+  });
+});
+
+describe('format auto-detection (flat + QMR through one entry point)', () => {
+  it('maps PCT_EARNED to percent_complete with fraction scaling', () => {
+    const wb = workbookFromRows([
+      { DWG: 'CV-1', DESC_: 'FDN', PCT_EARNED: 0.73 },
+      { DWG: 'CV-2', DESC_: 'SLAB', PCT_EARNED: 1 },
+    ]);
+    const { rows, unmappedHeaders } = parseProgressWorkbook(wb);
+    expect(rows[0]!.percent_complete).toBe(73);
+    expect(rows[1]!.percent_complete).toBe(100);
+    expect(unmappedHeaders).toEqual([]);
+  });
+
+  it('leaves 0..100-style percents untouched', () => {
+    const wb = workbookFromRows([{ DWG: 'P-1', DESC_: 'pipe', 'Percent Complete': 56 }]);
+    const { rows } = parseProgressWorkbook(wb);
+    expect(rows[0]!.percent_complete).toBe(56);
+  });
+
+  it('auto: flat workbook passes through with no qmrSheets marker', () => {
+    const wb = workbookFromRows([{ DWG: 'P-1', DESC_: 'pipe run', FLD_WHRS: 12 }]);
+    const result = parseProgressWorkbookAuto(wb);
+    expect(result.qmrSheets).toBeUndefined();
+    expect(result.rows).toHaveLength(1);
+    expect(result.rows[0]!.budget_hrs).toBe(12);
+  });
+
+  it('auto: QMR workbook flattens all audit tabs with provenance', () => {
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(
+      wb,
+      XLSX.utils.aoa_to_sheet([
+        ['Record Identity', ''],
+        ['DISCIPLINE', 'REC_NO', 'DWG', 'FLD_QTY', 'UOM', 'M1_PCT', 'M1_DESC'],
+        ['ALL', 'ALL', 'ALL', 'ALL', 'ALL', 'ALL', 'ALL'],
+        ['Civil', 1, 'CV-1', 10, 'CY', 0.5, 'Formwork'],
+        ['Civil', 2, 'CV-2', 20, 'CY', 1, 'Formwork'],
+      ]),
+      'Civ Audit',
+    );
+    XLSX.utils.book_append_sheet(
+      wb,
+      XLSX.utils.aoa_to_sheet([
+        ['Record Identity', ''],
+        ['DISCIPLINE', 'REC_NO', 'DWG', 'FLD_QTY', 'UOM', 'M1_PCT', 'M1_DESC'],
+        ['ALL', 'ALL', 'ALL', 'ALL', 'ALL', 'ALL', 'ALL'],
+        ['Pipe', 1, 'P-1', 5, 'LF', 0, 'Erect'],
+      ]),
+      'Pipe Audit',
+    );
+    const result = parseProgressWorkbookAuto(wb);
+    expect(result.rows).toHaveLength(3);
+    expect(result.qmrSheets).toEqual([
+      { sheetName: 'Civ Audit', disciplineLabel: 'Civil', rows: 2 },
+      { sheetName: 'Pipe Audit', disciplineLabel: 'Pipe', rows: 1 },
+    ]);
+    // Rows keep their per-tab discipline labels for the weekly import path.
+    expect(result.rows.map((r) => r.discipline_label)).toEqual(['Civil', 'Civil', 'Pipe']);
   });
 });

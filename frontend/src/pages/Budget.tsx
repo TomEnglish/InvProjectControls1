@@ -1,15 +1,14 @@
 import '@/lib/charts';
 import { useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Lock, Info, Download } from 'lucide-react';
 import { useProjectStore } from '@/stores/project';
 import {
   useBudgetRollup,
   useDashboardSummary,
   useDashboardSummaryAtSnapshot,
-  useCurrentUser,
   useProject,
   useSnapshots,
-  hasRole,
   type Project,
 } from '@/lib/queries';
 import { Button } from '@/components/ui/Button';
@@ -24,7 +23,6 @@ import {
 } from '@/components/ui/DateRangeFilter';
 import { fmt } from '@/lib/format';
 import { downloadCsv } from '@/lib/export';
-import { LockBaselineModal } from '@/components/budget/LockBaselineModal';
 import { BudgetByDisciplineChart } from '@/components/budget/BudgetByDisciplineChart';
 
 function ThreeBudgetPrimer() {
@@ -67,13 +65,6 @@ function ThreeBudgetPrimer() {
 
 export function BudgetPage() {
   const projectId = useProjectStore((s) => s.currentProjectId);
-  const { data: me } = useCurrentUser();
-  // A11 — matches the relaxed assert_role('pm') gate inside
-  // project_lock_baseline v3. PMs run the project lifecycle and need to
-  // lock the baseline without an admin in the loop.
-  const canLock = hasRole(me?.role, 'pm');
-  const [lockModalOpen, setLockModalOpen] = useState(false);
-
   const { data: project } = useProject(projectId);
 
   const rollup = useBudgetRollup(projectId);
@@ -148,8 +139,6 @@ export function BudgetPage() {
 
   const r = rollup.data!;
   const s = activeSummary.data!;
-  const isDraft = project.status === 'draft';
-  const recordCount = s.disciplines.reduce((acc, d) => acc + d.records, 0);
 
   const exportBudgetCsv = () => {
     const date = new Date().toISOString().slice(0, 10);
@@ -275,11 +264,7 @@ export function BudgetPage() {
           </ChartCard>
         </div>
         <div className="space-y-4">
-          <BaselineControlsCard
-            project={project}
-            canLock={canLock}
-            onLock={() => setLockModalOpen(true)}
-          />
+          <BaselineControlsCard project={project} />
           <ThreeBudgetPrimer />
         </div>
       </div>
@@ -337,15 +322,6 @@ export function BudgetPage() {
         </div>
       </div>
 
-      <LockBaselineModal
-        open={lockModalOpen && isDraft}
-        onClose={() => setLockModalOpen(false)}
-        projectId={project.id}
-        projectCode={project.project_code}
-        projectName={project.name}
-        totalBudgetHrs={s.total_budget_hrs}
-        recordCount={recordCount}
-      />
     </div>
   );
 }
@@ -383,15 +359,11 @@ function BudgetTile({
   );
 }
 
-function BaselineControlsCard({
-  project,
-  canLock,
-  onLock,
-}: {
-  project: Project;
-  canLock: boolean;
-  onLock: () => void;
-}) {
+// Locking moved to the Project Setup & Baseline page so the whole setup
+// flow (info → load → verify → lock) lives on one screen. This card keeps
+// the baseline's status visible in the budget context and points draft
+// projects at the setup page.
+function BaselineControlsCard({ project }: { project: Project }) {
   const isDraft = project.status === 'draft';
   const lockedDate = project.baseline_locked_at
     ? new Date(project.baseline_locked_at).toLocaleDateString()
@@ -401,7 +373,7 @@ function BaselineControlsCard({
     <div className="is-surface p-6">
       <div className="is-eyebrow mb-1.5">Baseline</div>
       <h3 className="text-base font-semibold leading-tight">
-        {isDraft ? 'Ready to lock' : 'Locked'}
+        {isDraft ? 'Not locked yet' : 'Locked'}
       </h3>
       <p className="text-sm text-[color:var(--color-text-muted)] mt-1.5 leading-relaxed">
         {isDraft
@@ -411,14 +383,9 @@ function BaselineControlsCard({
 
       <div className="mt-4 flex flex-col gap-2">
         {isDraft ? (
-          <Button
-            variant="primary"
-            disabled={!canLock}
-            onClick={onLock}
-            className="w-full justify-center"
-          >
-            <Lock size={14} /> Lock baseline
-          </Button>
+          <Link to="/projects" className="is-btn is-btn-primary w-full justify-center">
+            <Lock size={14} /> Lock on Project Setup & Baseline
+          </Link>
         ) : (
           <Button
             variant="outline"
@@ -428,11 +395,6 @@ function BaselineControlsCard({
           >
             <Download size={14} /> Export snapshot
           </Button>
-        )}
-        {!canLock && isDraft && (
-          <p className="text-xs text-[color:var(--color-text-muted)] text-center">
-            PM role or above required to lock baseline.
-          </p>
         )}
       </div>
     </div>

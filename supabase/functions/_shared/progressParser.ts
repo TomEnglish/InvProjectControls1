@@ -133,11 +133,15 @@ const HEADER_MAP: Record<string, keyof ParsedRow> = {
   actual_hrs: 'actual_hrs', actual_hours: 'actual_hrs', actual: 'actual_hrs',
   spent_hrs: 'actual_hrs',
 
-  // Percent complete
+  // Percent complete. PCT_EARNED is the unified/QMR workbook's computed
+  // milestones×weights percentage — mapped here so weekly imports carry a
+  // record-level percent (snapshot totals read it); the baseline path
+  // explicitly zeroes percent server-side so this mapping can't leak
+  // progress into a baseline.
   percent_complete: 'percent_complete', percent: 'percent_complete', pct: 'percent_complete',
   pct_complete: 'percent_complete', complete: 'percent_complete',
   completion: 'percent_complete', percent_hrs: 'percent_complete',
-  percenthrs: 'percent_complete',
+  percenthrs: 'percent_complete', pct_earned: 'percent_complete',
 
   // Unit of measure
   unit: 'unit', uom: 'unit', units: 'unit', unit_of_measure: 'unit',
@@ -397,7 +401,6 @@ function parseRawRows(raw: Record<string, unknown>[]): ParseResult {
   const SUPPRESS_FROM_IGNORED: ReadonlySet<string> = new Set([
     'whrs_unit',        // generated column = budget_hrs / budget_qty
     'ifc_whrs',         // mechanical alias of whrs_unit per the unified workbook
-    'pct_earned',       // generated from milestones × weights server-side
     'roc',              // generated = earn_whrs / fld_whrs server-side
     'ern_qty',          // → earned_qty_imported, but also computed server-side
     'earn_whrs',        // → earn_whrs_imported, but also computed server-side
@@ -457,6 +460,18 @@ function parseRawRows(raw: Record<string, unknown>[]): ParseResult {
           milestones.push({ name, pct: Math.max(0, Math.min(100, pct)) });
         }
         if (milestones.length > 0) out.milestones = milestones;
+      }
+
+      // Same fraction heuristic for the record-level percent: the QMR
+      // workbook's PCT_EARNED is a 0..1 fraction while the flat template
+      // reports 0..100. (A record that is genuinely 1% complete reads as
+      // 100% under this rule — the same accepted trade-off as milestones.)
+      if (
+        out.percent_complete !== undefined &&
+        out.percent_complete > 0 &&
+        out.percent_complete <= 1.001
+      ) {
+        out.percent_complete = out.percent_complete * 100;
       }
 
       return out;
@@ -594,6 +609,54 @@ export async function parseQmrFile(file: File): Promise<QmrParseResult> {
   const buf = await file.arrayBuffer();
   const workbook = XLSX.read(buf, { type: 'array' });
   return parseQmrWorkbook(workbook);
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Format auto-detection — accept BOTH the flat single-sheet template and
+// the unified QMR workbook through one entry point. Used by the weekly
+// Upload page and the clerk queue edge fn, where the user shouldn't have
+// to know (or say) which format the field team exported this week.
+// ─────────────────────────────────────────────────────────────────────
+
+export interface AutoParseResult extends ParseResult {
+  /**
+   * Present when the file was recognized as a unified QMR workbook:
+   * per-tab provenance for the flattened `rows`. Absent for flat files.
+   */
+  qmrSheets?: { sheetName: string; disciplineLabel: string | null; rows: number }[];
+}
+
+export function parseProgressWorkbookAuto(workbook: XLSX.WorkBook): AutoParseResult {
+  const qmr = parseQmrWorkbook(workbook);
+  if (qmr.auditSheets.length > 0) {
+    return {
+      rows: qmr.auditSheets.flatMap((s) => s.rows),
+      unmappedHeaders: [...new Set(qmr.auditSheets.flatMap((s) => s.unmappedHeaders))],
+      // ROC weights/labels are a flat-template affordance; the QMR path
+      // resolves milestone weights through WORK_TYPE instead.
+      inferredRocWeights: [],
+      inferredRocLabels: [],
+      qmrSheets: qmr.auditSheets.map((s) => ({
+        sheetName: s.sheetName,
+        disciplineLabel: s.disciplineLabel,
+        rows: s.rows.length,
+      })),
+    };
+  }
+  return parseProgressWorkbook(workbook);
+}
+
+export async function parseProgressFileAuto(file: File): Promise<AutoParseResult> {
+  const ext = file.name.toLowerCase().split('.').pop();
+  let workbook: XLSX.WorkBook;
+  if (ext === 'csv') {
+    const text = await file.text();
+    workbook = XLSX.read(text, { type: 'string' });
+  } else {
+    const buf = await file.arrayBuffer();
+    workbook = XLSX.read(buf, { type: 'array' });
+  }
+  return parseProgressWorkbookAuto(workbook);
 }
 
 export function recentSundayISO(): string {

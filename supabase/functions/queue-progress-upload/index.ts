@@ -23,7 +23,7 @@
 
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 import {
-  parseProgressWorkbook,
+  parseProgressWorkbookAuto,
   type ParseResult,
   type ParsedRow,
 } from '../_shared/progressParser.ts';
@@ -266,7 +266,9 @@ Deno.serve(async (req) => {
     return json({ error: `parse failed: ${(err as Error).message}` }, 400);
   }
 
-  const parsed = parseProgressWorkbook(workbook);
+  // Auto-detects flat single-sheet templates AND unified QMR workbooks
+  // (multi-tab audit workbook flattened with per-row discipline labels).
+  const parsed = parseProgressWorkbookAuto(workbook);
   if (parsed.rows.length === 0) {
     return json({ error: 'no rows parsed from file' }, 400);
   }

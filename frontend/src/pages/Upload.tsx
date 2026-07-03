@@ -10,9 +10,10 @@ import { Field, inputClass } from '@/components/ui/FormField';
 import { FileDropzone } from '@/components/ui/FileDropzone';
 import { NoProjectSelected } from '@/components/ui/NoProjectSelected';
 import {
-  parseProgressFile,
+  parseProgressFileAuto,
   recentSundayISO,
   type ParsedRow,
+  type AutoParseResult,
 } from '@/lib/progressParser';
 import { ClerkUploadPanel } from '@/components/upload-queue/ClerkUploadPanel';
 import { MySubmissionsCard } from '@/components/upload-queue/MySubmissionsCard';
@@ -56,6 +57,7 @@ function ReviewerDirectUploadPage() {
   const [parseErr, setParseErr] = useState<string | null>(null);
   const [rocWeightsFromFile, setRocWeightsFromFile] = useState<number[]>([]);
   const [rocLabelsFromFile, setRocLabelsFromFile] = useState<string[]>([]);
+  const [qmrSheets, setQmrSheets] = useState<AutoParseResult['qmrSheets']>(undefined);
 
   const workTypes = useWorkTypes();
 
@@ -167,15 +169,17 @@ function ReviewerDirectUploadPage() {
     setUnmapped([]);
     setRocWeightsFromFile([]);
     setRocLabelsFromFile([]);
+    setQmrSheets(undefined);
     updateTemplate.reset();
     setFile(f);
     if (!f) return;
     try {
-      const result = await parseProgressFile(f);
+      const result = await parseProgressFileAuto(f);
       setParsed(result.rows);
       setUnmapped(result.unmappedHeaders);
       setRocWeightsFromFile(result.inferredRocWeights);
       setRocLabelsFromFile(result.inferredRocLabels);
+      setQmrSheets(result.qmrSheets);
       if (!label) setLabel(f.name.replace(/\.[^.]+$/, ''));
     } catch (err) {
       setParseErr((err as Error).message);
@@ -219,7 +223,7 @@ function ReviewerDirectUploadPage() {
         <CardHeader
           eyebrow="Universal upload"
           title="Import progress data"
-          caption="CSV or Excel. Column names are matched against a wide alias table — drawing, description, hours, percent, foreman, IWP, milestone columns, etc."
+          caption="CSV, flat Excel, or the unified QMR workbook (all audit tabs combined automatically). Column names are matched against a wide alias table — drawing, description, hours, percent, foreman, IWP, milestone columns, etc."
           actions={
             <a
               href="/progress-template.csv"
@@ -261,6 +265,16 @@ function ReviewerDirectUploadPage() {
           </div>
 
           {parseErr && <div className="is-toast is-toast-danger">{parseErr}</div>}
+
+          {qmrSheets && (
+            <div className="is-toast is-toast-info text-xs">
+              Unified QMR workbook detected — combined {qmrSheets.length} audit tabs (
+              {qmrSheets
+                .map((s) => `${s.disciplineLabel ?? s.sheetName} ${s.rows}`)
+                .join(', ')}
+              ).
+            </div>
+          )}
 
           {parsed.length > 0 && (
             <div className="text-xs text-[color:var(--color-text-muted)]">
