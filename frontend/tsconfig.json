@@ -11,6 +11,5 @@
     },
     "types": ["vite/client"]
   },
-  "include": ["src"],
-  "references": [{ "path": "../packages/schemas" }]
+  "include": ["src"]
 }
