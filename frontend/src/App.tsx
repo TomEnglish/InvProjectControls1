@@ -43,6 +43,9 @@ const UploadQueuePage = lazy(() =>
 );
 const UsersPage = lazy(() => import('./pages/Users').then((m) => ({ default: m.UsersPage })));
 const QmrPage = lazy(() => import('./pages/Qmr').then((m) => ({ default: m.QmrPage })));
+const DataCheckPage = lazy(() =>
+  import('./pages/DataCheck').then((m) => ({ default: m.DataCheckPage })),
+);
 
 export const router = createBrowserRouter([
   { path: '/login', element: <LoginPage /> },
@@ -158,6 +161,15 @@ export const router = createBrowserRouter([
           </ProjectScopeGuard>
         ),
         handle: { title: 'QMR Report' },
+      },
+      {
+        path: '/data-check',
+        element: (
+          <ProjectScopeGuard>
+            <DataCheckPage />
+          </ProjectScopeGuard>
+        ),
+        handle: { title: 'Ingestion Data Check' },
       },
     ],
   },

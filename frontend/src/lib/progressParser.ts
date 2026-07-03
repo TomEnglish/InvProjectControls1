@@ -330,20 +330,28 @@ function extractInferredRocLabels(
   return labels;
 }
 
+const EMPTY_PARSE_RESULT: ParseResult = {
+  rows: [],
+  unmappedHeaders: [],
+  inferredRocWeights: [],
+  inferredRocLabels: [],
+};
+
 export function parseProgressWorkbook(workbook: XLSX.WorkBook): ParseResult {
-  const empty: ParseResult = {
-    rows: [],
-    unmappedHeaders: [],
-    inferredRocWeights: [],
-    inferredRocLabels: [],
-  };
   const sheetName = workbook.SheetNames[0];
-  if (!sheetName) return empty;
+  if (!sheetName) return EMPTY_PARSE_RESULT;
   const sheet = workbook.Sheets[sheetName];
-  if (!sheet) return empty;
+  if (!sheet) return EMPTY_PARSE_RESULT;
 
   const raw: Record<string, unknown>[] = XLSX.utils.sheet_to_json(sheet, { defval: '' });
-  if (raw.length === 0 || !raw[0]) return empty;
+  return parseRawRows(raw);
+}
+
+// Shared core: takes sheet_to_json output (row objects keyed by header) and
+// runs header aliasing, milestone-pair extraction, and row mapping. Used by
+// the single-sheet progress path above and the multi-sheet QMR path below.
+function parseRawRows(raw: Record<string, unknown>[]): ParseResult {
+  if (raw.length === 0 || !raw[0]) return EMPTY_PARSE_RESULT;
 
   const rawHeaders = Object.keys(raw[0]);
   // Drop unnamed trailing columns (xlsx.js names them `__EMPTY`, `__EMPTY_1`,
@@ -379,6 +387,7 @@ export function parseProgressWorkbook(workbook: XLSX.WorkBook): ParseResult {
     'ern_qty',          // → earned_qty_imported, but also computed server-side
     'earn_whrs',        // → earn_whrs_imported, but also computed server-side
     'earn_whr',         // mechanical's mis-spelling, same as above
+    'remaining_hours',  // QMR v7 formula column = fld_whrs − earn_whrs
   ]);
 
   const headerMapping: Record<string, keyof ParsedRow | null> = {};
@@ -459,6 +468,117 @@ export async function parseProgressFile(file: File): Promise<ParseResult> {
     workbook = XLSX.read(buf, { type: 'array' });
   }
   return parseProgressWorkbook(workbook);
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Unified QMR workbook (e.g. "QMR Report Phase 2 - Unified vN.xlsx")
+//
+// The client's QMR workbook carries the whole project in one file: seven
+// per-discipline audit tabs (Site Work / Civ / Elec / Pipe / Steel / Inst /
+// Mech Audit) plus reference tabs (QMR Summary, Milestone Reference, Column
+// Map, …) that are not record data. Audit tabs differ from the flat
+// templates parseProgressWorkbook expects in two ways:
+//   * Row 1 is a banner of merged group labels ("Record Identity",
+//     "Milestone Tracking", …); the real 65-column header is row 2.
+//   * Row 3 is column-applicability metadata ("ALL", "Civil, Pipe, …"),
+//     not a record. Data starts at row 4.
+// We detect audit tabs by scanning the first few rows for a header row
+// containing both DISCIPLINE and REC_NO, which also skips every reference
+// tab. Each tab's DISCIPLINE column names the discipline explicitly, so the
+// import can declare it per tab instead of relying on the COA-prime guess.
+// ─────────────────────────────────────────────────────────────────────
+
+// DISCIPLINE cell values used in the QMR audit tabs → discipline_code enum.
+const QMR_DISCIPLINE_CODE: Record<string, string> = {
+  'site work': 'SITE',
+  civil: 'CIVIL',
+  foundations: 'FOUNDATIONS',
+  steel: 'STEEL',
+  pipe: 'PIPE',
+  mechanical: 'MECH',
+  electrical: 'ELEC',
+  instrumentation: 'INST',
+};
+
+export interface QmrAuditSheet {
+  sheetName: string;
+  /** DISCIPLINE value from the tab's data rows, e.g. "Site Work". */
+  disciplineLabel: string | null;
+  /** discipline_code enum value, e.g. "SITE" — null when the label is unknown. */
+  disciplineCode: string | null;
+  /**
+   * Rows physically present under the tab's header (minus the applicability
+   * metadata row). Compared against rows.length on the Data Check page to
+   * surface blank/invalid rows the parser dropped.
+   */
+  sheetRowCount: number;
+  rows: ParsedRow[];
+  unmappedHeaders: string[];
+}
+
+export interface QmrParseResult {
+  auditSheets: QmrAuditSheet[];
+}
+
+// Scan the first rows of a sheet for the unified audit header row (must
+// contain both DISCIPLINE and REC_NO). Returns its 0-based index, or null
+// for non-audit sheets.
+function findAuditHeaderRow(sheet: XLSX.WorkSheet): number | null {
+  const ref = sheet['!ref'];
+  if (!ref) return null;
+  const range = XLSX.utils.decode_range(ref);
+  const maxScanRow = Math.min(range.s.r + 4, range.e.r);
+  for (let r = range.s.r; r <= maxScanRow; r++) {
+    let hasDiscipline = false;
+    let hasRecNo = false;
+    for (let c = range.s.c; c <= range.e.c; c++) {
+      const cell = sheet[XLSX.utils.encode_cell({ r, c })] as XLSX.CellObject | undefined;
+      if (typeof cell?.v !== 'string') continue;
+      const norm = normalizeHeader(cell.v);
+      if (norm === 'discipline') hasDiscipline = true;
+      else if (norm === 'rec_no') hasRecNo = true;
+      if (hasDiscipline && hasRecNo) return r;
+    }
+  }
+  return null;
+}
+
+export function parseQmrWorkbook(workbook: XLSX.WorkBook): QmrParseResult {
+  const auditSheets: QmrAuditSheet[] = [];
+  for (const sheetName of workbook.SheetNames) {
+    const sheet = workbook.Sheets[sheetName];
+    if (!sheet) continue;
+    const headerRow = findAuditHeaderRow(sheet);
+    if (headerRow === null) continue;
+
+    const raw: Record<string, unknown>[] = XLSX.utils.sheet_to_json(sheet, {
+      range: headerRow,
+      defval: '',
+    });
+    const { rows, unmappedHeaders } = parseRawRows(raw);
+    // Drop the applicability metadata row (DISCIPLINE = "ALL") that sits
+    // between the header and the first record.
+    const dataRows = rows.filter((r) => (r.discipline_label ?? '').toLowerCase() !== 'all');
+    const metadataRows = rows.length - dataRows.length;
+    const disciplineLabel = dataRows.find((r) => r.discipline_label)?.discipline_label ?? null;
+    auditSheets.push({
+      sheetName,
+      disciplineLabel,
+      disciplineCode: disciplineLabel
+        ? QMR_DISCIPLINE_CODE[disciplineLabel.toLowerCase()] ?? null
+        : null,
+      sheetRowCount: raw.length - metadataRows,
+      rows: dataRows,
+      unmappedHeaders,
+    });
+  }
+  return { auditSheets };
+}
+
+export async function parseQmrFile(file: File): Promise<QmrParseResult> {
+  const buf = await file.arrayBuffer();
+  const workbook = XLSX.read(buf, { type: 'array' });
+  return parseQmrWorkbook(workbook);
 }
 
 export function recentSundayISO(): string {

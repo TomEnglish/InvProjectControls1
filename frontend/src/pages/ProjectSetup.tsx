@@ -13,6 +13,7 @@ import { AddDisciplineModal } from '@/components/projects/AddDisciplineModal';
 import { RollupModeCard } from '@/components/projects/RollupModeCard';
 import { ProjectCoaPickerCard } from '@/components/projects/ProjectCoaPickerCard';
 import { PerDisciplineBaselineCard } from '@/components/projects/PerDisciplineBaselineCard';
+import { UnifiedQmrBaselineCard } from '@/components/projects/UnifiedQmrBaselineCard';
 import { CoReviewerDefaultsCard } from '@/components/projects/CoReviewerDefaultsCard';
 
 type Discipline = {
@@ -220,6 +221,8 @@ export function ProjectSetupPage() {
           </table>
         </div>
       </Card>
+
+      {!locked && canSetupEdit && <UnifiedQmrBaselineCard projectId={projectId} />}
 
       {!locked && canSetupEdit && <PerDisciplineBaselineCard projectId={projectId} />}
 

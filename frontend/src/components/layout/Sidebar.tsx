@@ -12,6 +12,7 @@ import {
   TrendingUp,
   PieChart,
   ClipboardList,
+  ClipboardCheck,
   Upload as UploadIcon,
   Inbox,
   Users,
@@ -43,6 +44,9 @@ const sections: NavSection[] = [
     label: 'Setup',
     items: [
       { to: '/projects', label: 'Project Setup', icon: FolderCog },
+      // Post-import reconciliation: did everything in the uploaded QMR
+      // workbook actually land in the database?
+      { to: '/data-check', label: 'Data Check', icon: ClipboardCheck },
       { to: '/coa', label: 'COA & Unit Rates', icon: ListTree },
       { to: '/work-types', label: 'Rules of Credit (ROC)', icon: SlidersHorizontal },
       // A15: tenant-wide user / invite / alias admin lives here so it

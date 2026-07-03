@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import * as XLSX from 'xlsx';
-import { parseProgressWorkbook } from './progressParser';
+import { parseProgressWorkbook, parseQmrWorkbook } from './progressParser';
 
 function workbookFromRows(rows: Record<string, unknown>[]): XLSX.WorkBook {
   const ws = XLSX.utils.json_to_sheet(rows);
@@ -308,5 +308,107 @@ describe('parseProgressWorkbook', () => {
     ]);
     const { rows } = parseProgressWorkbook(wb);
     expect(rows[0]!.pslip).toBe('PS-1234');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────
+// Unified QMR workbook parsing (QMR Report Phase 2 - Unified vN.xlsx)
+// ─────────────────────────────────────────────────────────────────────
+describe('parseQmrWorkbook', () => {
+  // Mirrors the real audit-tab layout: banner row (merged group labels),
+  // header row, applicability metadata row, then data.
+  function auditSheet(discipline: string, dataRows: unknown[][]): XLSX.WorkSheet {
+    return XLSX.utils.aoa_to_sheet([
+      ['Record Identity', '', 'Drawing & Schedule', '', '', ''],
+      ['DISCIPLINE', 'REC_NO', 'DWG', 'CODE', 'FLD_QTY', 'UOM', 'FLD_WHRS', 'WORK_TYPE', 'M1_PCT', 'M1_DESC', 'REMAINING_HOURS'],
+      ['ALL', 'ALL', 'ALL', 'ALL', 'ALL', 'ALL', 'ALL except Foundations', 'ALL', 'ALL', 'ALL', 'ALL'],
+      ...dataRows.map((r) => [discipline, ...r]),
+    ]);
+  }
+
+  function qmrWorkbook(): XLSX.WorkBook {
+    const wb = XLSX.utils.book_new();
+    // Reference tabs that must NOT be picked up as audit data.
+    XLSX.utils.book_append_sheet(
+      wb,
+      XLSX.utils.aoa_to_sheet([['Quarterly Manhour Report'], ['Craft', 'Description', 'UOM']]),
+      'QMR Summary',
+    );
+    XLSX.utils.book_append_sheet(
+      wb,
+      auditSheet('Civil', [
+        [1, 'CV-100', '04130', 187, 'CY', 1271.6, 'CIV-FDN', 1, 'Formwork', 343.3],
+        [2, 'CV-100', '04700', 10, 'CY', 12.5, 'CIV-COMP', 0.2, 'Complete', 0],
+      ]),
+      'Civ Audit',
+    );
+    XLSX.utils.book_append_sheet(
+      wb,
+      auditSheet('Site Work', [[1, 'SW-001', '01410', 500, 'CY', 15, 'SITE-COMP', 0.5, 'Complete', 7.5]]),
+      'Site Work Audit',
+    );
+    XLSX.utils.book_append_sheet(
+      wb,
+      XLSX.utils.aoa_to_sheet([
+        ['WORK_TYPE', 'DISCIPLINE', 'DESCRIPTION'],
+        ['CIV-FDN', 'Civil', 'Foundations'],
+      ]),
+      'Milestone Reference',
+    );
+    return wb;
+  }
+
+  it('detects only audit tabs and routes each to its discipline code', () => {
+    const { auditSheets } = parseQmrWorkbook(qmrWorkbook());
+    expect(auditSheets.map((s) => s.sheetName)).toEqual(['Civ Audit', 'Site Work Audit']);
+    expect(auditSheets[0]!).toMatchObject({ disciplineLabel: 'Civil', disciplineCode: 'CIVIL' });
+    expect(auditSheets[1]!).toMatchObject({ disciplineLabel: 'Site Work', disciplineCode: 'SITE' });
+  });
+
+  it('reads headers from row 2 and drops the applicability metadata row', () => {
+    const { auditSheets } = parseQmrWorkbook(qmrWorkbook());
+    const civ = auditSheets[0]!;
+    expect(civ.rows).toHaveLength(2);
+    expect(civ.rows[0]!).toMatchObject({
+      discipline_label: 'Civil',
+      source_row: 1,
+      dwg: 'CV-100',
+      code: '04130',
+      budget_qty: 187,
+      unit: 'CY',
+      budget_hrs: 1271.6,
+      work_type: 'CIV-FDN',
+    });
+    // No row carries the metadata placeholder.
+    expect(civ.rows.every((r) => r.dwg !== 'ALL')).toBe(true);
+  });
+
+  it('extracts milestone pairs with fraction→percent scaling', () => {
+    const { auditSheets } = parseQmrWorkbook(qmrWorkbook());
+    expect(auditSheets[0]!.rows[0]!.milestones).toEqual([{ name: 'Formwork', pct: 100 }]);
+    expect(auditSheets[0]!.rows[1]!.milestones).toEqual([{ name: 'Complete', pct: 20 }]);
+  });
+
+  it('suppresses the REMAINING_HOURS formula column from ignored headers', () => {
+    const { auditSheets } = parseQmrWorkbook(qmrWorkbook());
+    expect(auditSheets[0]!.unmappedHeaders).toEqual([]);
+  });
+
+  it('flags an unrecognized discipline label with a null code', () => {
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(
+      wb,
+      auditSheet('Scaffolding', [[1, 'SC-1', '99100', 10, 'EA', 5, '', 0, 'Complete', 5]]),
+      'Scaf Audit',
+    );
+    const { auditSheets } = parseQmrWorkbook(wb);
+    expect(auditSheets[0]!.disciplineLabel).toBe('Scaffolding');
+    expect(auditSheets[0]!.disciplineCode).toBeNull();
+  });
+
+  it('returns no audit sheets for a flat single-sheet progress file', () => {
+    const wb = workbookFromRows([{ DWG: 'P-2001', Description: 'pipe run' }]);
+    const { auditSheets } = parseQmrWorkbook(wb);
+    expect(auditSheets).toEqual([]);
   });
 });

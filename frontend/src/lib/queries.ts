@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from './supabase';
 import { useAuth } from './auth';
+import type { ImportManifest, DisciplineIngestionStats } from './ingestionStats';
 
 export type UserRole =
   | 'super_admin'
@@ -1660,4 +1661,42 @@ export async function submitToUploadQueue(opts: {
       llmScanState: body.llmScanState ?? 'pending',
     },
   };
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Ingestion Data Check — manifests captured at import time + DB-side
+// aggregates from the baseline_ingestion_stats RPC. See lib/ingestionStats.ts
+// for the diff logic and the rationale.
+// ─────────────────────────────────────────────────────────────────────
+export function useImportManifests(projectId: string | null) {
+  return useQuery({
+    queryKey: ['import-manifests', projectId] as const,
+    enabled: !!projectId,
+    queryFn: async (): Promise<ImportManifest[]> => {
+      const { data, error } = await supabase
+        .from('import_manifests')
+        .select(
+          'id, sheet_name, discipline_code, source_filename, sheet_row_count, parsed_row_count, stats, created_at',
+        )
+        .eq('project_id', projectId!)
+        .order('created_at', { ascending: true });
+      if (error) throw error;
+      return (data ?? []) as unknown as ImportManifest[];
+    },
+  });
+}
+
+export function useBaselineIngestionStats(projectId: string | null) {
+  return useQuery({
+    queryKey: ['baseline-ingestion-stats', projectId] as const,
+    enabled: !!projectId,
+    queryFn: async (): Promise<DisciplineIngestionStats[]> => {
+      const { data, error } = await supabase.rpc('baseline_ingestion_stats', {
+        p_project_id: projectId!,
+      });
+      if (error) throw error;
+      const body = (data ?? {}) as { disciplines?: DisciplineIngestionStats[] };
+      return body.disciplines ?? [];
+    },
+  });
 }
