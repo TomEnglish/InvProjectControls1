@@ -13,7 +13,7 @@ import { Button } from '@/components/ui/Button';
 import { FileDropzone } from '@/components/ui/FileDropzone';
 import { parseQmrFile, type QmrAuditSheet } from '@/lib/progressParser';
 import { buildManifestStats } from '@/lib/ingestionStats';
-import { useWorkTypes } from '@/lib/queries';
+import { useWorkTypes, useBaselineByDiscipline, useCurrentUser, hasRole } from '@/lib/queries';
 
 /**
  * Unified QMR workbook baseline load.
@@ -66,10 +66,45 @@ type Props = { projectId: string };
 export function UnifiedQmrBaselineCard({ projectId }: Props) {
   const qc = useQueryClient();
   const workTypes = useWorkTypes();
+  const baseline = useBaselineByDiscipline(projectId);
+  const { data: me } = useCurrentUser();
+  // Clearing (and loading) requires pm+ server-side; don't render a
+  // dead-end button for pc_reviewer, who can see this card but not act.
+  const canClear = hasRole(me?.role, 'pm');
   const [file, setFile] = useState<File | null>(null);
   const [sheets, setSheets] = useState<QmrAuditSheet[]>([]);
   const [parseErr, setParseErr] = useState<string | null>(null);
   const [statuses, setStatuses] = useState<Map<string, SheetStatus>>(new Map());
+  const [clearFirst, setClearFirst] = useState(true);
+
+  const existingCount =
+    [...(baseline.data?.byDiscipline.values() ?? [])].reduce((n, d) => n + d.count, 0) +
+    (baseline.data?.unassignedCount ?? 0);
+
+  const invalidateAll = () => {
+    qc.invalidateQueries({ queryKey: ['baseline-by-discipline', projectId] });
+    qc.invalidateQueries({ queryKey: ['disciplines', projectId] });
+    qc.invalidateQueries({ queryKey: ['progress-rows', projectId] });
+    qc.invalidateQueries({ queryKey: ['project-metrics', projectId] });
+    qc.invalidateQueries({ queryKey: ['discipline-metrics', projectId] });
+    qc.invalidateQueries({ queryKey: ['import-manifests', projectId] });
+    qc.invalidateQueries({ queryKey: ['baseline-ingestion-stats', projectId] });
+  };
+
+  const clearBaseline = useMutation({
+    mutationFn: async () => {
+      const { data, error } = await supabase.rpc('project_clear_baseline', {
+        p_project_id: projectId,
+      });
+      if (error) throw error;
+      return data as {
+        records_deleted: number;
+        manifests_deleted: number;
+        iwps_deleted: number;
+      };
+    },
+    onSettled: invalidateAll,
+  });
 
   const knownWorkTypes = new Set(
     (workTypes.data ?? []).map((w) => w.work_type_code.toLowerCase()),
@@ -93,6 +128,14 @@ export function UnifiedQmrBaselineCard({ projectId }: Props) {
 
   const submit = useMutation({
     mutationFn: async () => {
+      // Clear-before-load: wipe the existing baseline in one RPC so the
+      // reload starts from zero instead of appending duplicates.
+      if (existingCount > 0 && clearFirst) {
+        const { error: clearErr } = await supabase.rpc('project_clear_baseline', {
+          p_project_id: projectId,
+        });
+        if (clearErr) throw new Error(`clear baseline failed: ${clearErr.message}`);
+      }
       let failed = 0;
       for (const sheet of sheets) {
         if (!sheet.disciplineCode || sheet.rows.length === 0) {
@@ -143,21 +186,12 @@ export function UnifiedQmrBaselineCard({ projectId }: Props) {
       if (failed > 0) {
         throw new Error(
           `${failed} tab${failed === 1 ? '' : 's'} failed to load — see the per-tab status. ` +
-            'Successfully loaded tabs are already saved. Before retrying a failed tab via ' +
-            'the per-discipline zones below, check its record count there first — ' +
-            're-uploads append a fresh batch and are not deduped.',
+            'Successfully loaded tabs are already saved. After fixing the issue, re-drop ' +
+            'the workbook with "Clear existing baseline first" checked to reload cleanly.',
         );
       }
     },
-    onSettled: () => {
-      qc.invalidateQueries({ queryKey: ['baseline-by-discipline', projectId] });
-      qc.invalidateQueries({ queryKey: ['disciplines', projectId] });
-      qc.invalidateQueries({ queryKey: ['progress-rows', projectId] });
-      qc.invalidateQueries({ queryKey: ['project-metrics', projectId] });
-      qc.invalidateQueries({ queryKey: ['discipline-metrics', projectId] });
-      qc.invalidateQueries({ queryKey: ['import-manifests', projectId] });
-      qc.invalidateQueries({ queryKey: ['baseline-ingestion-stats', projectId] });
-    },
+    onSettled: invalidateAll,
   });
 
   const onFile = async (f: File | null) => {
@@ -200,6 +234,28 @@ export function UnifiedQmrBaselineCard({ projectId }: Props) {
           'discipline named on each tab. Milestone labels are loaded with ' +
           'progress pinned to 0 — the baseline captures scope; progress comes ' +
           'in through weekly uploads after the baseline is locked.'
+        }
+        actions={
+          existingCount > 0 && canClear ? (
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={clearBaseline.isPending || submit.isPending}
+              onClick={() => {
+                if (
+                  confirm(
+                    `Delete all ${existingCount} baseline records for this project ` +
+                      '(plus their milestones, import manifests, and orphaned IWPs)? ' +
+                      'Disciplines and their settings are kept.',
+                  )
+                ) {
+                  clearBaseline.mutate();
+                }
+              }}
+            >
+              {clearBaseline.isPending ? 'Clearing…' : `Clear baseline (${existingCount})`}
+            </Button>
+          ) : undefined
         }
       />
 
@@ -271,6 +327,18 @@ export function UnifiedQmrBaselineCard({ projectId }: Props) {
           </div>
         )}
 
+        {clearBaseline.error && (
+          <div className="is-toast is-toast-danger text-xs">
+            {(clearBaseline.error as Error).message}
+          </div>
+        )}
+        {clearBaseline.isSuccess && !submit.isSuccess && (
+          <div className="is-toast is-toast-success text-xs">
+            Baseline cleared — {clearBaseline.data?.records_deleted ?? 0} records,{' '}
+            {clearBaseline.data?.manifests_deleted ?? 0} manifests,{' '}
+            {clearBaseline.data?.iwps_deleted ?? 0} IWPs deleted.
+          </div>
+        )}
         {submit.error && (
           <div className="is-toast is-toast-danger text-xs">
             {(submit.error as Error).message}
@@ -278,15 +346,38 @@ export function UnifiedQmrBaselineCard({ projectId }: Props) {
         )}
         {submit.isSuccess && (
           <div className="is-toast is-toast-success text-xs">
-            Baseline loaded — {totalRows} records across {importable.length} disciplines.
+            Baseline loaded — {totalRows} records across {importable.length} disciplines. Verify
+            the load on the Data Check page.
           </div>
         )}
 
-        <div className="flex justify-end">
+        <div className="flex justify-end items-center gap-4">
+          {existingCount > 0 && canClear && sheets.length > 0 && (
+            <label className="flex items-center gap-2 text-xs text-[color:var(--color-text-muted)] cursor-pointer">
+              <input
+                type="checkbox"
+                checked={clearFirst}
+                onChange={(e) => setClearFirst(e.target.checked)}
+              />
+              Clear existing baseline first ({existingCount} records)
+            </label>
+          )}
           <Button
             variant="primary"
             disabled={submit.isPending || totalRows === 0 || finished}
-            onClick={() => submit.mutate()}
+            onClick={() => {
+              if (existingCount > 0 && clearFirst) {
+                if (
+                  !confirm(
+                    `This will delete the ${existingCount} existing baseline records ` +
+                      `and reload ${totalRows} from the workbook. Continue?`,
+                  )
+                ) {
+                  return;
+                }
+              }
+              submit.mutate();
+            }}
           >
             <UploadIcon size={12} />
             {submit.isPending
