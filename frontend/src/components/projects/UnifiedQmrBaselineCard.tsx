@@ -103,6 +103,14 @@ export function UnifiedQmrBaselineCard({ projectId }: Props) {
         iwps_deleted: number;
       };
     },
+    onSuccess: () => {
+      // A successful clear unlatches the load flow: the previous attempt's
+      // success/error state (which disables the Load button to prevent
+      // accidental duplicate submits) no longer describes reality, and the
+      // per-tab chips should read "ready" again for the reload.
+      submit.reset();
+      setStatuses(new Map());
+    },
     onSettled: invalidateAll,
   });
 
