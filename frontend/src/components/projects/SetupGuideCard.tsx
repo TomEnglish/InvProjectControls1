@@ -1,0 +1,117 @@
+import { Link } from 'react-router-dom';
+import { CheckCircle2, Circle, ArrowRight } from 'lucide-react';
+import { Card, CardHeader } from '@/components/ui/Card';
+import { useBaselineByDiscipline, useImportManifests, type Project } from '@/lib/queries';
+
+/**
+ * New-user orientation for the project-setup flow.
+ *
+ * UAT feedback: the setup sequence (info → baseline → verify → lock) is
+ * only obvious once you've done it — and after locking, the lock card
+ * disappears from this page with nothing saying setup is complete. This
+ * guide states the steps in order, derives each step's done/pending state
+ * from the project's actual data (not a stored checklist that can drift),
+ * and stays visible after lock as the "setup complete" confirmation.
+ */
+type Props = { project: Project };
+
+type Step = {
+  title: string;
+  detail: string;
+  done: boolean;
+  linkTo?: string;
+  linkLabel?: string;
+};
+
+export function SetupGuideCard({ project }: Props) {
+  const baseline = useBaselineByDiscipline(project.id);
+  const manifests = useImportManifests(project.id);
+
+  const baselineCount =
+    [...(baseline.data?.byDiscipline.values() ?? [])].reduce((n, d) => n + d.count, 0) +
+    (baseline.data?.unassignedCount ?? 0);
+  const locked = project.status !== 'draft';
+
+  const steps: Step[] = [
+    {
+      title: 'Complete project information',
+      detail:
+        'Set the project code, name, client, and start/end dates in the card below. ' +
+        'Everything stays editable until the baseline is locked.',
+      done: !!(project.name && project.client && project.start_date && project.end_date),
+    },
+    {
+      title: 'Load the baseline',
+      detail:
+        'Drop the unified QMR workbook (all audit tabs in one file) on the loader below. ' +
+        'Disciplines are created automatically from the tabs; use the per-discipline ' +
+        'zones only for single-craft files.',
+      done: baselineCount > 0,
+    },
+    {
+      title: 'Verify the load',
+      detail:
+        'The Data Check page reconciles the file against the database — row counts, ' +
+        'column coverage, sums, and work types. Aim for all checks green before locking.',
+      done: (manifests.data?.length ?? 0) > 0 && baselineCount > 0,
+      linkTo: '/data-check',
+      linkLabel: 'Open Data Check',
+    },
+    {
+      title: 'Lock the baseline',
+      detail:
+        'Locking freezes scope as the official baseline and moves the project to Active. ' +
+        'You pick the effective baseline date in the confirmation. After locking, scope ' +
+        'changes go through Change Orders and weekly progress comes in via the Upload page.',
+      done: locked,
+    },
+  ];
+
+  const doneCount = steps.filter((s) => s.done).length;
+
+  return (
+    <Card>
+      <CardHeader
+        eyebrow="Setup guide"
+        title={locked ? 'Setup complete — project is active' : 'Setting up this project'}
+        caption={
+          locked
+            ? 'The baseline is locked. Weekly progress now flows through the Upload page, ' +
+              'and scope changes go through Change Management.'
+            : `${doneCount} of ${steps.length} steps done. Work top to bottom — each step ` +
+              'unlocks the next.'
+        }
+      />
+      <ol className="space-y-2">
+        {steps.map((s, i) => (
+          <li key={s.title} className="flex gap-3 items-start">
+            {s.done ? (
+              <CheckCircle2
+                size={18}
+                className="text-[color:var(--color-variance-favourable)] shrink-0 mt-0.5"
+              />
+            ) : (
+              <Circle size={18} className="text-[color:var(--color-text-subtle)] shrink-0 mt-0.5" />
+            )}
+            <div className="min-w-0">
+              <div className="text-sm font-semibold">
+                {i + 1}. {s.title}
+              </div>
+              <div className="text-xs text-[color:var(--color-text-muted)] mt-0.5">
+                {s.detail}{' '}
+                {s.linkTo && (
+                  <Link
+                    to={s.linkTo}
+                    className="inline-flex items-center gap-1 text-[color:var(--color-accent)] hover:underline"
+                  >
+                    {s.linkLabel} <ArrowRight size={12} />
+                  </Link>
+                )}
+              </div>
+            </div>
+          </li>
+        ))}
+      </ol>
+    </Card>
+  );
+}

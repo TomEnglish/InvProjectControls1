@@ -16,6 +16,7 @@ import { PerDisciplineBaselineCard } from '@/components/projects/PerDisciplineBa
 import { UnifiedQmrBaselineCard } from '@/components/projects/UnifiedQmrBaselineCard';
 import { CoReviewerDefaultsCard } from '@/components/projects/CoReviewerDefaultsCard';
 import { LockBaselineCard } from '@/components/projects/LockBaselineCard';
+import { SetupGuideCard } from '@/components/projects/SetupGuideCard';
 
 type Discipline = {
   id: string;
@@ -112,6 +113,8 @@ export function ProjectSetupPage() {
 
   return (
     <div className="space-y-4">
+      <SetupGuideCard project={project} />
+
       <Card>
         <CardHeader
           title="Project Information"
