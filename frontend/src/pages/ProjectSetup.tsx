@@ -63,16 +63,29 @@ export function ProjectSetupPage() {
 
   const saveProject = useMutation({
     mutationFn: async (payload: Partial<Project>) => {
+      if (!payload.project_code?.trim()) {
+        throw new Error('Project code cannot be empty.');
+      }
       const { error } = await supabase
         .from('projects')
         .update({
+          project_code: payload.project_code?.trim(),
           name: payload.name,
           client: payload.client,
           start_date: payload.start_date,
           end_date: payload.end_date,
         })
         .eq('id', projectId!);
-      if (error) throw error;
+      if (error) {
+        // Unique (tenant_id, project_code) violation → friendly message
+        // instead of the raw Postgres constraint text.
+        if (error.code === '23505') {
+          throw new Error(
+            `Project code "${payload.project_code?.trim()}" is already used by another project.`,
+          );
+        }
+        throw error;
+      }
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['project', projectId] });
@@ -102,7 +115,12 @@ export function ProjectSetupPage() {
         />
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <Field label="Project Code">
-            <input className={inputClass} value={draft.project_code} readOnly />
+            <input
+              className={inputClass}
+              value={draft.project_code}
+              disabled={locked || !canSetupEdit}
+              onChange={(e) => setDraft({ ...draft, project_code: e.target.value })}
+            />
           </Field>
           <Field label="Project Name">
             <input
