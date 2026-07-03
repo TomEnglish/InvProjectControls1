@@ -17,6 +17,7 @@
 // re-uploading the same file inserts no duplicates.
 
 import { createClient } from 'jsr:@supabase/supabase-js@2';
+import { normalizeUom, KNOWN_UOMS } from '../_shared/uom.ts';
 
 type Milestone = { name: string; pct: number };
 type Item = {
@@ -166,6 +167,31 @@ Deno.serve(async (req) => {
     return json(
       {
         error: `invalid declaredDiscipline "${body.declaredDiscipline}" — must be one of ${[...VALID_DISCIPLINES].join(', ')}`,
+      },
+      400,
+    );
+  }
+
+  // Pre-validate UOMs so a stray unit fails with row numbers instead of a
+  // raw enum rejection that kills the whole batch without saying where.
+  const badUoms = new Map<string, number[]>();
+  for (const item of body.items) {
+    const uom = normalizeUom(item.unit);
+    if (!KNOWN_UOMS.has(uom)) {
+      const rows = badUoms.get(uom) ?? [];
+      if (rows.length < 5) rows.push(item.source_row ?? -1);
+      badUoms.set(uom, rows);
+    }
+  }
+  if (badUoms.size > 0) {
+    const detail = [...badUoms.entries()]
+      .map(([uom, rows]) => `"${uom}" (rows ${rows.filter((r) => r > 0).join(', ') || '?'})`)
+      .join('; ');
+    return json(
+      {
+        error:
+          `unknown unit of measure: ${detail}. ` +
+          `Known units: ${[...KNOWN_UOMS].join(', ')}. Fix the file or ask an admin to add the unit.`,
       },
       400,
     );
@@ -384,7 +410,7 @@ Deno.serve(async (req) => {
       description,
       tag_no: item.tag_no ?? null,
       spool_fr: item.spool_fr ?? null,
-      uom: (item.unit ?? 'EA').toUpperCase(),
+      uom: normalizeUom(item.unit),
       budget_qty: item.budget_qty ?? null,
       // Baseline = no progress yet, regardless of what the file says.
       actual_qty: null,

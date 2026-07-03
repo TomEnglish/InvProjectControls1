@@ -14,6 +14,7 @@
 // Returns ImportResult — never throws. Caller maps to HTTP response.
 
 import type { SupabaseClient } from 'jsr:@supabase/supabase-js@2';
+import { normalizeUom } from './uom.ts';
 
 export type ImportedMilestone = { name: string; pct: number };
 
@@ -138,7 +139,7 @@ export async function importProgressRecords(p: ImportParams): Promise<ImportResu
       description,
       tag_no: item.tag_no ?? null,
       spool_fr: item.spool_fr ?? null,
-      uom: (item.unit ?? 'EA').toUpperCase(),
+      uom: normalizeUom(item.unit),
       budget_qty: item.budget_qty ?? null,
       actual_qty: item.actual_qty ?? null,
       earned_qty_imported: item.earned_qty_imported ?? null,
