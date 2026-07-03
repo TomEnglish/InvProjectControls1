@@ -76,6 +76,7 @@ export function UnifiedQmrBaselineCard({ projectId }: Props) {
   const [parseErr, setParseErr] = useState<string | null>(null);
   const [statuses, setStatuses] = useState<Map<string, SheetStatus>>(new Map());
   const [clearFirst, setClearFirst] = useState(true);
+  const [manifestWarnings, setManifestWarnings] = useState<string[]>([]);
 
   const existingCount =
     [...(baseline.data?.byDiscipline.values() ?? [])].reduce((n, d) => n + d.count, 0) +
@@ -187,7 +188,13 @@ export function UnifiedQmrBaselineCard({ projectId }: Props) {
             stats: buildManifestStats(sheet.rows),
           });
           if (manifestErr) {
-            console.warn(`manifest capture failed for ${sheet.sheetName}:`, manifestErr.message);
+            // Non-fatal (records are imported) but must be VISIBLE: during
+            // UAT this only console.warn'd and nobody knew the Data Check
+            // page had no file-side expectations to diff against.
+            setManifestWarnings((prev) => [
+              ...prev,
+              `${sheet.sheetName}: ${manifestErr.message}`,
+            ]);
           }
         }
       }
@@ -207,6 +214,7 @@ export function UnifiedQmrBaselineCard({ projectId }: Props) {
     // the old sheets array, and resetting state under it would desync the UI
     // from what's actually being sent to the server.
     if (submit.isPending) return;
+    setManifestWarnings([]);
     setParseErr(null);
     setSheets([]);
     setStatuses(new Map());
@@ -356,6 +364,17 @@ export function UnifiedQmrBaselineCard({ projectId }: Props) {
           <div className="is-toast is-toast-success text-xs">
             Baseline loaded — {totalRows} records across {importable.length} disciplines. Verify
             the load on the Data Check page.
+          </div>
+        )}
+        {manifestWarnings.length > 0 && (
+          <div className="is-toast is-toast-warn text-xs">
+            <AlertTriangle size={14} />
+            <span>
+              Records imported, but manifest capture failed for{' '}
+              {manifestWarnings.length} tab{manifestWarnings.length === 1 ? '' : 's'} (
+              {manifestWarnings.join('; ')}) — the Data Check page won&apos;t have file-side
+              expectations for {manifestWarnings.length === 1 ? 'that tab' : 'those tabs'}.
+            </span>
           </div>
         )}
 
