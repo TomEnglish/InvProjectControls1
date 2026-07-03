@@ -11,7 +11,20 @@ const NETWORK_ERROR_RE =
   /failed to fetch|network\s?error|network request failed|load failed|fetch failed|timed? ?out/i;
 
 function describeError(error: unknown): string {
-  const raw = error instanceof Error ? error.message : error ? String(error) : '';
+  // Supabase clients surface some failures as plain objects with a
+  // `message` field (not Error instances) — e.g. postgrest-js wraps a
+  // failed fetch as { message, details, hint, code }. String() on those
+  // yields "[object Object]", which is what users saw during UAT; pull
+  // the message out of any shape that carries one.
+  let raw = '';
+  if (error instanceof Error) {
+    raw = error.message;
+  } else if (error && typeof error === 'object' && 'message' in error) {
+    raw = String((error as { message: unknown }).message ?? '');
+  } else if (error) {
+    raw = String(error);
+    if (raw === '[object Object]') raw = JSON.stringify(error);
+  }
   if (!navigator.onLine || NETWORK_ERROR_RE.test(raw)) {
     return "We couldn't reach the server — you may be offline or on a weak connection.";
   }
