@@ -15,6 +15,7 @@ import { ProjectCoaPickerCard } from '@/components/projects/ProjectCoaPickerCard
 import { PerDisciplineBaselineCard } from '@/components/projects/PerDisciplineBaselineCard';
 import { UnifiedQmrBaselineCard } from '@/components/projects/UnifiedQmrBaselineCard';
 import { CoReviewerDefaultsCard } from '@/components/projects/CoReviewerDefaultsCard';
+import { LockBaselineCard } from '@/components/projects/LockBaselineCard';
 
 type Discipline = {
   id: string;
@@ -32,6 +33,9 @@ export function ProjectSetupPage() {
   const qc = useQueryClient();
   const { data: me } = useCurrentUser();
   const canSetupEdit = hasRole(me?.role, 'pc_reviewer');
+  // Locking is pm+ (the RPC re-asserts); don't render the card for
+  // reviewers who could only hit a server rejection.
+  const canLock = hasRole(me?.role, 'pm');
 
   const { data: project, isLoading: loadingProject } = useProject(projectId);
 
@@ -243,6 +247,14 @@ export function ProjectSetupPage() {
       {!locked && canSetupEdit && <UnifiedQmrBaselineCard projectId={projectId} />}
 
       {!locked && canSetupEdit && <PerDisciplineBaselineCard projectId={projectId} />}
+
+      {!locked && canLock && (
+        <LockBaselineCard
+          projectId={projectId}
+          projectCode={project.project_code}
+          projectName={project.name}
+        />
+      )}
 
       <RollupModeCard projectId={projectId} />
 
