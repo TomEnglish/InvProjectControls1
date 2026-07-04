@@ -1,7 +1,12 @@
 import { Link } from 'react-router-dom';
 import { CheckCircle2, Circle, ArrowRight } from 'lucide-react';
 import { Card, CardHeader } from '@/components/ui/Card';
-import { useBaselineByDiscipline, useImportManifests, type Project } from '@/lib/queries';
+import {
+  useBaselineByDiscipline,
+  useImportManifests,
+  useDataCheckSignoff,
+  type Project,
+} from '@/lib/queries';
 
 /**
  * New-user orientation for the project-setup flow.
@@ -26,11 +31,21 @@ type Step = {
 export function SetupGuideCard({ project }: Props) {
   const baseline = useBaselineByDiscipline(project.id);
   const manifests = useImportManifests(project.id);
+  const signoff = useDataCheckSignoff(project.id);
 
   const baselineCount =
     [...(baseline.data?.byDiscipline.values() ?? [])].reduce((n, d) => n + d.count, 0) +
     (baseline.data?.unassignedCount ?? 0);
   const locked = project.status !== 'draft';
+
+  // Verified = someone signed off on the Data Check page AND no import has
+  // landed since (a newer manifest means the verified state is stale).
+  const latestImportAt = (manifests.data ?? []).reduce<string | null>(
+    (acc, m) => (acc === null || m.created_at > acc ? m.created_at : acc),
+    null,
+  );
+  const verified =
+    !!signoff.data && (!latestImportAt || signoff.data.verified_at >= latestImportAt);
 
   const steps: Step[] = [
     {
@@ -52,8 +67,9 @@ export function SetupGuideCard({ project }: Props) {
       title: 'Verify the load',
       detail:
         'The Data Check page reconciles the file against the database — row counts, ' +
-        'column coverage, sums, and work types. Aim for all checks green before locking.',
-      done: (manifests.data?.length ?? 0) > 0 && baselineCount > 0,
+        'column coverage, sums, and work types. Review the checks, then click ' +
+        '"Mark load verified" to sign off. Re-importing after sign-off asks for a fresh one.',
+      done: verified,
       linkTo: '/data-check',
       linkLabel: 'Open Data Check',
     },

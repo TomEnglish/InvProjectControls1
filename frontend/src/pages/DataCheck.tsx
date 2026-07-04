@@ -1,9 +1,19 @@
-import { CheckCircle2, XCircle, AlertTriangle, Info } from 'lucide-react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { CheckCircle2, XCircle, AlertTriangle, Info, ClipboardCheck } from 'lucide-react';
 import { useProjectStore } from '@/stores/project';
+import { supabase } from '@/lib/supabase';
 import { Card, CardHeader } from '@/components/ui/Card';
+import { Button } from '@/components/ui/Button';
 import { NoProjectSelected } from '@/components/ui/NoProjectSelected';
 import { fmt } from '@/lib/format';
-import { useImportManifests, useBaselineIngestionStats } from '@/lib/queries';
+import {
+  useImportManifests,
+  useBaselineIngestionStats,
+  useDataCheckSignoff,
+  useCurrentUser,
+  hasRole,
+  type DataCheckSignoff,
+} from '@/lib/queries';
 import {
   latestManifestsBySheet,
   compareDiscipline,
@@ -28,6 +38,9 @@ export function DataCheckPage() {
   const projectId = useProjectStore((s) => s.currentProjectId);
   const manifests = useImportManifests(projectId);
   const dbStats = useBaselineIngestionStats(projectId);
+  const signoff = useDataCheckSignoff(projectId);
+  const { data: me } = useCurrentUser();
+  const canVerify = hasRole(me?.role, 'pc_reviewer');
 
   if (!projectId) {
     return <NoProjectSelected message="Pick a project in the top bar to run its data check." />;
@@ -65,6 +78,18 @@ export function DataCheckPage() {
           }
         />
         {db.length > 0 && <DbOnlyProfile db={db} />}
+        {db.length > 0 && (
+          <div className="mt-3">
+            <SignoffStrip
+              projectId={projectId}
+              signoff={signoff.data ?? null}
+              canVerify={canVerify}
+              checksTotal={0}
+              checksFailing={0}
+              latestImportAt={null}
+            />
+          </div>
+        )}
       </Card>
     );
   }
@@ -100,6 +125,11 @@ export function DataCheckPage() {
   // per-discipline zones, which don't capture manifests yet).
   const manifestDisciplines = new Set(latest.map((m) => m.discipline_code));
   const unmanifested = db.filter((s) => !manifestDisciplines.has(s.discipline_code));
+
+  const latestImportAt = latest.reduce<string | null>(
+    (acc, m) => (acc === null || m.created_at > acc ? m.created_at : acc),
+    null,
+  );
 
   return (
     <div className="space-y-4">
@@ -183,6 +213,17 @@ export function DataCheckPage() {
             </span>
           </div>
         )}
+
+        <div className="mt-3">
+          <SignoffStrip
+            projectId={projectId}
+            signoff={signoff.data ?? null}
+            canVerify={canVerify}
+            checksTotal={total}
+            checksFailing={failing}
+            latestImportAt={latestImportAt}
+          />
+        </div>
       </Card>
 
       <Card>
@@ -306,6 +347,92 @@ export function DataCheckPage() {
           </ul>
         </div>
       </Card>
+    </div>
+  );
+}
+
+/**
+ * Explicit "Verify Load" sign-off. The checks above are computed — a human
+ * still has to own the call that the load is good, so this records who,
+ * when, and the check counts at that moment (append-only server-side). A
+ * sign-off older than the newest import manifest is stale: the data changed
+ * after it was verified, so the strip asks for a fresh one.
+ */
+function SignoffStrip({
+  projectId,
+  signoff,
+  canVerify,
+  checksTotal,
+  checksFailing,
+  latestImportAt,
+}: {
+  projectId: string;
+  signoff: DataCheckSignoff | null;
+  canVerify: boolean;
+  checksTotal: number;
+  checksFailing: number;
+  latestImportAt: string | null;
+}) {
+  const qc = useQueryClient();
+  const verify = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase.from('data_check_signoffs').insert({
+        project_id: projectId,
+        checks_total: checksTotal,
+        checks_failing: checksFailing,
+      });
+      if (error) throw error;
+    },
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: ['data-check-signoff', projectId] });
+    },
+  });
+
+  const stale = !!(signoff && latestImportAt && latestImportAt > signoff.verified_at);
+  const verifierName = signoff?.app_users?.display_name ?? signoff?.app_users?.email ?? 'unknown';
+
+  if (signoff && !stale) {
+    return (
+      <div className="is-toast is-toast-success text-xs">
+        <ClipboardCheck size={14} />
+        <span>
+          Load verified by <strong>{verifierName}</strong> on {fmt.date(signoff.verified_at)}
+          {signoff.checks_total > 0 &&
+            ` — ${signoff.checks_total - signoff.checks_failing} of ${signoff.checks_total} checks passing`}
+          .
+        </span>
+      </div>
+    );
+  }
+
+  return (
+    <div className={`is-toast ${stale ? 'is-toast-warn' : 'is-toast-info'} text-xs items-center`}>
+      <ClipboardCheck size={14} />
+      <span className="flex-1">
+        {stale
+          ? `Verified by ${verifierName} on ${fmt.date(signoff!.verified_at)}, but data was imported after that — re-verify to complete the setup step.`
+          : 'Review the checks above, then sign off to complete the "Verify the load" setup step.'}
+        {checksFailing > 0 && (
+          <strong> {checksFailing} checks are currently failing — resolve or sign off knowingly.</strong>
+        )}
+      </span>
+      {canVerify ? (
+        <Button
+          variant="primary"
+          size="sm"
+          disabled={verify.isPending}
+          onClick={() => verify.mutate()}
+        >
+          {verify.isPending ? 'Saving…' : 'Mark load verified'}
+        </Button>
+      ) : (
+        <span className="text-[color:var(--color-text-muted)]">Reviewer role required</span>
+      )}
+      {verify.error && (
+        <span className="text-[color:var(--color-variance-unfavourable)]">
+          {(verify.error as Error).message}
+        </span>
+      )}
     </div>
   );
 }

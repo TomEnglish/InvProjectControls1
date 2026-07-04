@@ -1700,3 +1700,34 @@ export function useBaselineIngestionStats(projectId: string | null) {
     },
   });
 }
+
+export type DataCheckSignoff = {
+  id: string;
+  verified_at: string;
+  checks_total: number;
+  checks_failing: number;
+  note: string | null;
+  verified_by: string | null;
+  app_users: { display_name: string | null; email: string } | null;
+};
+
+/** Latest Data Check sign-off for the project (append-only history server-side). */
+export function useDataCheckSignoff(projectId: string | null) {
+  return useQuery({
+    queryKey: ['data-check-signoff', projectId] as const,
+    enabled: !!projectId,
+    queryFn: async (): Promise<DataCheckSignoff | null> => {
+      const { data, error } = await supabase
+        .from('data_check_signoffs')
+        .select(
+          'id, verified_at, checks_total, checks_failing, note, verified_by, app_users(display_name, email)',
+        )
+        .eq('project_id', projectId!)
+        .order('verified_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (error) throw error;
+      return (data ?? null) as unknown as DataCheckSignoff | null;
+    },
+  });
+}
