@@ -7,7 +7,8 @@ function disc(overrides: Partial<DisciplineQuality>): DisciplineQuality {
     discipline_code: 'PIPE',
     display_name: 'Piping',
     total_rows: 10,
-    zero_budget_count: 0,
+    fld_whrs_missing_count: 0,
+    fld_qty_missing_count: 0,
     no_milestone_count: 0,
     unmapped_work_type_count: 0,
     coa_out_of_scope_count: 0,
@@ -20,11 +21,12 @@ const byKey = (qc: BaselineQualityChecks) =>
   Object.fromEntries(summarizeQuality(qc).map((c) => [c.key, c.count]));
 
 describe('summarizeQuality', () => {
-  it('returns exactly six gates', () => {
+  it('returns exactly seven gates', () => {
     const gates = summarizeQuality({ milestone_weights: [], disciplines: [], unassigned_count: 0 });
-    expect(gates).toHaveLength(6);
+    expect(gates).toHaveLength(7);
     expect(gates.map((g) => g.key)).toEqual([
-      'zero_budget',
+      'fld_whrs',
+      'fld_qty',
       'no_milestone',
       'unmapped_wt',
       'coa_scope',
@@ -46,17 +48,19 @@ describe('summarizeQuality', () => {
     const counts = byKey({
       milestone_weights: [],
       disciplines: [
-        disc({ zero_budget_count: 2, no_milestone_count: 1, unit_outlier_count: 3 }),
+        disc({ fld_whrs_missing_count: 2, no_milestone_count: 1, unit_outlier_count: 3 }),
         disc({
           discipline_code: 'CIVIL',
-          zero_budget_count: 1,
+          fld_whrs_missing_count: 1,
+          fld_qty_missing_count: 6,
           unmapped_work_type_count: 4,
           coa_out_of_scope_count: 5,
         }),
       ],
       unassigned_count: 7,
     });
-    expect(counts.zero_budget).toBe(3); // 2 + 1
+    expect(counts.fld_whrs).toBe(3); // 2 + 1
+    expect(counts.fld_qty).toBe(6);
     expect(counts.no_milestone).toBe(1);
     expect(counts.unmapped_wt).toBe(4);
     expect(counts.coa_scope).toBe(5);

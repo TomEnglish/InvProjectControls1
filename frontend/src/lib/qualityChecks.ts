@@ -14,10 +14,16 @@ export function summarizeQuality(qc: BaselineQualityChecks): QualityAgg[] {
     qc.disciplines.reduce((n, d) => n + f(d), 0);
   return [
     {
-      key: 'zero_budget',
-      label: 'Budget hours present',
-      count: sum((d) => d.zero_budget_count),
-      hint: 'records with 0 or null budget hours (invisible to hours-weighted EV)',
+      key: 'fld_whrs',
+      label: 'FLD_WHRS present',
+      count: sum((d) => d.fld_whrs_missing_count),
+      hint: 'numbered rows (with a REC_NO) whose field work-hours are 0 or null',
+    },
+    {
+      key: 'fld_qty',
+      label: 'FLD_QTY present',
+      count: sum((d) => d.fld_qty_missing_count),
+      hint: 'numbered rows (with a REC_NO) whose field quantity is 0 or null',
     },
     {
       key: 'no_milestone',

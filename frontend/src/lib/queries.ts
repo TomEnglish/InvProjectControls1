@@ -1764,7 +1764,8 @@ export type DisciplineQuality = {
   discipline_code: string;
   display_name: string;
   total_rows: number;
-  zero_budget_count: number;
+  fld_whrs_missing_count: number; // FLD_WHRS (budget_hrs) zero/null on a numbered row
+  fld_qty_missing_count: number; // FLD_QTY (budget_qty) zero/null on a numbered row
   no_milestone_count: number;
   unmapped_work_type_count: number;
   coa_out_of_scope_count: number;

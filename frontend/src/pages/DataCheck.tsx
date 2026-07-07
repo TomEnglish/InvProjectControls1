@@ -740,7 +740,8 @@ function BaselineQualityCard({
             <tr>
               <th>Discipline</th>
               <th style={{ textAlign: 'right' }}>Rows</th>
-              <th style={{ textAlign: 'right' }}>Zero budget</th>
+              <th style={{ textAlign: 'right' }}>FLD_WHRS = 0</th>
+              <th style={{ textAlign: 'right' }}>FLD_QTY = 0</th>
               <th style={{ textAlign: 'right' }}>No milestones</th>
               <th style={{ textAlign: 'right' }}>Unmapped WT</th>
               <th style={{ textAlign: 'right' }}>COA out of scope</th>
@@ -752,7 +753,8 @@ function BaselineQualityCard({
               <tr key={d.discipline_code}>
                 <td className="font-semibold">{d.display_name}</td>
                 <td className="text-right font-mono">{fmt.int(d.total_rows)}</td>
-                <QCell n={d.zero_budget_count} />
+                <QCell n={d.fld_whrs_missing_count} />
+                <QCell n={d.fld_qty_missing_count} />
                 <QCell n={d.no_milestone_count} />
                 <QCell n={d.unmapped_work_type_count} />
                 <QCell n={d.coa_out_of_scope_count} />
