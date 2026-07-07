@@ -22,7 +22,12 @@ const byKey = (qc: BaselineQualityChecks) =>
 
 describe('summarizeQuality', () => {
   it('returns exactly seven gates', () => {
-    const gates = summarizeQuality({ milestone_weights: [], disciplines: [], unassigned_count: 0 });
+    const gates = summarizeQuality({
+      milestone_weights: [],
+      disciplines: [],
+      coa_out_of_scope_codes: [],
+      unassigned_count: 0,
+    });
     expect(gates).toHaveLength(7);
     expect(gates.map((g) => g.key)).toEqual([
       'fld_whrs',
@@ -39,6 +44,7 @@ describe('summarizeQuality', () => {
     const counts = byKey({
       milestone_weights: [],
       disciplines: [disc({}), disc({ discipline_code: 'CIVIL' })],
+      coa_out_of_scope_codes: [],
       unassigned_count: 0,
     });
     expect(Object.values(counts).every((n) => n === 0)).toBe(true);
@@ -57,6 +63,7 @@ describe('summarizeQuality', () => {
           coa_out_of_scope_count: 5,
         }),
       ],
+      coa_out_of_scope_codes: [],
       unassigned_count: 7,
     });
     expect(counts.fld_whrs).toBe(3); // 2 + 1
@@ -72,6 +79,7 @@ describe('summarizeQuality', () => {
     const gates = summarizeQuality({
       milestone_weights: [],
       disciplines: [disc({ coa_out_of_scope_count: 1 })],
+      coa_out_of_scope_codes: [],
       unassigned_count: 0,
     });
     const failing = gates.filter((g) => g.count > 0);

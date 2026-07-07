@@ -1775,6 +1775,8 @@ export type DisciplineQuality = {
 export type BaselineQualityChecks = {
   milestone_weights: MilestoneWeightCheck[];
   disciplines: DisciplineQuality[];
+  /** Distinct COA codes used by the baseline but not in the project scope. */
+  coa_out_of_scope_codes: { code: string; count: number }[];
   unassigned_count: number;
 };
 
@@ -1797,6 +1799,7 @@ export function useBaselineQualityChecks(projectId: string | null) {
       return {
         milestone_weights: body.milestone_weights ?? [],
         disciplines: body.disciplines ?? [],
+        coa_out_of_scope_codes: body.coa_out_of_scope_codes ?? [],
         unassigned_count: body.unassigned_count ?? 0,
       };
     },

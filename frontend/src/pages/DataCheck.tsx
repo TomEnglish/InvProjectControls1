@@ -87,7 +87,12 @@ export function DataCheckPage() {
 
   // Semantic quality checks: one per work type (milestone weights) + six
   // project-level gates. All fold into the Verify Load totals.
-  const qc = quality.data ?? { milestone_weights: [], disciplines: [], unassigned_count: 0 };
+  const qc = quality.data ?? {
+    milestone_weights: [],
+    disciplines: [],
+    coa_out_of_scope_codes: [],
+    unassigned_count: 0,
+  };
   const qualityAggChecks = summarizeQuality(qc);
   const qualityTotal = qc.milestone_weights.length + qualityAggChecks.length;
   const qualityFailing =
@@ -764,6 +769,30 @@ function BaselineQualityCard({
           </tbody>
         </table>
       </div>
+      {qc.coa_out_of_scope_codes.length > 0 && (
+        <div className="mt-3 rounded-md border border-[color:var(--color-line)] p-3">
+          <div className="text-xs font-semibold mb-1">
+            COA codes used but not in the project scope
+          </div>
+          <div className="text-xs text-[color:var(--color-text-muted)] mb-2">
+            Add these on Project Setup → COA scope, or correct the codes in the source data.
+            Otherwise their hours won’t roll up in cost.
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {qc.coa_out_of_scope_codes.map((c) => (
+              <span
+                key={c.code}
+                className="inline-flex items-center gap-1 rounded border border-[color:var(--color-line)] bg-[color:var(--color-raised)] px-1.5 py-0.5 font-mono text-xs"
+                title={`${fmt.int(c.count)} record(s)`}
+              >
+                {c.code}
+                <span className="text-[color:var(--color-text-muted)]">×{fmt.int(c.count)}</span>
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
       {qc.unassigned_count > 0 && (
         <div className="is-toast is-toast-warn text-xs mt-3">
           <AlertTriangle size={14} />
