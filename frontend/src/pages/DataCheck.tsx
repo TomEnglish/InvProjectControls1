@@ -505,6 +505,10 @@ function recnoIssues(r: RecnoDwgCheck): string[] {
   const issues: string[] = [];
   if (r.recno_nulls > 0) issues.push(`${fmt.int(r.recno_nulls)} row(s) with no REC_NO`);
   if (r.recno_min != null && r.recno_min !== 1) issues.push(`starts at ${r.recno_min}, not 1`);
+  // A value above the row count can't fit a 1..N sequence — call it out
+  // directly rather than only as the gap it implies.
+  if (r.recno_max != null && r.recno_max > r.total_rows)
+    issues.push(`REC_NO above row count (max ${r.recno_max} > ${r.total_rows})`);
   if (r.duplicate_count > 0)
     issues.push(`duplicate: ${sampleList(r.duplicate_sample, r.duplicate_count)}`);
   if (r.missing_count > 0) issues.push(`missing: ${sampleList(r.missing_sample, r.missing_count)}`);
