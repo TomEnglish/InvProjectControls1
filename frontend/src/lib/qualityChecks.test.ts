@@ -10,7 +10,8 @@ function disc(overrides: Partial<DisciplineQuality>): DisciplineQuality {
     fld_whrs_missing_count: 0,
     fld_qty_missing_count: 0,
     no_milestone_count: 0,
-    unmapped_work_type_count: 0,
+    work_type_blank_count: 0,
+    work_type_unmapped_count: 0,
     coa_out_of_scope_count: 0,
     unit_outlier_count: 0,
     ...overrides,
@@ -21,19 +22,21 @@ const byKey = (qc: BaselineQualityChecks) =>
   Object.fromEntries(summarizeQuality(qc).map((c) => [c.key, c.count]));
 
 describe('summarizeQuality', () => {
-  it('returns exactly seven gates', () => {
+  it('returns exactly eight gates', () => {
     const gates = summarizeQuality({
       milestone_weights: [],
       disciplines: [],
       coa_out_of_scope_codes: [],
+      work_type_unmapped_codes: [],
       unassigned_count: 0,
     });
-    expect(gates).toHaveLength(7);
+    expect(gates).toHaveLength(8);
     expect(gates.map((g) => g.key)).toEqual([
       'fld_whrs',
       'fld_qty',
       'no_milestone',
-      'unmapped_wt',
+      'wt_blank',
+      'wt_unmapped',
       'coa_scope',
       'unit_outlier',
       'unassigned',
@@ -45,6 +48,7 @@ describe('summarizeQuality', () => {
       milestone_weights: [],
       disciplines: [disc({}), disc({ discipline_code: 'CIVIL' })],
       coa_out_of_scope_codes: [],
+      work_type_unmapped_codes: [],
       unassigned_count: 0,
     });
     expect(Object.values(counts).every((n) => n === 0)).toBe(true);
@@ -59,17 +63,20 @@ describe('summarizeQuality', () => {
           discipline_code: 'CIVIL',
           fld_whrs_missing_count: 1,
           fld_qty_missing_count: 6,
-          unmapped_work_type_count: 4,
+          work_type_blank_count: 2,
+          work_type_unmapped_count: 4,
           coa_out_of_scope_count: 5,
         }),
       ],
       coa_out_of_scope_codes: [],
+      work_type_unmapped_codes: [],
       unassigned_count: 7,
     });
     expect(counts.fld_whrs).toBe(3); // 2 + 1
     expect(counts.fld_qty).toBe(6);
     expect(counts.no_milestone).toBe(1);
-    expect(counts.unmapped_wt).toBe(4);
+    expect(counts.wt_blank).toBe(2);
+    expect(counts.wt_unmapped).toBe(4);
     expect(counts.coa_scope).toBe(5);
     expect(counts.unit_outlier).toBe(3);
     expect(counts.unassigned).toBe(7); // project-level, not per-discipline
@@ -80,6 +87,7 @@ describe('summarizeQuality', () => {
       milestone_weights: [],
       disciplines: [disc({ coa_out_of_scope_count: 1 })],
       coa_out_of_scope_codes: [],
+      work_type_unmapped_codes: [],
       unassigned_count: 0,
     });
     const failing = gates.filter((g) => g.count > 0);

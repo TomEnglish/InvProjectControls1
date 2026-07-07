@@ -442,6 +442,9 @@ Deno.serve(async (req) => {
       ta_level: item.ta_level ?? null,
       pslip: item.pslip ?? null,
       work_type_id: workTypeId,
+      // Raw WORK_TYPE code as it appeared in the file, so the Data Check can
+      // tell a blank WORK_TYPE from one that simply isn't in the library.
+      work_type_raw: item.work_type?.trim() || null,
       discipline_label: item.discipline_label ?? null,
     };
   });

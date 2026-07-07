@@ -1767,7 +1767,8 @@ export type DisciplineQuality = {
   fld_whrs_missing_count: number; // FLD_WHRS (budget_hrs) zero/null on a numbered row
   fld_qty_missing_count: number; // FLD_QTY (budget_qty) zero/null on a numbered row
   no_milestone_count: number;
-  unmapped_work_type_count: number;
+  work_type_blank_count: number; // no WORK_TYPE code in the file
+  work_type_unmapped_count: number; // WORK_TYPE code present but not in the library
   coa_out_of_scope_count: number;
   unit_outlier_count: number;
 };
@@ -1777,6 +1778,8 @@ export type BaselineQualityChecks = {
   disciplines: DisciplineQuality[];
   /** Distinct COA codes used by the baseline but not in the project scope. */
   coa_out_of_scope_codes: { code: string; count: number }[];
+  /** Distinct WORK_TYPE codes present in the file but not in the library. */
+  work_type_unmapped_codes: { code: string; count: number }[];
   unassigned_count: number;
 };
 
@@ -1800,6 +1803,7 @@ export function useBaselineQualityChecks(projectId: string | null) {
         milestone_weights: body.milestone_weights ?? [],
         disciplines: body.disciplines ?? [],
         coa_out_of_scope_codes: body.coa_out_of_scope_codes ?? [],
+        work_type_unmapped_codes: body.work_type_unmapped_codes ?? [],
         unassigned_count: body.unassigned_count ?? 0,
       };
     },

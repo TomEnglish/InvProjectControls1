@@ -32,10 +32,16 @@ export function summarizeQuality(qc: BaselineQualityChecks): QualityAgg[] {
       hint: 'mapped records with no milestone rows (can’t earn progressively)',
     },
     {
-      key: 'unmapped_wt',
-      label: 'Work types mapped',
-      count: sum((d) => d.unmapped_work_type_count),
-      hint: 'records with no work type (fall back to the discipline default)',
+      key: 'wt_blank',
+      label: 'Work type present',
+      count: sum((d) => d.work_type_blank_count),
+      hint: 'records with no WORK_TYPE code in the file (fall back to the discipline default)',
+    },
+    {
+      key: 'wt_unmapped',
+      label: 'Work type mapped',
+      count: sum((d) => d.work_type_unmapped_count),
+      hint: 'records whose WORK_TYPE code is not in the work-types library',
     },
     {
       key: 'coa_scope',

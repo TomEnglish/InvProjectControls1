@@ -91,6 +91,7 @@ export function DataCheckPage() {
     milestone_weights: [],
     disciplines: [],
     coa_out_of_scope_codes: [],
+    work_type_unmapped_codes: [],
     unassigned_count: 0,
   };
   const qualityAggChecks = summarizeQuality(qc);
@@ -748,6 +749,7 @@ function BaselineQualityCard({
               <th style={{ textAlign: 'right' }}>FLD_WHRS = 0</th>
               <th style={{ textAlign: 'right' }}>FLD_QTY = 0</th>
               <th style={{ textAlign: 'right' }}>No milestones</th>
+              <th style={{ textAlign: 'right' }}>Blank WT</th>
               <th style={{ textAlign: 'right' }}>Unmapped WT</th>
               <th style={{ textAlign: 'right' }}>COA out of scope</th>
               <th style={{ textAlign: 'right' }}>Unit outliers</th>
@@ -761,7 +763,8 @@ function BaselineQualityCard({
                 <QCell n={d.fld_whrs_missing_count} />
                 <QCell n={d.fld_qty_missing_count} />
                 <QCell n={d.no_milestone_count} />
-                <QCell n={d.unmapped_work_type_count} />
+                <QCell n={d.work_type_blank_count} />
+                <QCell n={d.work_type_unmapped_count} />
                 <QCell n={d.coa_out_of_scope_count} />
                 <QCell n={d.unit_outlier_count} />
               </tr>
@@ -769,29 +772,17 @@ function BaselineQualityCard({
           </tbody>
         </table>
       </div>
-      {qc.coa_out_of_scope_codes.length > 0 && (
-        <div className="mt-3 rounded-md border border-[color:var(--color-line)] p-3">
-          <div className="text-xs font-semibold mb-1">
-            COA codes used but not in the project scope
-          </div>
-          <div className="text-xs text-[color:var(--color-text-muted)] mb-2">
-            Add these on Project Setup → COA scope, or correct the codes in the source data.
-            Otherwise their hours won’t roll up in cost.
-          </div>
-          <div className="flex flex-wrap gap-1.5">
-            {qc.coa_out_of_scope_codes.map((c) => (
-              <span
-                key={c.code}
-                className="inline-flex items-center gap-1 rounded border border-[color:var(--color-line)] bg-[color:var(--color-raised)] px-1.5 py-0.5 font-mono text-xs"
-                title={`${fmt.int(c.count)} record(s)`}
-              >
-                {c.code}
-                <span className="text-[color:var(--color-text-muted)]">×{fmt.int(c.count)}</span>
-              </span>
-            ))}
-          </div>
-        </div>
-      )}
+      <CodeChipList
+        title="COA codes used but not in the project scope"
+        help="Add these on Project Setup → COA scope, or correct the codes in the source data. Otherwise their hours won’t roll up in cost."
+        codes={qc.coa_out_of_scope_codes}
+      />
+
+      <CodeChipList
+        title="WORK_TYPE codes not in the work-types library"
+        help="Add these to the work-types library (with milestone weights), or correct the codes in the source data. Until then these records use the discipline default for earned value."
+        codes={qc.work_type_unmapped_codes}
+      />
 
       {qc.unassigned_count > 0 && (
         <div className="is-toast is-toast-warn text-xs mt-3">
@@ -803,6 +794,37 @@ function BaselineQualityCard({
         </div>
       )}
     </Card>
+  );
+}
+
+/** A titled, wrap-flowing list of code chips with per-code record counts. */
+function CodeChipList({
+  title,
+  help,
+  codes,
+}: {
+  title: string;
+  help: string;
+  codes: { code: string; count: number }[];
+}) {
+  if (codes.length === 0) return null;
+  return (
+    <div className="mt-3 rounded-md border border-[color:var(--color-line)] p-3">
+      <div className="text-xs font-semibold mb-1">{title}</div>
+      <div className="text-xs text-[color:var(--color-text-muted)] mb-2">{help}</div>
+      <div className="flex flex-wrap gap-1.5">
+        {codes.map((c) => (
+          <span
+            key={c.code}
+            className="inline-flex items-center gap-1 rounded border border-[color:var(--color-line)] bg-[color:var(--color-raised)] px-1.5 py-0.5 font-mono text-xs"
+            title={`${fmt.int(c.count)} record(s)`}
+          >
+            {c.code}
+            <span className="text-[color:var(--color-text-muted)]">×{fmt.int(c.count)}</span>
+          </span>
+        ))}
+      </div>
+    </div>
   );
 }
 
