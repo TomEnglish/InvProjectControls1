@@ -9,11 +9,13 @@ import { fmt } from '@/lib/format';
 import {
   useImportManifests,
   useBaselineIngestionStats,
+  useBaselineRecnoDwgCheck,
   useDataCheckSignoff,
   useCurrentUser,
   useProjectClosed,
   hasRole,
   type DataCheckSignoff,
+  type RecnoDwgCheck,
 } from '@/lib/queries';
 import { FrozenBanner } from '@/components/ui/FrozenBanner';
 import {
@@ -40,6 +42,7 @@ export function DataCheckPage() {
   const projectId = useProjectStore((s) => s.currentProjectId);
   const manifests = useImportManifests(projectId);
   const dbStats = useBaselineIngestionStats(projectId);
+  const recnoDwg = useBaselineRecnoDwgCheck(projectId);
   const signoff = useDataCheckSignoff(projectId);
   const { data: me } = useCurrentUser();
   const frozen = useProjectClosed(projectId);
@@ -48,18 +51,18 @@ export function DataCheckPage() {
   if (!projectId) {
     return <NoProjectSelected message="Pick a project in the top bar to run its data check." />;
   }
-  if (manifests.isLoading || dbStats.isLoading) {
+  if (manifests.isLoading || dbStats.isLoading || recnoDwg.isLoading) {
     return (
       <Card>
         <div className="h-6 bg-[color:var(--color-canvas)] rounded w-48 animate-pulse" />
       </Card>
     );
   }
-  if (manifests.error || dbStats.error) {
+  if (manifests.error || dbStats.error || recnoDwg.error) {
     return (
       <Card>
         <div className="is-toast is-toast-danger">
-          {((manifests.error ?? dbStats.error) as Error).message}
+          {((manifests.error ?? dbStats.error ?? recnoDwg.error) as Error).message}
         </div>
       </Card>
     );
@@ -68,32 +71,46 @@ export function DataCheckPage() {
   const latest = latestManifestsBySheet(manifests.data ?? []);
   const db = dbStats.data ?? [];
 
+  // REC_NO sequence + DWG presence checks — two per discipline, independent of
+  // manifests, so they fold into the totals in both the manifest and
+  // no-manifest branches.
+  const recnoRows = recnoDwg.data ?? [];
+  const recnoDwgTotal = recnoRows.length * 2;
+  const recnoDwgFailing = recnoRows.reduce(
+    (n, r) => n + (r.recno_ok ? 0 : 1) + (r.dwg_ok ? 0 : 1),
+    0,
+  );
+
   if (latest.length === 0) {
     return (
-      <Card>
-        <CardHeader
-          eyebrow="Ingestion"
-          title="Data Check"
-          caption={
-            'No import manifests yet. Manifests are captured when a baseline is ' +
-            'loaded from the unified QMR workbook on Project Setup — load one and ' +
-            'this page fills in with a file-vs-database reconciliation.'
-          }
-        />
-        {db.length > 0 && <DbOnlyProfile db={db} />}
-        {db.length > 0 && (
-          <div className="mt-3">
-            <SignoffStrip
-              projectId={projectId}
-              signoff={signoff.data ?? null}
-              canVerify={canVerify}
-              checksTotal={0}
-              checksFailing={0}
-              latestImportAt={null}
-            />
-          </div>
-        )}
-      </Card>
+      <div className="space-y-4">
+        <FrozenBanner projectId={projectId} />
+        <Card>
+          <CardHeader
+            eyebrow="Ingestion"
+            title="Data Check"
+            caption={
+              'No import manifests yet. Manifests are captured when a baseline is ' +
+              'loaded from the unified QMR workbook on Project Setup — load one and ' +
+              'this page fills in with a file-vs-database reconciliation.'
+            }
+          />
+          {db.length > 0 && <DbOnlyProfile db={db} />}
+          {db.length > 0 && (
+            <div className="mt-3">
+              <SignoffStrip
+                projectId={projectId}
+                signoff={signoff.data ?? null}
+                canVerify={canVerify}
+                checksTotal={recnoDwgTotal}
+                checksFailing={recnoDwgFailing}
+                latestImportAt={null}
+              />
+            </div>
+          )}
+        </Card>
+        {recnoRows.length > 0 && <RecnoDwgCard rows={recnoRows} />}
+      </div>
     );
   }
 
@@ -121,8 +138,11 @@ export function DataCheckPage() {
     ...[...checksByDiscipline.values()].flat(),
     ...columnChecks,
   ];
-  const failing = allChecks.filter((c) => c.status === 'fail').length + pivot.filter((p) => p.status === 'fail').length;
-  const total = allChecks.length + pivot.length;
+  const failing =
+    allChecks.filter((c) => c.status === 'fail').length +
+    pivot.filter((p) => p.status === 'fail').length +
+    recnoDwgFailing;
+  const total = allChecks.length + pivot.length + recnoDwgTotal;
 
   // Records in DB disciplines with no manifest (e.g. loaded via the
   // per-discipline zones, which don't capture manifests yet).
@@ -229,6 +249,8 @@ export function DataCheckPage() {
           />
         </div>
       </Card>
+
+      {recnoRows.length > 0 && <RecnoDwgCard rows={recnoRows} />}
 
       <Card>
         <CardHeader
@@ -468,5 +490,102 @@ function DbOnlyProfile({ db }: { db: DisciplineIngestionStats[] }) {
         </tbody>
       </table>
     </div>
+  );
+}
+
+/** Truncated list like "3, 4, 7 …" from a capped sample + a full count. */
+function sampleList(sample: number[], count: number): string {
+  if (sample.length === 0) return '';
+  const shown = sample.join(', ');
+  return count > sample.length ? `${shown} …` : shown;
+}
+
+/** Human-readable REC_NO problems for one discipline, or [] if clean. */
+function recnoIssues(r: RecnoDwgCheck): string[] {
+  const issues: string[] = [];
+  if (r.recno_nulls > 0) issues.push(`${fmt.int(r.recno_nulls)} row(s) with no REC_NO`);
+  if (r.recno_min != null && r.recno_min !== 1) issues.push(`starts at ${r.recno_min}, not 1`);
+  if (r.duplicate_count > 0)
+    issues.push(`duplicate: ${sampleList(r.duplicate_sample, r.duplicate_count)}`);
+  if (r.missing_count > 0) issues.push(`missing: ${sampleList(r.missing_sample, r.missing_count)}`);
+  return issues;
+}
+
+const passPill = (
+  <span className="text-xs text-[color:var(--color-variance-favourable)] inline-flex items-center gap-1">
+    <CheckCircle2 size={12} /> ok
+  </span>
+);
+
+/**
+ * REC_NO sequence + DWG presence, one row per audit tab (discipline).
+ * REC_NO should run 1..N per tab with no gaps or duplicates; DWG must be
+ * present on every numbered row. Both are read from the file values as
+ * imported, so this catches source-workbook errors the reconciliation
+ * (which compares counts/sums) can't see.
+ */
+function RecnoDwgCard({ rows }: { rows: RecnoDwgCheck[] }) {
+  const failing = rows.reduce((n, r) => n + (r.recno_ok ? 0 : 1) + (r.dwg_ok ? 0 : 1), 0);
+  return (
+    <Card>
+      <CardHeader
+        eyebrow="Record integrity"
+        title="REC_NO sequence & DWG presence"
+        caption="Per audit tab: REC_NO should run 1…N with no gaps or duplicates, and every numbered row must have a DWG. Checked against the file values as imported."
+        actions={
+          failing === 0 ? (
+            <span className="is-toast is-toast-success text-xs">
+              <CheckCircle2 size={14} /> All {rows.length * 2} checks pass
+            </span>
+          ) : (
+            <span className="is-toast is-toast-danger text-xs">
+              <XCircle size={14} /> {failing} of {rows.length * 2} checks failing
+            </span>
+          )
+        }
+      />
+      <div className="overflow-x-auto rounded-md border border-[color:var(--color-line)]">
+        <table className="is-table">
+          <thead>
+            <tr>
+              <th>Discipline</th>
+              <th style={{ textAlign: 'right' }}>Rows</th>
+              <th>REC_NO (1…N)</th>
+              <th>DWG present</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => {
+              const issues = recnoIssues(r);
+              return (
+                <tr key={r.discipline_code}>
+                  <td className="font-semibold">{r.display_name}</td>
+                  <td className="text-right font-mono">{fmt.int(r.total_rows)}</td>
+                  <td>
+                    {r.recno_ok ? (
+                      passPill
+                    ) : (
+                      <span className="text-xs text-[color:var(--color-variance-unfavourable)] inline-flex items-center gap-1">
+                        <XCircle size={12} className="shrink-0" /> {issues.join('; ')}
+                      </span>
+                    )}
+                  </td>
+                  <td>
+                    {r.dwg_ok ? (
+                      passPill
+                    ) : (
+                      <span className="text-xs text-[color:var(--color-variance-unfavourable)] inline-flex items-center gap-1">
+                        <XCircle size={12} className="shrink-0" />{' '}
+                        {fmt.int(r.dwg_null_count)} numbered row(s) missing DWG
+                      </span>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </Card>
   );
 }

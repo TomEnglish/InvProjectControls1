@@ -1713,6 +1713,44 @@ export function useBaselineIngestionStats(projectId: string | null) {
   });
 }
 
+/** Per-discipline REC_NO sequence + DWG-presence integrity for the baseline. */
+export type RecnoDwgCheck = {
+  discipline_code: string;
+  display_name: string;
+  total_rows: number;
+  recno_nulls: number;
+  recno_min: number | null;
+  recno_max: number | null;
+  recno_distinct: number;
+  missing_count: number;
+  missing_sample: number[];
+  duplicate_count: number;
+  duplicate_sample: number[];
+  dwg_null_count: number;
+  recno_ok: boolean;
+  dwg_ok: boolean;
+};
+
+/**
+ * REC_NO sequence + DWG presence checks per audit tab (discipline). Computed
+ * server-side over the baseline records; independent of import manifests, so
+ * it runs whether or not the load came through the QMR workbook.
+ */
+export function useBaselineRecnoDwgCheck(projectId: string | null) {
+  return useQuery({
+    queryKey: ['baseline-recno-dwg-check', projectId] as const,
+    enabled: !!projectId,
+    queryFn: async (): Promise<RecnoDwgCheck[]> => {
+      const { data, error } = await supabase.rpc('baseline_recno_dwg_check', {
+        p_project_id: projectId!,
+      });
+      if (error) throw error;
+      const body = (data ?? {}) as { disciplines?: RecnoDwgCheck[] };
+      return body.disciplines ?? [];
+    },
+  });
+}
+
 export type DataCheckSignoff = {
   id: string;
   verified_at: string;
