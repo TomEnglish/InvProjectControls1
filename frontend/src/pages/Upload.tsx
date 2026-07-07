@@ -3,7 +3,8 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Upload as UploadIcon, Download, RefreshCw } from 'lucide-react';
 import { useProjectStore } from '@/stores/project';
 import { supabase } from '@/lib/supabase';
-import { useCurrentUser, useWorkTypes, hasRole } from '@/lib/queries';
+import { useCurrentUser, useWorkTypes, useProjectClosed, hasRole } from '@/lib/queries';
+import { FrozenBanner } from '@/components/ui/FrozenBanner';
 import { Card, CardHeader } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Field, inputClass } from '@/components/ui/FormField';
@@ -46,6 +47,7 @@ export function UploadPage() {
 
 function ReviewerDirectUploadPage() {
   const projectId = useProjectStore((s) => s.currentProjectId);
+  const frozen = useProjectClosed(projectId);
   const qc = useQueryClient();
   const { data: me } = useCurrentUser();
   const canUpdateTemplate = hasRole(me?.role, 'admin');
@@ -219,6 +221,7 @@ function ReviewerDirectUploadPage() {
 
   return (
     <div className="space-y-4">
+      <FrozenBanner projectId={projectId} />
       <Card>
         <CardHeader
           eyebrow="Universal upload"
@@ -373,7 +376,12 @@ function ReviewerDirectUploadPage() {
             <Button
               type="submit"
               variant="primary"
-              disabled={submit.isPending || parsed.length === 0}
+              disabled={submit.isPending || parsed.length === 0 || frozen}
+              title={
+                frozen
+                  ? 'Project is closed — data is frozen. Reopen it on Project Setup to upload.'
+                  : undefined
+              }
             >
               <UploadIcon size={14} />
               {submit.isPending ? 'Uploading…' : `Upload ${parsed.length} rows`}

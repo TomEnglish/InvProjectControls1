@@ -1,11 +1,13 @@
 import { useQuery } from '@tanstack/react-query';
 import { useMatches } from 'react-router-dom';
-import { Info, Moon, Sun, LogOut } from 'lucide-react';
+import { Info, Moon, Sun, LogOut, Plus } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth';
+import { useCurrentUser, hasRole } from '@/lib/queries';
 import { useProjectStore } from '@/stores/project';
 import { ProjectMetadataModal } from '@/components/projects/ProjectMetadataModal';
+import { NewProjectModal } from '@/components/projects/NewProjectModal';
 
 type Project = {
   id: string;
@@ -20,6 +22,8 @@ export function Topbar() {
   const title = crumb?.title ?? 'Dashboard';
 
   const { user, signOut } = useAuth();
+  const { data: me } = useCurrentUser();
+  const canCreate = hasRole(me?.role, 'pm');
   const { currentProjectId, setCurrentProjectId } = useProjectStore();
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     const stored = localStorage.getItem('pc-theme');
@@ -27,6 +31,7 @@ export function Topbar() {
     return (document.documentElement.getAttribute('data-theme') as 'light' | 'dark') ?? 'light';
   });
   const [metadataOpen, setMetadataOpen] = useState(false);
+  const [newProjectOpen, setNewProjectOpen] = useState(false);
 
   const { data: projects, error: projectsError } = useQuery({
     queryKey: ['projects'],
@@ -42,10 +47,20 @@ export function Topbar() {
 
   const currentProject = projects?.find((p) => p.id === currentProjectId);
 
+  // Keep closed projects out of the main switcher list but still reachable
+  // (grouped at the bottom) so a mistakenly-closed one can be selected and
+  // reopened. Auto-select prefers an open project.
+  const openProjects = projects?.filter((p) => p.status !== 'closed') ?? [];
+  const closedProjects = projects?.filter((p) => p.status === 'closed') ?? [];
+
   useEffect(() => {
     if (projects && projects.length > 0 && !currentProjectId) {
-      setCurrentProjectId(projects[0]?.id ?? null);
+      const first = openProjects[0]?.id ?? projects[0]?.id ?? null;
+      setCurrentProjectId(first);
     }
+    // openProjects is derived from projects; depend on projects to avoid a
+    // new-array-every-render loop.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projects, currentProjectId, setCurrentProjectId]);
 
   useEffect(() => {
@@ -85,12 +100,32 @@ export function Topbar() {
             style={{ minHeight: '36px' }}
           >
             <option value="">— Select project —</option>
-            {projects?.map((p) => (
+            {openProjects.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.project_code} — {p.name}
               </option>
             ))}
+            {closedProjects.length > 0 && (
+              <optgroup label="Closed">
+                {closedProjects.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.project_code} — {p.name}
+                  </option>
+                ))}
+              </optgroup>
+            )}
           </select>
+          {canCreate && (
+            <button
+              type="button"
+              aria-label="New project"
+              title="New project"
+              onClick={() => setNewProjectOpen(true)}
+              className="inline-flex items-center justify-center w-9 h-9 rounded-md border border-[color:var(--color-line)] text-[color:var(--color-text-muted)] hover:text-[color:var(--color-primary)] hover:border-[color:var(--color-primary)] transition-colors"
+            >
+              <Plus size={16} />
+            </button>
+          )}
           {currentProject && (
             <button
               type="button"
@@ -136,6 +171,8 @@ export function Topbar() {
         onClose={() => setMetadataOpen(false)}
         projectId={currentProjectId}
       />
+
+      <NewProjectModal open={newProjectOpen} onClose={() => setNewProjectOpen(false)} />
     </header>
   );
 }

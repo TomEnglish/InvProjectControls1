@@ -16,6 +16,7 @@ import { PerDisciplineBaselineCard } from '@/components/projects/PerDisciplineBa
 import { UnifiedQmrBaselineCard } from '@/components/projects/UnifiedQmrBaselineCard';
 import { CoReviewerDefaultsCard } from '@/components/projects/CoReviewerDefaultsCard';
 import { LockBaselineCard } from '@/components/projects/LockBaselineCard';
+import { CloseProjectCard } from '@/components/projects/CloseProjectCard';
 import { SetupGuideCard } from '@/components/projects/SetupGuideCard';
 
 type Discipline = {
@@ -257,6 +258,10 @@ export function ProjectSetupPage() {
           projectCode={project.project_code}
           projectName={project.name}
         />
+      )}
+
+      {canLock && (project.status === 'active' || project.status === 'closed') && (
+        <CloseProjectCard projectId={projectId} status={project.status} />
       )}
 
       <RollupModeCard projectId={projectId} />

@@ -71,6 +71,7 @@ export type Project = {
   end_date: string;
   manager_id: string | null;
   baseline_locked_at: string | null;
+  closed_at: string | null;
 };
 
 /**
@@ -86,7 +87,7 @@ export function useProject(projectId: string | null) {
       const { data, error } = await supabase
         .from('projects')
         .select(
-          'id, tenant_id, project_code, name, client, status, start_date, end_date, manager_id, baseline_locked_at',
+          'id, tenant_id, project_code, name, client, status, start_date, end_date, manager_id, baseline_locked_at, closed_at',
         )
         .eq('id', projectId!)
         .maybeSingle();
@@ -94,6 +95,17 @@ export function useProject(projectId: string | null) {
       return (data ?? null) as Project | null;
     },
   });
+}
+
+/**
+ * Is the selected project closed (baseline data frozen at the DB)? Reads the
+ * shared ['project', id] cache, so it's free wherever useProject already ran.
+ * Write-capable pages use this to disable their entry points and show a
+ * frozen banner — a UI mirror of the freeze_closed table triggers.
+ */
+export function useProjectClosed(projectId: string | null): boolean {
+  const { data } = useProject(projectId);
+  return data?.status === 'closed';
 }
 
 export type ProjectMeta = { project_code: string; name: string; client: string | null };

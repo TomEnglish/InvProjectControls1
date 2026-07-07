@@ -9,8 +9,10 @@ import { FileDropzone } from '@/components/ui/FileDropzone';
 import {
   submitToUploadQueue,
   useProjectClerkCrafts,
+  useProjectClosed,
   type HeuristicWarnings,
 } from '@/lib/queries';
+import { FrozenBanner } from '@/components/ui/FrozenBanner';
 import { recentSundayISO } from '@/lib/progressParser';
 
 /**
@@ -24,6 +26,7 @@ export function ClerkUploadPanel() {
   const projectId = useProjectStore((s) => s.currentProjectId);
   const qc = useQueryClient();
   const crafts = useProjectClerkCrafts(projectId);
+  const frozen = useProjectClosed(projectId);
 
   const [file, setFile] = useState<File | null>(null);
   const [declaredCraft, setDeclaredCraft] = useState('');
@@ -53,6 +56,19 @@ export function ClerkUploadPanel() {
           Pick a project in the top bar to submit a weekly progress file.
         </p>
       </Card>
+    );
+  }
+  if (frozen) {
+    return (
+      <div className="space-y-4">
+        <FrozenBanner projectId={projectId} />
+        <Card>
+          <CardHeader title="Submit weekly progress" />
+          <p className="text-sm text-[color:var(--color-text-muted)]">
+            This project is closed — weekly progress can't be submitted until it's reopened.
+          </p>
+        </Card>
+      </div>
     );
   }
   if (crafts.isLoading) {

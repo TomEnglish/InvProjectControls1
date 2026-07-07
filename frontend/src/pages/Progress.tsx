@@ -8,9 +8,11 @@ import {
   useCurrentUser,
   useProjectDisciplinesSimple,
   useWorkTypes,
+  useProjectClosed,
   hasRole,
 } from '@/lib/queries';
 import type { ProgressRow, WorkTypeMilestone } from '@/lib/queries';
+import { FrozenBanner } from '@/components/ui/FrozenBanner';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { NoProjectSelected } from '@/components/ui/NoProjectSelected';
@@ -28,7 +30,8 @@ const emptySet = (): Set<string> => new Set();
 export function ProgressPage() {
   const projectId = useProjectStore((s) => s.currentProjectId);
   const { data: me } = useCurrentUser();
-  const canAddRecord = hasRole(me?.role, 'pc_reviewer');
+  const frozen = useProjectClosed(projectId);
+  const canAddRecord = hasRole(me?.role, 'pc_reviewer') && !frozen;
 
   const [discFilter, setDiscFilter] = useState<Set<string>>(emptySet);
   const [iwpFilter, setIwpFilter] = useState<Set<string>>(emptySet);
@@ -145,6 +148,7 @@ export function ProgressPage() {
 
   return (
     <div className="space-y-4">
+      <FrozenBanner projectId={projectId} />
       <div className="flex flex-wrap justify-between items-start gap-2">
         <div className="flex items-center gap-2 flex-wrap">
           <FilterDropdown
@@ -209,7 +213,13 @@ export function ProgressPage() {
           <Button
             variant="primary"
             disabled={!canAddRecord}
-            title={canAddRecord ? undefined : 'PC Reviewer role or above required to add records.'}
+            title={
+              frozen
+                ? 'Project is closed — data is frozen. Reopen it on Project Setup to add records.'
+                : canAddRecord
+                  ? undefined
+                  : 'PC Reviewer role or above required to add records.'
+            }
             onClick={() => setNewRecordOpen(true)}
           >
             + New Record

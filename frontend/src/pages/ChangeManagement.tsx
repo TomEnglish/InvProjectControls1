@@ -6,9 +6,11 @@ import {
   useChangeOrders,
   useBudgetRollup,
   useCurrentUser,
+  useProjectClosed,
   hasRole,
   type ChangeOrder,
 } from '@/lib/queries';
+import { FrozenBanner } from '@/components/ui/FrozenBanner';
 import { Card, CardHeader } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { NoProjectSelected } from '@/components/ui/NoProjectSelected';
@@ -26,6 +28,8 @@ export function ChangeManagementPage() {
   const projectId = useProjectStore((s) => s.currentProjectId);
   const qc = useQueryClient();
   const { data: me } = useCurrentUser();
+  const frozen = useProjectClosed(projectId);
+  const canCreateCo = hasRole(me?.role, 'pc_reviewer') && !frozen;
 
   const [statusFilter, setStatusFilter] = useState<string>('All');
   const [mineOnly, setMineOnly] = useState(false);
@@ -121,6 +125,7 @@ export function ChangeManagementPage() {
 
   return (
     <div className="space-y-6">
+      <FrozenBanner projectId={projectId} />
       <div className="flex justify-between items-center flex-wrap gap-2">
         <div className="flex items-center gap-3 flex-wrap">
           <select
@@ -147,11 +152,13 @@ export function ChangeManagementPage() {
         </div>
         <Button
           variant="primary"
-          disabled={!hasRole(me?.role, 'pc_reviewer')}
+          disabled={!canCreateCo}
           title={
-            hasRole(me?.role, 'pc_reviewer')
-              ? undefined
-              : 'PC Reviewer role or above required to submit change orders.'
+            frozen
+              ? 'Project is closed — data is frozen. Reopen it on Project Setup to submit change orders.'
+              : hasRole(me?.role, 'pc_reviewer')
+                ? undefined
+                : 'PC Reviewer role or above required to submit change orders.'
           }
           onClick={() => setModalOpen(true)}
         >
@@ -190,8 +197,8 @@ export function ChangeManagementPage() {
                   key={co.id}
                   co={co}
                   selected={co.id === selectedId}
-                  canPcReview={hasRole(me?.role, 'pc_reviewer')}
-                  canApprove={hasRole(me?.role, 'pm')}
+                  canPcReview={hasRole(me?.role, 'pc_reviewer') && !frozen}
+                  canApprove={hasRole(me?.role, 'pm') && !frozen}
                   pcBusy={pcReview.isPending}
                   approveBusy={approve.isPending}
                   onSelect={() => setSelectedId(co.id === selectedId ? null : co.id)}

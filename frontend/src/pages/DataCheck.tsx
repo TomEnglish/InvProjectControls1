@@ -11,9 +11,11 @@ import {
   useBaselineIngestionStats,
   useDataCheckSignoff,
   useCurrentUser,
+  useProjectClosed,
   hasRole,
   type DataCheckSignoff,
 } from '@/lib/queries';
+import { FrozenBanner } from '@/components/ui/FrozenBanner';
 import {
   latestManifestsBySheet,
   compareDiscipline,
@@ -40,7 +42,8 @@ export function DataCheckPage() {
   const dbStats = useBaselineIngestionStats(projectId);
   const signoff = useDataCheckSignoff(projectId);
   const { data: me } = useCurrentUser();
-  const canVerify = hasRole(me?.role, 'pc_reviewer');
+  const frozen = useProjectClosed(projectId);
+  const canVerify = hasRole(me?.role, 'pc_reviewer') && !frozen;
 
   if (!projectId) {
     return <NoProjectSelected message="Pick a project in the top bar to run its data check." />;
@@ -133,6 +136,7 @@ export function DataCheckPage() {
 
   return (
     <div className="space-y-4">
+      <FrozenBanner projectId={projectId} />
       <Card>
         <CardHeader
           eyebrow="Ingestion"

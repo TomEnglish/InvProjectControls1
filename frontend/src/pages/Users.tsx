@@ -4,6 +4,7 @@ import { UsersCard } from '@/components/projects/UsersCard';
 import { ForemanAliasesCard } from '@/components/projects/ForemanAliasesCard';
 import { ClerkCraftsCard } from '@/components/projects/ClerkCraftsCard';
 import { RoleMatrixCard } from '@/components/projects/RoleMatrixCard';
+import { ExportDataCard } from '@/components/reports/ExportDataCard';
 
 /**
  * Tenant-wide user administration (A15). Consolidates users, invites,
@@ -39,6 +40,7 @@ export function UsersPage() {
   return (
     <div className="space-y-4">
       <UsersCard />
+      <ExportDataCard />
       <ClerkCraftsCard />
       <ForemanAliasesCard />
       <RoleMatrixCard />
