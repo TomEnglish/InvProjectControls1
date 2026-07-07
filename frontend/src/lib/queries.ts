@@ -1751,6 +1751,57 @@ export function useBaselineRecnoDwgCheck(projectId: string | null) {
   });
 }
 
+/** Milestone-weight integrity for one work type used by the baseline. */
+export type MilestoneWeightCheck = {
+  work_type_code: string;
+  milestone_count: number;
+  weight_sum: number; // 0..1 fraction; ~1.0 expected
+  ok: boolean;
+};
+
+/** Semantic quality counts for one audit tab (discipline). */
+export type DisciplineQuality = {
+  discipline_code: string;
+  display_name: string;
+  total_rows: number;
+  zero_budget_count: number;
+  no_milestone_count: number;
+  unmapped_work_type_count: number;
+  coa_out_of_scope_count: number;
+  unit_outlier_count: number;
+};
+
+export type BaselineQualityChecks = {
+  milestone_weights: MilestoneWeightCheck[];
+  disciplines: DisciplineQuality[];
+  unassigned_count: number;
+};
+
+/**
+ * Semantic baseline-quality checks — data that loaded cleanly but would
+ * produce wrong earned value (milestone weights ≠ 100%, zero-budget or
+ * milestone-less records, unmapped work types, out-of-scope COA codes,
+ * unit-hours outliers, unassigned records). Server-side, read-only.
+ */
+export function useBaselineQualityChecks(projectId: string | null) {
+  return useQuery({
+    queryKey: ['baseline-quality-checks', projectId] as const,
+    enabled: !!projectId,
+    queryFn: async (): Promise<BaselineQualityChecks> => {
+      const { data, error } = await supabase.rpc('baseline_quality_checks', {
+        p_project_id: projectId!,
+      });
+      if (error) throw error;
+      const body = (data ?? {}) as Partial<BaselineQualityChecks>;
+      return {
+        milestone_weights: body.milestone_weights ?? [],
+        disciplines: body.disciplines ?? [],
+        unassigned_count: body.unassigned_count ?? 0,
+      };
+    },
+  });
+}
+
 export type DataCheckSignoff = {
   id: string;
   verified_at: string;

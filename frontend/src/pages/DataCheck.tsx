@@ -10,12 +10,14 @@ import {
   useImportManifests,
   useBaselineIngestionStats,
   useBaselineRecnoDwgCheck,
+  useBaselineQualityChecks,
   useDataCheckSignoff,
   useCurrentUser,
   useProjectClosed,
   hasRole,
   type DataCheckSignoff,
   type RecnoDwgCheck,
+  type BaselineQualityChecks,
 } from '@/lib/queries';
 import { FrozenBanner } from '@/components/ui/FrozenBanner';
 import {
@@ -43,6 +45,7 @@ export function DataCheckPage() {
   const manifests = useImportManifests(projectId);
   const dbStats = useBaselineIngestionStats(projectId);
   const recnoDwg = useBaselineRecnoDwgCheck(projectId);
+  const quality = useBaselineQualityChecks(projectId);
   const signoff = useDataCheckSignoff(projectId);
   const { data: me } = useCurrentUser();
   const frozen = useProjectClosed(projectId);
@@ -51,18 +54,18 @@ export function DataCheckPage() {
   if (!projectId) {
     return <NoProjectSelected message="Pick a project in the top bar to run its data check." />;
   }
-  if (manifests.isLoading || dbStats.isLoading || recnoDwg.isLoading) {
+  if (manifests.isLoading || dbStats.isLoading || recnoDwg.isLoading || quality.isLoading) {
     return (
       <Card>
         <div className="h-6 bg-[color:var(--color-canvas)] rounded w-48 animate-pulse" />
       </Card>
     );
   }
-  if (manifests.error || dbStats.error || recnoDwg.error) {
+  if (manifests.error || dbStats.error || recnoDwg.error || quality.error) {
     return (
       <Card>
         <div className="is-toast is-toast-danger">
-          {((manifests.error ?? dbStats.error ?? recnoDwg.error) as Error).message}
+          {((manifests.error ?? dbStats.error ?? recnoDwg.error ?? quality.error) as Error).message}
         </div>
       </Card>
     );
@@ -80,6 +83,15 @@ export function DataCheckPage() {
     (n, r) => n + (r.recno_ok ? 0 : 1) + (r.dwg_ok ? 0 : 1),
     0,
   );
+
+  // Semantic quality checks: one per work type (milestone weights) + six
+  // project-level gates. All fold into the Verify Load totals.
+  const qc = quality.data ?? { milestone_weights: [], disciplines: [], unassigned_count: 0 };
+  const qualityAggChecks = summarizeQuality(qc);
+  const qualityTotal = qc.milestone_weights.length + qualityAggChecks.length;
+  const qualityFailing =
+    qc.milestone_weights.filter((w) => !w.ok).length +
+    qualityAggChecks.filter((c) => c.count > 0).length;
 
   if (latest.length === 0) {
     return (
@@ -102,14 +114,18 @@ export function DataCheckPage() {
                 projectId={projectId}
                 signoff={signoff.data ?? null}
                 canVerify={canVerify}
-                checksTotal={recnoDwgTotal}
-                checksFailing={recnoDwgFailing}
+                checksTotal={recnoDwgTotal + qualityTotal}
+                checksFailing={recnoDwgFailing + qualityFailing}
                 latestImportAt={null}
               />
             </div>
           )}
         </Card>
         {recnoRows.length > 0 && <RecnoDwgCard rows={recnoRows} />}
+        {qc.milestone_weights.length > 0 && <MilestoneWeightsCard rows={qc.milestone_weights} />}
+        {qc.disciplines.length > 0 && (
+          <BaselineQualityCard qc={qc} aggChecks={qualityAggChecks} />
+        )}
       </div>
     );
   }
@@ -141,8 +157,9 @@ export function DataCheckPage() {
   const failing =
     allChecks.filter((c) => c.status === 'fail').length +
     pivot.filter((p) => p.status === 'fail').length +
-    recnoDwgFailing;
-  const total = allChecks.length + pivot.length + recnoDwgTotal;
+    recnoDwgFailing +
+    qualityFailing;
+  const total = allChecks.length + pivot.length + recnoDwgTotal + qualityTotal;
 
   // Records in DB disciplines with no manifest (e.g. loaded via the
   // per-discipline zones, which don't capture manifests yet).
@@ -251,6 +268,10 @@ export function DataCheckPage() {
       </Card>
 
       {recnoRows.length > 0 && <RecnoDwgCard rows={recnoRows} />}
+
+      {qc.milestone_weights.length > 0 && <MilestoneWeightsCard rows={qc.milestone_weights} />}
+
+      {qc.disciplines.length > 0 && <BaselineQualityCard qc={qc} aggChecks={qualityAggChecks} />}
 
       <Card>
         <CardHeader
@@ -591,5 +612,225 @@ function RecnoDwgCard({ rows }: { rows: RecnoDwgCheck[] }) {
         </table>
       </div>
     </Card>
+  );
+}
+
+/** One project-level quality gate: a label + how many rows violate it. */
+type QualityAgg = { key: string; label: string; count: number; hint: string };
+
+function summarizeQuality(qc: BaselineQualityChecks): QualityAgg[] {
+  const sum = (f: (d: BaselineQualityChecks['disciplines'][number]) => number) =>
+    qc.disciplines.reduce((n, d) => n + f(d), 0);
+  return [
+    {
+      key: 'zero_budget',
+      label: 'Budget hours present',
+      count: sum((d) => d.zero_budget_count),
+      hint: 'records with 0 or null budget hours (invisible to hours-weighted EV)',
+    },
+    {
+      key: 'no_milestone',
+      label: 'Milestones present',
+      count: sum((d) => d.no_milestone_count),
+      hint: 'mapped records with no milestone rows (can’t earn progressively)',
+    },
+    {
+      key: 'unmapped_wt',
+      label: 'Work types mapped',
+      count: sum((d) => d.unmapped_work_type_count),
+      hint: 'records with no work type (fall back to the discipline default)',
+    },
+    {
+      key: 'coa_scope',
+      label: 'Codes in COA scope',
+      count: sum((d) => d.coa_out_of_scope_count),
+      hint: 'records whose COA code is not in the project scope (won’t roll up in cost)',
+    },
+    {
+      key: 'unit_outlier',
+      label: 'Unit-hours outliers',
+      count: sum((d) => d.unit_outlier_count),
+      hint: 'budget hrs/qty >10× or <1/10× the discipline median',
+    },
+    {
+      key: 'unassigned',
+      label: 'Assigned to a discipline',
+      count: qc.unassigned_count,
+      hint: 'records with no discipline (won’t roll into any discipline report)',
+    },
+  ];
+}
+
+/**
+ * Milestone weighting — each work type used by the baseline should have
+ * milestone weights summing to ~100% (±0.5pp). A wrong sum mis-earns every
+ * record that uses that type.
+ */
+function MilestoneWeightsCard({ rows }: { rows: BaselineQualityChecks['milestone_weights'] }) {
+  const failing = rows.filter((r) => !r.ok).length;
+  return (
+    <Card>
+      <CardHeader
+        eyebrow="Earned-value integrity"
+        title="Milestone weighting"
+        caption="Each work type used by the baseline should have milestone weights summing to 100% (±0.5). A wrong sum mis-earns every record that uses it."
+        actions={
+          failing === 0 ? (
+            <span className="is-toast is-toast-success text-xs">
+              <CheckCircle2 size={14} /> All {rows.length} pass
+            </span>
+          ) : (
+            <span className="is-toast is-toast-danger text-xs">
+              <XCircle size={14} /> {failing} of {rows.length} failing
+            </span>
+          )
+        }
+      />
+      <div className="overflow-x-auto rounded-md border border-[color:var(--color-line)]">
+        <table className="is-table">
+          <thead>
+            <tr>
+              <th>Work type</th>
+              <th style={{ textAlign: 'right' }}>Milestones</th>
+              <th style={{ textAlign: 'right' }}>Weight sum</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.work_type_code}>
+                <td className="font-mono text-xs">{r.work_type_code}</td>
+                <td className="text-right font-mono">{fmt.int(r.milestone_count)}</td>
+                <td className="text-right font-mono">{fmt.oneDp(r.weight_sum * 100)}%</td>
+                <td>
+                  {r.ok ? (
+                    passPill
+                  ) : (
+                    <span className="text-xs text-[color:var(--color-variance-unfavourable)] inline-flex items-center gap-1">
+                      <XCircle size={12} /> should total 100%
+                    </span>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </Card>
+  );
+}
+
+/**
+ * Baseline quality — six project-level gates (summary strip) plus a
+ * per-discipline breakdown of the offending row counts.
+ */
+function BaselineQualityCard({
+  qc,
+  aggChecks,
+}: {
+  qc: BaselineQualityChecks;
+  aggChecks: QualityAgg[];
+}) {
+  const failing = aggChecks.filter((c) => c.count > 0).length;
+  return (
+    <Card>
+      <CardHeader
+        eyebrow="Baseline quality"
+        title="Records that would distort earned value"
+        caption="Data that loaded cleanly but skews EV or cost rollup. Counts are rows affected; resolve before lock, or sign off knowingly."
+        actions={
+          failing === 0 ? (
+            <span className="is-toast is-toast-success text-xs">
+              <CheckCircle2 size={14} /> All {aggChecks.length} pass
+            </span>
+          ) : (
+            <span className="is-toast is-toast-danger text-xs">
+              <XCircle size={14} /> {failing} of {aggChecks.length} failing
+            </span>
+          )
+        }
+      />
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 mb-3">
+        {aggChecks.map((c) => (
+          <div
+            key={c.key}
+            className="flex items-start gap-2 p-2 rounded-md border border-[color:var(--color-line)]"
+            title={c.hint}
+          >
+            {c.count === 0 ? (
+              <CheckCircle2
+                size={14}
+                className="shrink-0 mt-0.5 text-[color:var(--color-variance-favourable)]"
+              />
+            ) : (
+              <XCircle
+                size={14}
+                className="shrink-0 mt-0.5 text-[color:var(--color-variance-unfavourable)]"
+              />
+            )}
+            <div className="text-xs">
+              <div className="font-semibold">{c.label}</div>
+              <div className="text-[color:var(--color-text-muted)]">
+                {c.count === 0 ? 'ok' : `${fmt.int(c.count)} row(s)`}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="overflow-x-auto rounded-md border border-[color:var(--color-line)]">
+        <table className="is-table">
+          <thead>
+            <tr>
+              <th>Discipline</th>
+              <th style={{ textAlign: 'right' }}>Rows</th>
+              <th style={{ textAlign: 'right' }}>Zero budget</th>
+              <th style={{ textAlign: 'right' }}>No milestones</th>
+              <th style={{ textAlign: 'right' }}>Unmapped WT</th>
+              <th style={{ textAlign: 'right' }}>COA out of scope</th>
+              <th style={{ textAlign: 'right' }}>Unit outliers</th>
+            </tr>
+          </thead>
+          <tbody>
+            {qc.disciplines.map((d) => (
+              <tr key={d.discipline_code}>
+                <td className="font-semibold">{d.display_name}</td>
+                <td className="text-right font-mono">{fmt.int(d.total_rows)}</td>
+                <QCell n={d.zero_budget_count} />
+                <QCell n={d.no_milestone_count} />
+                <QCell n={d.unmapped_work_type_count} />
+                <QCell n={d.coa_out_of_scope_count} />
+                <QCell n={d.unit_outlier_count} />
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {qc.unassigned_count > 0 && (
+        <div className="is-toast is-toast-warn text-xs mt-3">
+          <AlertTriangle size={14} />
+          <span>
+            {fmt.int(qc.unassigned_count)} baseline record(s) are not assigned to any discipline —
+            they won’t roll into discipline reports.
+          </span>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+/** Right-aligned count cell — muted 0, red when non-zero. */
+function QCell({ n }: { n: number }) {
+  return (
+    <td
+      className={`text-right font-mono ${
+        n > 0
+          ? 'text-[color:var(--color-variance-unfavourable)] font-semibold'
+          : 'text-[color:var(--color-text-muted)]'
+      }`}
+    >
+      {fmt.int(n)}
+    </td>
   );
 }
