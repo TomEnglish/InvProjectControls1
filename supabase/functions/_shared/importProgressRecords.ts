@@ -122,8 +122,11 @@ export async function importProgressRecords(p: ImportParams): Promise<ImportResu
     // if DESC_ is missing — the unified workbook treats these as discipline-
     // specific name variants, but downstream UI needs one resolved label.
     const description = item.name ?? item.tag_no ?? item.spool_fr ?? '(unnamed)';
-    const workTypeId = item.work_type
-      ? (workTypeMap.get(item.work_type.toLowerCase()) ?? null)
+    // Trim before lookup so a padded-but-valid code resolves (and matches the
+    // trimmed work_type_raw we persist below — otherwise "  X  " would store
+    // as "X" yet count as unmapped).
+    const workTypeId = item.work_type?.trim()
+      ? (workTypeMap.get(item.work_type.trim().toLowerCase()) ?? null)
       : null;
     return {
       tenant_id: p.tenantId,

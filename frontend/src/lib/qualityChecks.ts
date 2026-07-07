@@ -4,7 +4,7 @@ import type { BaselineQualityChecks } from '@/lib/queries';
 export type QualityAgg = { key: string; label: string; count: number; hint: string };
 
 /**
- * Collapse the per-discipline quality counts into six project-level gates.
+ * Collapse the per-discipline quality counts into eight project-level gates.
  * Each gate's `count` is the number of offending rows across all disciplines;
  * a gate fails when count > 0. Kept pure (no React) so the pass/fail
  * arithmetic that feeds the Verify Load sign-off is unit-testable.

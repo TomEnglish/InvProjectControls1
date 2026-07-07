@@ -682,7 +682,7 @@ function MilestoneWeightsCard({ rows }: { rows: BaselineQualityChecks['milestone
 }
 
 /**
- * Baseline quality — six project-level gates (summary strip) plus a
+ * Baseline quality — eight project-level gates (summary strip) plus a
  * per-discipline breakdown of the offending row counts.
  */
 function BaselineQualityCard({

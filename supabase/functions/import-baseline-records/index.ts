@@ -391,8 +391,11 @@ Deno.serve(async (req) => {
     const iwpId = item.iwp_name
       ? iwpIdByName.get(item.iwp_name.toLowerCase()) ?? null
       : null;
-    const workTypeId = item.work_type
-      ? (workTypeMap.get(item.work_type.toLowerCase()) ?? null)
+    // Trim before lookup so a padded-but-valid code resolves (and matches the
+    // trimmed work_type_raw we persist below — otherwise "  X  " would store
+    // as "X" yet count as unmapped).
+    const workTypeId = item.work_type?.trim()
+      ? (workTypeMap.get(item.work_type.trim().toLowerCase()) ?? null)
       : null;
     const description = item.name ?? item.tag_no ?? item.spool_fr ?? '(unnamed)';
     return {
