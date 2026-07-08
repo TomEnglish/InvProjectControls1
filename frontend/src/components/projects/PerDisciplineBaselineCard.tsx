@@ -21,14 +21,11 @@ import { useBaselineByDiscipline } from '@/lib/queries';
  *   "Today everything funnels through one generic upload. Sandra wants
  *    distinct upload zones on Project Setup, one per audit type."
  *
- * Each zone passes its discipline_code to import-baseline-records via
- * the new `declaredDiscipline` param so every record in a Foundations
- * file lands under FOUNDATIONS even though the codes share Civil's '04'
- * prime. The unified-workbook path (one big mixed file) is still
- * available if a clerk drops it into any zone — the existing per-row
- * PRIME_TO_DISCIPLINE logic engages when declaredDiscipline is null,
- * but we don't expose that path here; the zone-declared-discipline
- * pattern is what makes the UI legible per Sandra's spec.
+ * Each zone passes its discipline_code to import-baseline-records via the
+ * `declaredDiscipline` param so every record in the file lands under that
+ * discipline. Foundations is intentionally NOT a zone: its codes share
+ * Civil's '04' prime and are treated as Civil, so a "Foundations" audit
+ * loads through the Civil zone (and QMR "Foundations" rows map to CIVIL).
  *
  * Role gate: card is rendered from ProjectSetup behind `canEdit && !locked`
  * which already gates on pm+. The edge fn re-asserts ALLOWED_ROLES =
@@ -38,12 +35,11 @@ type DisciplineDef = { code: string; label: string };
 
 // Order roughly matches the work-sequence on a typical industrial job
 // (sitework first, instrumentation last) so the layout reads naturally
-// top-to-bottom. FOUNDATIONS is separated from CIVIL because its codes
-// share the '04' prime — see A11 plan + the edge-fn comment.
+// top-to-bottom. Foundations folds into Civil (shared '04' prime), so it
+// has no zone of its own.
 const DISCIPLINES: DisciplineDef[] = [
   { code: 'SITE', label: 'Site Work' },
   { code: 'CIVIL', label: 'Civil' },
-  { code: 'FOUNDATIONS', label: 'Foundations' },
   { code: 'STEEL', label: 'Steel' },
   { code: 'PIPE', label: 'Pipe' },
   { code: 'MECH', label: 'Mechanical' },

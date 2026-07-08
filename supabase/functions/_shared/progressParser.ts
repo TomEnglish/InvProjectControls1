@@ -523,7 +523,8 @@ const QMR_DISCIPLINE_CODE: Record<string, string> = {
   'site work': 'SITE',
   site: 'SITE',
   civil: 'CIVIL',
-  foundations: 'FOUNDATIONS',
+  // Foundations folds into Civil (shared '04' COA prime) — no separate discipline.
+  foundations: 'CIVIL',
   steel: 'STEEL',
   pipe: 'PIPE',
   mechanical: 'MECH',
