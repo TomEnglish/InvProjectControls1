@@ -163,15 +163,37 @@ function DisciplineSlot({
     setFile(f);
     if (!f) return;
     try {
-      // A zone declares ONE discipline for every row it imports — dropping
-      // the multi-discipline QMR workbook here would flatten all seven
-      // trades into this zone. Detect and redirect instead.
+      // A zone declares ONE discipline for every row it imports. A unified QMR
+      // workbook carries the discipline per row (and drops the "ALL" metadata
+      // row), so it belongs in the QMR card above — loading it here ignores
+      // that column and forces every row into the one selected discipline.
+      // Detect and redirect, describing what was actually found so the message
+      // matches the file (a single self-identifying tab, not necessarily
+      // "multiple tabs").
       const qmr = await parseQmrFile(f);
       if (qmr.auditSheets.length > 0) {
+        const sheetCount = qmr.auditSheets.length;
+        const totalRows = qmr.auditSheets.reduce((n, s) => n + s.rows.length, 0);
+        const discs = [
+          ...new Set(
+            qmr.auditSheets
+              .flatMap((s) => s.rows.map((r) => r.discipline_label))
+              .filter((d): d is string => !!d),
+          ),
+        ];
+        const discList = discs.length ? discs.join(', ') : 'set per row';
+        const detected =
+          sheetCount === 1
+            ? `Detected a unified audit tab (“${qmr.auditSheets[0]!.sheetName}”) with a DISCIPLINE column — ${
+                discs.length <= 1
+                  ? `${totalRows} records, discipline “${discs[0] ?? '—'}”`
+                  : `${totalRows} records across ${discs.length} disciplines (${discList})`
+              }.`
+            : `Detected ${sheetCount} audit tabs (${discList}), ${totalRows} records total.`;
         setParseErr(
-          'This is a unified QMR workbook (multiple audit tabs). Use the ' +
-            '"Load baseline from QMR workbook" card above so each tab lands in ' +
-            'its own discipline — this zone would put every record under one.',
+          `${detected} Use the “Load baseline from QMR workbook” card above — it reads the ` +
+            `discipline from each row. Loading it here would ignore that and force every record ` +
+            `into the one discipline selected in this zone.`,
         );
         return;
       }
