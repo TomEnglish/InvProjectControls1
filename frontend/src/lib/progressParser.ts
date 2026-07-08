@@ -506,6 +506,7 @@ export async function parseProgressFile(file: File): Promise<ParseResult> {
 // DISCIPLINE cell values used in the QMR audit tabs → discipline_code enum.
 const QMR_DISCIPLINE_CODE: Record<string, string> = {
   'site work': 'SITE',
+  site: 'SITE',
   civil: 'CIVIL',
   foundations: 'FOUNDATIONS',
   steel: 'STEEL',

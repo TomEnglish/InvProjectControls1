@@ -129,6 +129,7 @@ function DisciplineSlot({
   const [parsed, setParsed] = useState<ParsedRow[]>([]);
   const [unmapped, setUnmapped] = useState<string[]>([]);
   const [parseErr, setParseErr] = useState<string | null>(null);
+  const [warning, setWarning] = useState<string | null>(null);
 
   const submit = useMutation({
     mutationFn: async () => {
@@ -152,6 +153,7 @@ function DisciplineSlot({
       setFile(null);
       setParsed([]);
       setUnmapped([]);
+      setWarning(null);
     },
   });
 
@@ -159,42 +161,49 @@ function DisciplineSlot({
     setParseErr(null);
     setParsed([]);
     setUnmapped([]);
+    setWarning(null);
     submit.reset();
     setFile(f);
     if (!f) return;
     try {
-      // A zone declares ONE discipline for every row it imports. A unified QMR
-      // workbook carries the discipline per row (and drops the "ALL" metadata
-      // row), so it belongs in the QMR card above — loading it here ignores
-      // that column and forces every row into the one selected discipline.
-      // Detect and redirect, describing what was actually found so the message
-      // matches the file (a single self-identifying tab, not necessarily
-      // "multiple tabs").
+      // A zone declares ONE discipline for every record it imports. A QMR audit
+      // file carries a per-row DISCIPLINE column; if it spans MORE THAN ONE
+      // discipline, flattening it into this single zone would be wrong — so
+      // redirect to the QMR card, which routes each row by its discipline.
+      // But a single-discipline audit (e.g. a "Site Work" export) belongs here:
+      // use the QMR-parsed rows (correct header offset, "ALL" metadata dropped).
       const qmr = await parseQmrFile(f);
       if (qmr.auditSheets.length > 0) {
-        const sheetCount = qmr.auditSheets.length;
-        const totalRows = qmr.auditSheets.reduce((n, s) => n + s.rows.length, 0);
-        const discs = [
+        const rows = qmr.auditSheets.flatMap((s) => s.rows);
+        const labels = [
           ...new Set(
-            qmr.auditSheets
-              .flatMap((s) => s.rows.map((r) => r.discipline_label))
-              .filter((d): d is string => !!d),
+            rows.map((r) => (r.discipline_label ?? '').trim()).filter((d) => d !== ''),
           ),
         ];
-        const discList = discs.length ? discs.join(', ') : 'set per row';
-        const detected =
-          sheetCount === 1
-            ? `Detected a unified audit tab (“${qmr.auditSheets[0]!.sheetName}”) with a DISCIPLINE column — ${
-                discs.length <= 1
-                  ? `${totalRows} records, discipline “${discs[0] ?? '—'}”`
-                  : `${totalRows} records across ${discs.length} disciplines (${discList})`
-              }.`
-            : `Detected ${sheetCount} audit tabs (${discList}), ${totalRows} records total.`;
-        setParseErr(
-          `${detected} Use the “Load baseline from QMR workbook” card above — it reads the ` +
-            `discipline from each row. Loading it here would ignore that and force every record ` +
-            `into the one discipline selected in this zone.`,
-        );
+
+        if (labels.length > 1) {
+          setParseErr(
+            `This workbook spans ${labels.length} disciplines (${labels.join(', ')}), ` +
+              `${rows.length} records. Use the “Load baseline from QMR workbook” card above so ` +
+              `each discipline is routed correctly — this ${label} zone would force all ` +
+              `${rows.length} records into ${label}.`,
+          );
+          return;
+        }
+
+        setParsed(rows);
+        setUnmapped([...new Set(qmr.auditSheets.flatMap((s) => s.unmappedHeaders))]);
+
+        // Soft heads-up if the file's own discipline differs from this zone —
+        // the load still assigns every record to the zone's discipline.
+        const fileCode = qmr.auditSheets.map((s) => s.disciplineCode).find(Boolean) ?? null;
+        if (fileCode && fileCode !== disciplineCode) {
+          setWarning(
+            `This file’s DISCIPLINE column says “${labels[0]}” (${fileCode}), but you’re loading ` +
+              `it into the ${label} zone — all ${rows.length} records will be assigned to ${label}. ` +
+              `Use the ${labels[0]} zone instead if that isn’t intended.`,
+          );
+        }
         return;
       }
       const result = await parseProgressFile(f);
@@ -244,6 +253,8 @@ function DisciplineSlot({
       />
 
       {parseErr && <div className="is-toast is-toast-danger text-xs">{parseErr}</div>}
+
+      {warning && <div className="is-toast is-toast-warn text-xs">{warning}</div>}
 
       {parsed.length > 0 && (
         <div className="text-xs text-[color:var(--color-text-muted)] flex justify-between items-center">
