@@ -58,9 +58,9 @@ export function SetupGuideCard({ project }: Props) {
     {
       title: 'Load the baseline',
       detail:
-        'Drop the unified QMR workbook (all audit tabs in one file) on the loader below. ' +
-        'Disciplines are created automatically from the tabs; use the per-discipline ' +
-        'zones only for single-craft files.',
+        'Load the baseline one discipline at a time — drop each discipline\'s audit file ' +
+        'into its zone in the Baseline by discipline card below. Disciplines are created ' +
+        'automatically, and each upload is checked on the Data Check page.',
       done: baselineCount > 0,
     },
     {

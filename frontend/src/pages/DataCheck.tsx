@@ -110,8 +110,8 @@ export function DataCheckPage() {
             title="Data Check"
             caption={
               'No import manifests yet. Manifests are captured when a baseline is ' +
-              'loaded from the unified QMR workbook on Project Setup — load one and ' +
-              'this page fills in with a file-vs-database reconciliation.'
+              'loaded from the Baseline by discipline zones on Project Setup — load one ' +
+              'and this page fills in with a file-vs-database reconciliation.'
             }
           />
           {db.length > 0 && <DbOnlyProfile db={db} />}
@@ -256,8 +256,9 @@ export function DataCheckPage() {
             <span>
               {unmanifested.map((s) => s.display_name).join(', ')}:{' '}
               {unmanifested.reduce((n, s) => n + s.row_count, 0)} baseline records exist in the
-              database without an import manifest (loaded outside the QMR workbook flow) — they
-              are shown here but have no file-side expectation to check against.
+              database without an import manifest (loaded before manifest capture, or via a
+              legacy path) — they are shown here but have no file-side expectation to check
+              against. Re-loading that discipline's file captures one.
             </span>
           </div>
         )}

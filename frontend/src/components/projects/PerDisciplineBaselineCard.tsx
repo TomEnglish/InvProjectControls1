@@ -6,12 +6,14 @@ import {
   CheckCircle2,
   Circle,
   AlertTriangle,
+  Trash2,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { Card, CardHeader } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { FileDropzone } from '@/components/ui/FileDropzone';
 import { parseProgressFile, parseQmrFile, type ParsedRow } from '@/lib/progressParser';
+import { buildManifestStats } from '@/lib/ingestionStats';
 import { useBaselineByDiscipline } from '@/lib/queries';
 
 /**
@@ -50,7 +52,32 @@ const DISCIPLINES: DisciplineDef[] = [
 type Props = { projectId: string };
 
 export function PerDisciplineBaselineCard({ projectId }: Props) {
+  const qc = useQueryClient();
   const status = useBaselineByDiscipline(projectId);
+  const [confirmClear, setConfirmClear] = useState(false);
+
+  const totalLoaded =
+    [...(status.data?.byDiscipline.values() ?? [])].reduce((n, d) => n + d.count, 0) +
+    (status.data?.unassignedCount ?? 0);
+
+  const clearBaseline = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase.rpc('project_clear_baseline', { p_project_id: projectId });
+      if (error) throw error;
+    },
+    onSuccess: () => setConfirmClear(false),
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: ['baseline-by-discipline', projectId] });
+      qc.invalidateQueries({ queryKey: ['disciplines', projectId] });
+      qc.invalidateQueries({ queryKey: ['progress-rows', projectId] });
+      qc.invalidateQueries({ queryKey: ['project-metrics', projectId] });
+      qc.invalidateQueries({ queryKey: ['discipline-metrics', projectId] });
+      qc.invalidateQueries({ queryKey: ['import-manifests', projectId] });
+      qc.invalidateQueries({ queryKey: ['baseline-ingestion-stats', projectId] });
+      qc.invalidateQueries({ queryKey: ['baseline-recno-dwg-check', projectId] });
+      qc.invalidateQueries({ queryKey: ['baseline-quality-checks', projectId] });
+    },
+  });
 
   return (
     <Card>
@@ -58,21 +85,57 @@ export function PerDisciplineBaselineCard({ projectId }: Props) {
         eyebrow="Initial baseline"
         title="Baseline by discipline"
         caption={
-          'Drop each per-discipline audit file into its zone. Every record ' +
-          'in a file is assigned to the zone\'s discipline, so Foundations ' +
-          'audits land under FOUNDATIONS instead of folding back into Civil. ' +
-          'Use the Upload page for weekly progress once the baseline is locked.'
+          'Load the baseline one discipline at a time — drop each audit file into its ' +
+          'zone, and every record in that file is assigned to the zone\'s discipline. ' +
+          'Verify the load on the Data Check page, then lock. Weekly progress comes in ' +
+          'through the Upload page after lock.'
         }
         actions={
-          <a
-            href="/progress-template.csv"
-            download="progress-template.csv"
-            className="is-btn is-btn-outline is-btn-sm"
-          >
-            <Download size={14} /> Template
-          </a>
+          <div className="flex items-center gap-2">
+            {confirmClear ? (
+              <>
+                <span className="text-xs text-[color:var(--color-text-muted)]">
+                  Delete all {totalLoaded} baseline records?
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setConfirmClear(false)}
+                  disabled={clearBaseline.isPending}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="danger"
+                  size="sm"
+                  onClick={() => clearBaseline.mutate()}
+                  disabled={clearBaseline.isPending}
+                >
+                  {clearBaseline.isPending ? 'Clearing…' : 'Confirm clear'}
+                </Button>
+              </>
+            ) : (
+              <>
+                {totalLoaded > 0 && (
+                  <Button variant="outline" size="sm" onClick={() => setConfirmClear(true)}>
+                    <Trash2 size={14} /> Clear baseline
+                  </Button>
+                )}
+                <a
+                  href="/progress-template.csv"
+                  download="progress-template.csv"
+                  className="is-btn is-btn-outline is-btn-sm"
+                >
+                  <Download size={14} /> Template
+                </a>
+              </>
+            )}
+          </div>
         }
       />
+      {clearBaseline.error && (
+        <div className="is-toast is-toast-danger mb-4">{(clearBaseline.error as Error).message}</div>
+      )}
 
       {status.data && status.data.unassignedCount > 0 && (
         <div className="is-toast is-toast-warn mb-4">
@@ -126,6 +189,8 @@ function DisciplineSlot({
   const [unmapped, setUnmapped] = useState<string[]>([]);
   const [parseErr, setParseErr] = useState<string | null>(null);
   const [warning, setWarning] = useState<string | null>(null);
+  const [sheetRowCount, setSheetRowCount] = useState(0);
+  const [manifestNote, setManifestNote] = useState<string | null>(null);
 
   const submit = useMutation({
     mutationFn: async () => {
@@ -138,6 +203,23 @@ function DisciplineSlot({
         },
       });
       if (error) throw error;
+
+      // Capture the ingestion manifest so the Data Check page has a file-side
+      // expectation to reconcile against. Keyed by the discipline label so a
+      // re-upload of this discipline replaces it (latest wins) — the same
+      // per-tab behaviour the old unified loader had. Non-fatal: records are
+      // already imported, so a manifest miss only degrades the check page.
+      const { error: manifestErr } = await supabase.from('import_manifests').insert({
+        project_id: projectId,
+        source_filename: file?.name ?? null,
+        sheet_name: label,
+        discipline_code: disciplineCode,
+        sheet_row_count: sheetRowCount || parsed.length,
+        parsed_row_count: parsed.length,
+        stats: buildManifestStats(parsed),
+      });
+      setManifestNote(manifestErr ? manifestErr.message : null);
+
       return (data ?? {}) as { inserted?: number; error?: string };
     },
     onSuccess: () => {
@@ -146,10 +228,15 @@ function DisciplineSlot({
       qc.invalidateQueries({ queryKey: ['progress-rows', projectId] });
       qc.invalidateQueries({ queryKey: ['project-metrics', projectId] });
       qc.invalidateQueries({ queryKey: ['discipline-metrics', projectId] });
+      qc.invalidateQueries({ queryKey: ['import-manifests', projectId] });
+      qc.invalidateQueries({ queryKey: ['baseline-ingestion-stats', projectId] });
+      qc.invalidateQueries({ queryKey: ['baseline-recno-dwg-check', projectId] });
+      qc.invalidateQueries({ queryKey: ['baseline-quality-checks', projectId] });
       setFile(null);
       setParsed([]);
       setUnmapped([]);
       setWarning(null);
+      setSheetRowCount(0);
     },
   });
 
@@ -158,16 +245,18 @@ function DisciplineSlot({
     setParsed([]);
     setUnmapped([]);
     setWarning(null);
+    setSheetRowCount(0);
+    setManifestNote(null);
     submit.reset();
     setFile(f);
     if (!f) return;
     try {
       // A zone declares ONE discipline for every record it imports. A QMR audit
-      // file carries a per-row DISCIPLINE column; if it spans MORE THAN ONE
-      // discipline, flattening it into this single zone would be wrong — so
-      // redirect to the QMR card, which routes each row by its discipline.
-      // But a single-discipline audit (e.g. a "Site Work" export) belongs here:
-      // use the QMR-parsed rows (correct header offset, "ALL" metadata dropped).
+      // file carries a per-row DISCIPLINE column; a single-discipline audit
+      // (e.g. a "Site Work" export) belongs here — use the QMR-parsed rows
+      // (correct header offset, "ALL" metadata dropped). A file spanning MORE
+      // THAN ONE discipline can't go in a single zone; the baseline is loaded
+      // one discipline at a time, so it must be split first.
       const qmr = await parseQmrFile(f);
       if (qmr.auditSheets.length > 0) {
         const rows = qmr.auditSheets.flatMap((s) => s.rows);
@@ -179,15 +268,16 @@ function DisciplineSlot({
 
         if (labels.length > 1) {
           setParseErr(
-            `This workbook spans ${labels.length} disciplines (${labels.join(', ')}), ` +
-              `${rows.length} records. Use the “Load baseline from QMR workbook” card above so ` +
-              `each discipline is routed correctly — this ${label} zone would force all ` +
-              `${rows.length} records into ${label}.`,
+            `This file spans ${labels.length} disciplines (${labels.join(', ')}), ` +
+              `${rows.length} records. The baseline is loaded one discipline at a time — split ` +
+              `the file by discipline and drop each part in its own zone. (This ${label} zone ` +
+              `would assign all ${rows.length} records to ${label}.)`,
           );
           return;
         }
 
         setParsed(rows);
+        setSheetRowCount(qmr.auditSheets.reduce((n, s) => n + s.sheetRowCount, 0));
         setUnmapped([...new Set(qmr.auditSheets.flatMap((s) => s.unmappedHeaders))]);
 
         // Soft heads-up if the file's own discipline differs from this zone —
@@ -204,6 +294,7 @@ function DisciplineSlot({
       }
       const result = await parseProgressFile(f);
       setParsed(result.rows);
+      setSheetRowCount(result.rows.length);
       setUnmapped(result.unmappedHeaders);
     } catch (err) {
       setParseErr((err as Error).message);
@@ -274,6 +365,12 @@ function DisciplineSlot({
       {submit.isSuccess && submit.data && (
         <div className="is-toast is-toast-success text-xs">
           Loaded {submit.data.inserted} records into {label}.
+        </div>
+      )}
+      {submit.isSuccess && manifestNote && (
+        <div className="is-toast is-toast-warn text-xs">
+          Records loaded, but the Data Check reference wasn’t captured ({manifestNote}) — the
+          file-vs-database reconciliation won’t have an expectation for {label}.
         </div>
       )}
 
