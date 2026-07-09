@@ -55,6 +55,9 @@ export function PerDisciplineBaselineCard({ projectId }: Props) {
   const qc = useQueryClient();
   const status = useBaselineByDiscipline(projectId);
   const [confirmClear, setConfirmClear] = useState(false);
+  // Bumped on a project-wide clear to remount the zones, dropping each one's
+  // local state (staged file, "Loaded X" toast) that no longer applies.
+  const [resetNonce, setResetNonce] = useState(0);
 
   const totalLoaded =
     [...(status.data?.byDiscipline.values() ?? [])].reduce((n, d) => n + d.count, 0) +
@@ -65,7 +68,10 @@ export function PerDisciplineBaselineCard({ projectId }: Props) {
       const { error } = await supabase.rpc('project_clear_baseline', { p_project_id: projectId });
       if (error) throw error;
     },
-    onSuccess: () => setConfirmClear(false),
+    onSuccess: () => {
+      setConfirmClear(false);
+      setResetNonce((n) => n + 1);
+    },
     onSettled: () => {
       qc.invalidateQueries({ queryKey: ['baseline-by-discipline', projectId] });
       qc.invalidateQueries({ queryKey: ['disciplines', projectId] });
@@ -154,7 +160,7 @@ export function PerDisciplineBaselineCard({ projectId }: Props) {
           const entry = status.data?.byDiscipline.get(d.code) ?? null;
           return (
             <DisciplineSlot
-              key={d.code}
+              key={`${d.code}-${resetNonce}`}
               projectId={projectId}
               disciplineCode={d.code}
               label={d.label}
@@ -360,7 +366,14 @@ function DisciplineSlot({
                 <button
                   type="button"
                   className="font-semibold text-[color:var(--color-danger)] hover:underline"
-                  onClick={() => clearDiscipline.mutate()}
+                  onClick={() => {
+                    // Drop the previous load's "Loaded X records" toast (and
+                    // any parse/manifest state) — it no longer describes this
+                    // zone once the records are being cleared.
+                    submit.reset();
+                    setManifestNote(null);
+                    clearDiscipline.mutate();
+                  }}
                   disabled={clearDiscipline.isPending}
                 >
                   {clearDiscipline.isPending ? 'Clearing…' : 'Confirm'}
