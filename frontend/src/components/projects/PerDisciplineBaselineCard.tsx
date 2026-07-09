@@ -191,6 +191,30 @@ function DisciplineSlot({
   const [warning, setWarning] = useState<string | null>(null);
   const [sheetRowCount, setSheetRowCount] = useState(0);
   const [manifestNote, setManifestNote] = useState<string | null>(null);
+  const [confirmClear, setConfirmClear] = useState(false);
+
+  const invalidateChecks = () => {
+    qc.invalidateQueries({ queryKey: ['baseline-by-discipline', projectId] });
+    qc.invalidateQueries({ queryKey: ['progress-rows', projectId] });
+    qc.invalidateQueries({ queryKey: ['project-metrics', projectId] });
+    qc.invalidateQueries({ queryKey: ['discipline-metrics', projectId] });
+    qc.invalidateQueries({ queryKey: ['import-manifests', projectId] });
+    qc.invalidateQueries({ queryKey: ['baseline-ingestion-stats', projectId] });
+    qc.invalidateQueries({ queryKey: ['baseline-recno-dwg-check', projectId] });
+    qc.invalidateQueries({ queryKey: ['baseline-quality-checks', projectId] });
+  };
+
+  const clearDiscipline = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase.rpc('project_clear_discipline_baseline', {
+        p_project_id: projectId,
+        p_discipline_code: disciplineCode,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => setConfirmClear(false),
+    onSettled: invalidateChecks,
+  });
 
   const submit = useMutation({
     mutationFn: async () => {
@@ -205,14 +229,17 @@ function DisciplineSlot({
       if (error) throw error;
 
       // Capture the ingestion manifest so the Data Check page has a file-side
-      // expectation to reconcile against. Keyed by the discipline label so a
-      // re-upload of this discipline replaces it (latest wins) — the same
-      // per-tab behaviour the old unified loader had. Non-fatal: records are
-      // already imported, so a manifest miss only degrades the check page.
+      // expectation to reconcile against. Key it by "discipline — filename":
+      // the reconciliation SUMS all manifests for a discipline, so a discipline
+      // fed by two files (e.g. a Civil and a Foundations audit, both loaded in
+      // the Civil zone) keeps both expectations, while re-uploading the SAME
+      // file replaces its own manifest (latest wins) — matching the old
+      // per-tab behaviour. Non-fatal: records are already imported, so a
+      // manifest miss only degrades the check page.
       const { error: manifestErr } = await supabase.from('import_manifests').insert({
         project_id: projectId,
         source_filename: file?.name ?? null,
-        sheet_name: label,
+        sheet_name: file ? `${label} — ${file.name}` : label,
         discipline_code: disciplineCode,
         sheet_row_count: sheetRowCount || parsed.length,
         parsed_row_count: parsed.length,
@@ -223,15 +250,8 @@ function DisciplineSlot({
       return (data ?? {}) as { inserted?: number; error?: string };
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['baseline-by-discipline', projectId] });
       qc.invalidateQueries({ queryKey: ['disciplines', projectId] });
-      qc.invalidateQueries({ queryKey: ['progress-rows', projectId] });
-      qc.invalidateQueries({ queryKey: ['project-metrics', projectId] });
-      qc.invalidateQueries({ queryKey: ['discipline-metrics', projectId] });
-      qc.invalidateQueries({ queryKey: ['import-manifests', projectId] });
-      qc.invalidateQueries({ queryKey: ['baseline-ingestion-stats', projectId] });
-      qc.invalidateQueries({ queryKey: ['baseline-recno-dwg-check', projectId] });
-      qc.invalidateQueries({ queryKey: ['baseline-quality-checks', projectId] });
+      invalidateChecks();
       setFile(null);
       setParsed([]);
       setUnmapped([]);
@@ -322,11 +342,50 @@ function DisciplineSlot({
           </span>
         </div>
         {loaded && (
-          <span className="text-xs text-[color:var(--color-text-muted)]">
-            {loadedCount} records · {lastDate}
-          </span>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-[color:var(--color-text-muted)]">
+              {loadedCount} records · {lastDate}
+            </span>
+            {confirmClear ? (
+              <span className="flex items-center gap-1.5 text-xs">
+                <span className="text-[color:var(--color-text-muted)]">Clear {label}?</span>
+                <button
+                  type="button"
+                  className="text-[color:var(--color-text-muted)] hover:underline"
+                  onClick={() => setConfirmClear(false)}
+                  disabled={clearDiscipline.isPending}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="font-semibold text-[color:var(--color-danger)] hover:underline"
+                  onClick={() => clearDiscipline.mutate()}
+                  disabled={clearDiscipline.isPending}
+                >
+                  {clearDiscipline.isPending ? 'Clearing…' : 'Confirm'}
+                </button>
+              </span>
+            ) : (
+              <button
+                type="button"
+                aria-label={`Clear ${label} baseline`}
+                title={`Clear ${label} baseline records`}
+                className="text-[color:var(--color-text-subtle)] hover:text-[color:var(--color-danger)] transition-colors"
+                onClick={() => setConfirmClear(true)}
+              >
+                <Trash2 size={13} />
+              </button>
+            )}
+          </div>
         )}
       </div>
+
+      {clearDiscipline.error && (
+        <div className="is-toast is-toast-danger text-xs">
+          {(clearDiscipline.error as Error).message}
+        </div>
+      )}
 
       <FileDropzone
         accept=".csv,.xlsx,.xls"

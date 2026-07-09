@@ -202,7 +202,7 @@ export function DataCheckPage() {
           <table className="is-table">
             <thead>
               <tr>
-                <th>Audit tab</th>
+                <th>Source file</th>
                 <th>Discipline</th>
                 <th style={{ textAlign: 'right' }}>File rows</th>
                 <th style={{ textAlign: 'right' }}>Parsed</th>
