@@ -75,7 +75,7 @@ export function ProgressTable({ records, selectedId, onSelect, getMilestones, to
   };
 
   return (
-    <div className="overflow-x-auto rounded-md border border-[color:var(--color-line)]">
+    <div className="overflow-auto rounded-md border border-[color:var(--color-line)]" style={{ maxHeight: '60vh' }}>
       <table className="is-table" style={{ fontSize: 13 }}>
         <thead>
           <tr>
@@ -83,7 +83,7 @@ export function ProgressTable({ records, selectedId, onSelect, getMilestones, to
               <th
                 key={h.label}
                 className={`whitespace-nowrap ${h.align === 'right' ? 'text-right' : ''}`}
-                style={{ padding: '10px 10px' }}
+                style={{ padding: '10px 10px', position: 'sticky', top: 0, zIndex: 1 }}
               >
                 {h.key ? (
                   <button

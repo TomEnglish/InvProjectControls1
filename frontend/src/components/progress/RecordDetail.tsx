@@ -23,6 +23,12 @@ type Props = {
 
 export function RecordDetail({ record, projectId, onClose }: Props) {
   const qc = useQueryClient();
+  // The panel mounts below the records table — bring it into view on open
+  // and when the user clicks a different row, or it sits off-screen.
+  const rootRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    rootRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }, [record.id]);
   const { data: rocMilestones } = useWorkTypeMilestonesForRecord(
     record.work_type_id,
     record.discipline_id,
@@ -238,6 +244,7 @@ export function RecordDetail({ record, projectId, onClose }: Props) {
   };
 
   return (
+    <div ref={rootRef}>
     <Card className="border-l-4">
       <CardHeader
         title={`Record ${record.record_no != null ? `#${record.record_no} ` : ''}— ${record.dwg ?? '(no dwg)'} ${record.rev ? `Rev ${record.rev}` : ''}`}
@@ -473,6 +480,7 @@ export function RecordDetail({ record, projectId, onClose }: Props) {
 
       <AuditDetails record={record} />
     </Card>
+    </div>
   );
 }
 
