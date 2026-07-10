@@ -2,9 +2,16 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
-import { useWorkTypeMilestonesForRecord, type ProgressRow } from '@/lib/queries';
+import {
+  useWorkTypeMilestonesForRecord,
+  useProject,
+  useCurrentUser,
+  hasRole,
+  type ProgressRow,
+} from '@/lib/queries';
 import { Card, CardHeader } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
+import { Field, inputClass } from '@/components/ui/FormField';
 import { AttachmentsList } from '@/components/attachments/AttachmentsList';
 import { fmt } from '@/lib/format';
 
@@ -20,6 +27,74 @@ export function RecordDetail({ record, projectId, onClose }: Props) {
     record.work_type_id,
     record.discipline_id,
   );
+  const { data: project } = useProject(projectId);
+  const { data: me } = useCurrentUser();
+  // Record fields (budget, identity, actuals) are part of the baseline scope,
+  // so they're editable only before the baseline is locked — after lock, scope
+  // changes go through Change Orders. Milestone % below stays editable for
+  // execution progress regardless.
+  const canEditFields = project?.status === 'draft' && hasRole(me?.role, 'pc_reviewer');
+
+  // Editable field draft (strings for inputs; converted on save).
+  type FieldDraft = {
+    dwg: string;
+    rev: string;
+    code: string;
+    description: string;
+    budget_hrs: string;
+    budget_qty: string;
+    actual_hrs: string;
+    percent_complete: string;
+  };
+  const toFieldDraft = useCallback(
+    (r: ProgressRow): FieldDraft => ({
+      dwg: r.dwg ?? '',
+      rev: r.rev ?? '',
+      code: r.code ?? '',
+      description: r.description ?? '',
+      budget_hrs: String(r.budget_hrs ?? 0),
+      budget_qty: r.budget_qty == null ? '' : String(r.budget_qty),
+      actual_hrs: String(r.actual_hrs ?? 0),
+      percent_complete: String(r.percent_complete ?? 0),
+    }),
+    [],
+  );
+  const [fields, setFields] = useState<FieldDraft>(() => toFieldDraft(record));
+  useEffect(() => {
+    setFields(toFieldDraft(record));
+  }, [record, toFieldDraft]);
+  const setField = (k: keyof FieldDraft, v: string) => setFields((f) => ({ ...f, [k]: v }));
+
+  const saveFields = useMutation({
+    mutationFn: async () => {
+      const num = (s: string) => (s.trim() === '' ? null : Number(s));
+      const { error } = await supabase
+        .from('progress_records')
+        .update({
+          dwg: fields.dwg.trim() || null,
+          rev: fields.rev.trim() || null,
+          code: fields.code.trim() || null,
+          // description is NOT NULL — fall back to the drawing/tag or a marker.
+          description: fields.description.trim() || record.dwg || '(unnamed)',
+          budget_hrs: num(fields.budget_hrs) ?? 0,
+          budget_qty: num(fields.budget_qty),
+          actual_hrs: num(fields.actual_hrs) ?? 0,
+          percent_complete: num(fields.percent_complete) ?? 0,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', record.id);
+      if (error) throw error;
+    },
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: ['progress-rows', projectId] });
+      qc.invalidateQueries({ queryKey: ['project-metrics', projectId] });
+      qc.invalidateQueries({ queryKey: ['discipline-metrics', projectId] });
+      // budget_hrs edits resync the discipline budget (DB trigger) → refresh
+      // the Active Disciplines / budget views too.
+      qc.invalidateQueries({ queryKey: ['disciplines', projectId] });
+      qc.invalidateQueries({ queryKey: ['budget-rollup', projectId] });
+    },
+  });
 
   // Local draft of milestone values (0..100). Debounced to the server.
   const [draft, setDraft] = useState<Record<number, number>>(() => {
@@ -123,8 +198,11 @@ export function RecordDetail({ record, projectId, onClose }: Props) {
   // weights[i].weight sums to 1.0; draft values are 0..100.
   // earn_pct (0..1) = sum(value/100 * weight).
   const liveEarnPct = weights.reduce((sum, m) => sum + ((draft[m.seq] ?? 0) / 100) * m.weight, 0);
-  const liveEarnHrs = record.budget_hrs * liveEarnPct;
-  const liveEarnedQty = (record.budget_qty ?? 0) * liveEarnPct;
+  // Use the edited budget so earned hrs/qty track live as the user edits it.
+  const editBudgetHrs = Number(fields.budget_hrs) || 0;
+  const editBudgetQty = fields.budget_qty.trim() === '' ? 0 : Number(fields.budget_qty) || 0;
+  const liveEarnHrs = editBudgetHrs * liveEarnPct;
+  const liveEarnedQty = editBudgetQty * liveEarnPct;
 
   // Detect milestone rows that don't line up with the current work_type's
   // milestone set. These are leftover values from when the record (or its
@@ -182,24 +260,111 @@ export function RecordDetail({ record, projectId, onClose }: Props) {
           </>
         }
       />
-      <div className="mb-4 grid grid-cols-1 md:grid-cols-4 gap-4 text-sm">
-        <div>
-          <div className="is-stat-label">Account code</div>
-          <div className="font-mono font-semibold mt-1">{record.code ?? '—'}</div>
+      {canEditFields ? (
+        <div className="mb-4 rounded-md border border-[color:var(--color-line)] p-3">
+          <div className="flex items-center justify-between mb-3">
+            <h4 className="text-sm font-semibold">Edit record</h4>
+            <div className="flex items-center gap-2">
+              {saveFields.isError && (
+                <span className="text-xs text-[color:var(--color-variance-unfavourable)]">
+                  {(saveFields.error as Error).message}
+                </span>
+              )}
+              {saveFields.isSuccess && !saveFields.isPending && (
+                <span className="text-xs text-[color:var(--color-variance-favourable)]">Saved</span>
+              )}
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => saveFields.mutate()}
+                disabled={saveFields.isPending}
+              >
+                {saveFields.isPending ? 'Saving…' : 'Save fields'}
+              </Button>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <Field label="DWG">
+              <input className={inputClass} value={fields.dwg} onChange={(e) => setField('dwg', e.target.value)} />
+            </Field>
+            <Field label="Rev">
+              <input className={inputClass} value={fields.rev} onChange={(e) => setField('rev', e.target.value)} />
+            </Field>
+            <Field label="Account code">
+              <input className={inputClass} value={fields.code} onChange={(e) => setField('code', e.target.value)} />
+            </Field>
+            <Field label="Description">
+              <input
+                className={inputClass}
+                value={fields.description}
+                onChange={(e) => setField('description', e.target.value)}
+              />
+            </Field>
+            <Field label="Budget hrs (FLD_WHRS)">
+              <input
+                type="number"
+                min={0}
+                step="any"
+                className={inputClass}
+                value={fields.budget_hrs}
+                onChange={(e) => setField('budget_hrs', e.target.value)}
+              />
+            </Field>
+            <Field label="Budget qty (FLD_QTY)">
+              <input
+                type="number"
+                step="any"
+                className={inputClass}
+                value={fields.budget_qty}
+                onChange={(e) => setField('budget_qty', e.target.value)}
+              />
+            </Field>
+            <Field label="Actual hrs">
+              <input
+                type="number"
+                min={0}
+                step="any"
+                className={inputClass}
+                value={fields.actual_hrs}
+                onChange={(e) => setField('actual_hrs', e.target.value)}
+              />
+            </Field>
+            <Field label="% complete" hint="0–100">
+              <input
+                type="number"
+                min={0}
+                max={100}
+                step="any"
+                className={inputClass}
+                value={fields.percent_complete}
+                onChange={(e) => setField('percent_complete', e.target.value)}
+              />
+            </Field>
+          </div>
+          <div className="mt-2 text-xs text-[color:var(--color-text-muted)]">
+            Discipline <span className="font-medium">{record.discipline_name ?? '—'}</span> · IWP{' '}
+            <span className="font-mono">{record.iwp_name ?? '—'}</span> · Foreman{' '}
+            {record.foreman_name ?? '—'}
+          </div>
         </div>
-        <div>
-          <div className="is-stat-label">Discipline</div>
-          <div className="font-medium mt-1">{record.discipline_name ?? '—'}</div>
+      ) : (
+        <div className="mb-4 grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+          <ReadField label="Account code" value={record.code} mono />
+          <ReadField label="Discipline" value={record.discipline_name} />
+          <ReadField label="IWP" value={record.iwp_name} mono />
+          <ReadField label="Foreman" value={record.foreman_name} />
+          <ReadField label="Budget hrs" value={fmt.oneDp(record.budget_hrs)} mono />
+          <ReadField label="Budget qty" value={record.budget_qty == null ? '—' : fmt.oneDp(record.budget_qty)} mono />
+          <ReadField label="Actual hrs" value={fmt.oneDp(record.actual_hrs)} mono />
+          <ReadField label="% complete" value={`${fmt.oneDp(record.percent_complete)}%`} mono />
+          {project && project.status !== 'draft' && (
+            <div className="col-span-2 md:col-span-4 text-xs text-[color:var(--color-text-muted)]">
+              Baseline is locked — record scope is read-only; changes go through Change Orders.
+              Milestone progress below stays editable.
+            </div>
+          )}
         </div>
-        <div>
-          <div className="is-stat-label">IWP</div>
-          <div className="font-mono mt-1">{record.iwp_name ?? '—'}</div>
-        </div>
-        <div>
-          <div className="is-stat-label">Foreman</div>
-          <div className="mt-1">{record.foreman_name ?? '—'}</div>
-        </div>
-      </div>
+      )}
 
       <h4 className="text-sm font-semibold mb-3">
         Milestones
@@ -406,6 +571,24 @@ function AuditDetails({ record }: { record: ProgressRow }) {
           />
         </div>
       )}
+    </div>
+  );
+}
+
+/** Labelled read-only value used when record fields aren't editable. */
+function ReadField({
+  label,
+  value,
+  mono = false,
+}: {
+  label: string;
+  value: string | number | null | undefined;
+  mono?: boolean;
+}) {
+  return (
+    <div>
+      <div className="is-stat-label">{label}</div>
+      <div className={`mt-1 ${mono ? 'font-mono' : ''}`}>{value == null || value === '' ? '—' : value}</div>
     </div>
   );
 }
