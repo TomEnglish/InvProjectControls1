@@ -15,6 +15,7 @@ import { ProjectCoaPickerCard } from '@/components/projects/ProjectCoaPickerCard
 import { PerDisciplineBaselineCard } from '@/components/projects/PerDisciplineBaselineCard';
 import { CoReviewerDefaultsCard } from '@/components/projects/CoReviewerDefaultsCard';
 import { LockBaselineCard } from '@/components/projects/LockBaselineCard';
+import { UnlockBaselineCard } from '@/components/projects/UnlockBaselineCard';
 import { CloseProjectCard } from '@/components/projects/CloseProjectCard';
 import { SetupGuideCard } from '@/components/projects/SetupGuideCard';
 
@@ -254,6 +255,17 @@ export function ProjectSetupPage() {
           projectId={projectId}
           projectCode={project.project_code}
           projectName={project.name}
+        />
+      )}
+
+      {/* Same slot as the lock card: once locked (active), the action here
+          flips to Unlock. Closed projects reopen via CloseProjectCard first. */}
+      {canLock && project.status === 'active' && (
+        <UnlockBaselineCard
+          projectId={projectId}
+          projectCode={project.project_code}
+          projectName={project.name}
+          lockedAt={project.baseline_locked_at}
         />
       )}
 

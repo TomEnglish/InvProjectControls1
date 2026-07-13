@@ -41,7 +41,10 @@ begin;
 --   mutating: project_co_reviewer_set (admin/pm setter, audit-logged)
 --   change_orders gains assigned_pc_reviewer_id + assigned_pm_id columns
 --   co_pc_review signature changed to admit a re-assignment parameter
-select plan(65);
+-- Lifecycle additions (20260707/20260713):
+--   mutating: project_unlock_baseline (active → draft; completes the
+--             unlock → fix/reload → recheck → re-lock loop)
+select plan(68);
 
 -- ─────────────────────────────────────────────────────────────────────
 -- 1. Existence checks for every RPC the frontend depends on.
@@ -55,6 +58,7 @@ select has_function('projectcontrols', 'co_submit',           array['jsonb'],   
 select has_function('projectcontrols', 'co_pc_review',        array['uuid', 'text', 'text', 'uuid'], 'co_pc_review v3 exists');
 select has_function('projectcontrols', 'co_approve',          array['uuid', 'text', 'text'], 'co_approve exists');
 select has_function('projectcontrols', 'project_lock_baseline', array['uuid', 'timestamptz'], 'project_lock_baseline exists');
+select has_function('projectcontrols', 'project_unlock_baseline', array['uuid'], 'project_unlock_baseline exists');
 select has_function('projectcontrols', 'admin_set_user_role', array['uuid', 'projectcontrols.user_role', 'text'], 'admin_set_user_role exists');
 select has_function('projectcontrols', 'actuals_bulk_upsert', array['uuid', 'uuid', 'jsonb'], 'actuals_bulk_upsert exists');
 select has_function('projectcontrols', 'period_close',        array['uuid', 'uuid'], 'period_close exists');
@@ -96,6 +100,11 @@ select is(
   'project_lock_baseline is SECURITY DEFINER'
 );
 select is(
+  (select prosecdef from pg_proc where oid = 'projectcontrols.project_unlock_baseline(uuid)'::regprocedure),
+  true,
+  'project_unlock_baseline is SECURITY DEFINER'
+);
+select is(
   (select prosecdef from pg_proc where oid = 'projectcontrols.admin_set_user_role(uuid, projectcontrols.user_role, text)'::regprocedure),
   true,
   'admin_set_user_role is SECURITY DEFINER'
@@ -130,6 +139,10 @@ select ok(
 select ok(
   has_function_privilege('authenticated', 'projectcontrols.project_lock_baseline(uuid, timestamptz)', 'execute'),
   'authenticated can execute project_lock_baseline'
+);
+select ok(
+  has_function_privilege('authenticated', 'projectcontrols.project_unlock_baseline(uuid)', 'execute'),
+  'authenticated can execute project_unlock_baseline'
 );
 select ok(
   has_function_privilege('authenticated', 'projectcontrols.admin_set_user_role(uuid, projectcontrols.user_role, text)', 'execute'),
