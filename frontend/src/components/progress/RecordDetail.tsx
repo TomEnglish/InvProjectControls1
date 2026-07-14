@@ -109,7 +109,17 @@ export function RecordDetail({ record, projectId, onClose }: Props) {
     return map;
   });
 
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Debounced edits waiting to be written, tagged with the record they belong
+  // to — kept in a ref so unmount / record-switch / beforeunload can flush
+  // them without racing React's render cycle.
+  const pending = useRef<{ recordId: string; values: Record<number, number> } | null>(null);
+
+  // Re-seed from the server when the open record changes, or when a refetch
+  // brings real milestone values. Skip while a debounced save is queued so a
+  // stale empty milestones array can't wipe in-flight edits.
   useEffect(() => {
+    if (pending.current?.recordId === record.id) return;
     const map: Record<number, number> = {};
     for (const m of record.milestones) map[m.seq] = m.value;
     setDraft(map);
@@ -161,12 +171,6 @@ export function RecordDetail({ record, projectId, onClose }: Props) {
   // useMutation's `mutate` is referentially stable, so callbacks below can
   // depend on it without re-arming effects every render.
   const saveMutate = save.mutate;
-
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Debounced edits waiting to be written, tagged with the record they belong
-  // to — kept in a ref so unmount / record-switch / beforeunload can flush
-  // them without racing React's render cycle.
-  const pending = useRef<{ recordId: string; values: Record<number, number> } | null>(null);
 
   const commitPending = useCallback(() => {
     if (timer.current) {
@@ -237,7 +241,7 @@ export function RecordDetail({ record, projectId, onClose }: Props) {
   };
 
   const setMilestone = (seq: number, raw: number) => {
-    const clamped = Math.min(100, Math.max(0, raw));
+    const clamped = Number.isFinite(raw) ? Math.min(100, Math.max(0, raw)) : 0;
     const next = { ...draft, [seq]: clamped };
     setDraft(next);
     queueSave(next);
@@ -411,8 +415,11 @@ export function RecordDetail({ record, projectId, onClose }: Props) {
               >
                 {meta.label}
               </div>
-              <div className="text-[10px] text-[color:var(--color-text-subtle)] font-mono">
-                {fmt.pct(meta.weight)}
+              <div
+                className="text-[10px] text-[color:var(--color-text-subtle)] font-mono"
+                title="Rule-of-credit weight (fixed)"
+              >
+                wt {fmt.pct(meta.weight)}
               </div>
               <input
                 type="number"
@@ -423,7 +430,8 @@ export function RecordDetail({ record, projectId, onClose }: Props) {
                 onChange={(e) => setMilestone(seq, Number(e.target.value))}
                 className="is-form-input w-full mt-1.5 text-center font-mono"
                 style={{ minHeight: 30, padding: '4px 6px', fontSize: 12 }}
-                aria-label={`Milestone ${seq} percent`}
+                aria-label={`Milestone ${seq} percent complete`}
+                title="Percent complete (0–100)"
               />
             </div>
           );

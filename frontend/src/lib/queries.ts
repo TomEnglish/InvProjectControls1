@@ -476,6 +476,38 @@ export function useProgressPeriods(projectId: string | null) {
   });
 }
 
+/**
+ * Supabase/PostgREST caps each select at max_rows (1000). Large projects
+ * exceed that for progress_records, milestones, and the EV view — a bare
+ * `.select()` silently truncates, so milestone edits appear to vanish after
+ * refetch even though the upsert succeeded. Page through `.range()` until
+ * every row is in hand. Mirrors the helper in exportData.ts.
+ */
+const PAGE_SIZE = 1000;
+
+type PageResult<T> = {
+  data: T[] | null;
+  error: { message: string } | null;
+  count: number | null;
+};
+
+async function fetchAllPages<T>(
+  label: string,
+  run: (from: number, to: number) => PromiseLike<PageResult<T>>,
+): Promise<T[]> {
+  const all: T[] = [];
+  let total = Infinity;
+  for (let from = 0; all.length < total; from += PAGE_SIZE) {
+    const { data, error, count } = await run(from, from + PAGE_SIZE - 1);
+    if (error) throw new Error(`${label}: ${error.message}`);
+    if (count != null) total = count;
+    const page = data ?? [];
+    all.push(...page);
+    if (count == null && page.length < PAGE_SIZE) break;
+  }
+  return all;
+}
+
 export type ProgressRow = {
   id: string;
   project_id: string;
@@ -600,42 +632,7 @@ export function useProgressRows(projectId: string | null) {
         iwps: { name: string } | null;
       };
 
-      const [recordsRes, msRes, evRes] = await Promise.all([
-        supabase
-          .from('progress_records')
-          .select(
-            'id, project_id, discipline_id, iwp_id, record_no, source_row, source_type, dwg, rev, code, description, ' +
-              'tag_no, spool_fr, uom, ' +
-              'budget_qty, actual_qty, earned_qty, earned_qty_imported, budget_hrs, actual_hrs, earned_hrs, earn_whrs_imported, ' +
-              'whrs_unit, percent_complete, status, ' +
-              'foreman_user_id, foreman_name, gen_foreman_name, attr_type, attr_size, attr_spec, line_area, ' +
-              'sched_id, system, carea, var_area, test_pkg, cwp, spl_cnt, paint_spec, insu_spec, heat_trace_spec, service, ' +
-              'ta_bank, ta_bay, ta_level, pslip, work_type_id, discipline_label, ' +
-              'project_disciplines(discipline_code, display_name), iwps(name), ' +
-              'work_types(work_type_code, description)',
-          )
-          .eq('project_id', projectId!)
-          .order('dwg', { nullsFirst: false }),
-        supabase
-          .from('progress_record_milestones')
-          .select('progress_record_id, seq, value'),
-        supabase
-          .from('v_progress_record_ev')
-          .select('record_id, earn_pct, earn_whrs, current_budget_hrs, remaining_hrs')
-          .eq('project_id', projectId!),
-      ]);
-
-      if (recordsRes.error) throw recordsRes.error;
-      if (msRes.error) throw msRes.error;
-      if (evRes.error) throw evRes.error;
-
-      const msByRecord = new Map<string, { seq: number; value: number }[]>();
-      for (const row of (msRes.data ?? []) as { progress_record_id: string; seq: number; value: number | string }[]) {
-        const arr = msByRecord.get(row.progress_record_id) ?? [];
-        arr.push({ seq: row.seq, value: Number(row.value) });
-        msByRecord.set(row.progress_record_id, arr);
-      }
-
+      type MsRow = { progress_record_id: string; seq: number; value: number | string };
       type EvRow = {
         record_id: string;
         earn_pct: number | string;
@@ -643,11 +640,68 @@ export function useProgressRows(projectId: string | null) {
         current_budget_hrs: number | string;
         remaining_hrs: number | string;
       };
+
+      // Page past PostgREST max_rows (1000). Milestones are scoped through the
+      // parent record so we don't pull every tenant row and still truncate.
+      const [rawRows, msRows, evRows] = await Promise.all([
+        fetchAllPages<RawRow>('progress_records', (from, to) =>
+          supabase
+            .from('progress_records')
+            .select(
+              'id, project_id, discipline_id, iwp_id, record_no, source_row, source_type, dwg, rev, code, description, ' +
+                'tag_no, spool_fr, uom, ' +
+                'budget_qty, actual_qty, earned_qty, earned_qty_imported, budget_hrs, actual_hrs, earned_hrs, earn_whrs_imported, ' +
+                'whrs_unit, percent_complete, status, ' +
+                'foreman_user_id, foreman_name, gen_foreman_name, attr_type, attr_size, attr_spec, line_area, ' +
+                'sched_id, system, carea, var_area, test_pkg, cwp, spl_cnt, paint_spec, insu_spec, heat_trace_spec, service, ' +
+                'ta_bank, ta_bay, ta_level, pslip, work_type_id, discipline_label, ' +
+                'project_disciplines(discipline_code, display_name), iwps(name), ' +
+                'work_types(work_type_code, description)',
+              { count: 'exact' },
+            )
+            .eq('project_id', projectId!)
+            .order('dwg', { nullsFirst: false })
+            .range(from, to) as PromiseLike<PageResult<RawRow>>,
+        ),
+        fetchAllPages<MsRow>('progress_record_milestones', (from, to) =>
+          (
+            supabase
+              .from('progress_record_milestones')
+              .select('progress_record_id, seq, value, progress_records!inner(project_id)', {
+                count: 'exact',
+              }) as unknown as {
+              eq: (
+                col: string,
+                val: string,
+              ) => { range: (from: number, to: number) => PromiseLike<PageResult<MsRow>> };
+            }
+          )
+            .eq('progress_records.project_id', projectId!)
+            .range(from, to),
+        ),
+        fetchAllPages<EvRow>('v_progress_record_ev', (from, to) =>
+          supabase
+            .from('v_progress_record_ev')
+            .select('record_id, earn_pct, earn_whrs, current_budget_hrs, remaining_hrs', {
+              count: 'exact',
+            })
+            .eq('project_id', projectId!)
+            .range(from, to) as PromiseLike<PageResult<EvRow>>,
+        ),
+      ]);
+
+      const msByRecord = new Map<string, { seq: number; value: number }[]>();
+      for (const row of msRows) {
+        const arr = msByRecord.get(row.progress_record_id) ?? [];
+        arr.push({ seq: row.seq, value: Number(row.value) });
+        msByRecord.set(row.progress_record_id, arr);
+      }
+
       const evByRecord = new Map<
         string,
         { earn_pct: number; earn_whrs: number; current_budget_hrs: number; remaining_hrs: number }
       >();
-      for (const row of (evRes.data ?? []) as EvRow[]) {
+      for (const row of evRows) {
         evByRecord.set(row.record_id, {
           earn_pct: Number(row.earn_pct),
           earn_whrs: Number(row.earn_whrs),
@@ -656,7 +710,6 @@ export function useProgressRows(projectId: string | null) {
         });
       }
 
-      const rawRows = (recordsRes.data ?? []) as unknown as RawRow[];
       return rawRows.map((r) => {
         const ms = (msByRecord.get(r.id) ?? []).sort((a, b) => a.seq - b.seq);
         return {
