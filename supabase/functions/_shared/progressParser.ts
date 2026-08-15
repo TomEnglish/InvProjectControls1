@@ -575,6 +575,247 @@ function findAuditHeaderRow(sheet: XLSX.WorkSheet): number | null {
   return null;
 }
 
+export type ProgressValidationIssueCode =
+  | 'file_type'
+  | 'sheet_count'
+  | 'header_row'
+  | 'missing_header'
+  | 'header_order'
+  | 'duplicate_header'
+  | 'unexpected_header'
+  | 'no_data_rows'
+  | 'invalid_cell';
+
+export interface ProgressValidationIssue {
+  code: ProgressValidationIssueCode;
+  message: string;
+  row?: number;
+  column?: string;
+}
+
+export class ProgressFormatError extends Error {
+  readonly issues: ProgressValidationIssue[];
+
+  constructor(issues: ProgressValidationIssue[]) {
+    const detail = issues
+      .slice(0, 8)
+      .map((issue) => `- ${issue.message}`)
+      .join('\n');
+    super(`Upload blocked: the workbook does not match the Unified Audit format.\n${detail}`);
+    this.name = 'ProgressFormatError';
+    this.issues = issues;
+  }
+}
+
+export interface ParseProgressOptions {
+  /** Enforce the single-sheet Unified Audit Workbook contract. */
+  strict?: boolean;
+}
+
+// This is the canonical row-2 header from ProgressDocs/templates/Unified Audit Workbook.xlsx.
+// Keep the order strict: the template is intentionally a stable interchange format.
+const UNIFIED_AUDIT_HEADERS = [
+  'DISCIPLINE', 'REC_NO', 'DWG', 'REV_NO', 'SCHED_ID', 'CAREA', 'CODE', 'SYSTEM',
+  'LINE_AREA', 'CIRCUIT', 'TAG_NO', 'SPOOL_FR', 'DESC_', 'SZE', 'FLD_QTY', 'UOM',
+  'FLD_WHRS', 'SPEC', 'ERN_QTY', 'EARN_WHRS', 'M1_PCT', 'M1_DESC', 'M2_PCT', 'M2_DESC',
+  'M3_PCT', 'M3_DESC', 'M4_PCT', 'M4_DESC', 'M5_PCT', 'M5_DESC', 'M6_PCT', 'M6_DESC',
+  'M7_PCT', 'M7_DESC', 'M8_PCT', 'M8_DESC', 'TEST_PKG', 'CWP', 'IWP_PLAN_NO', 'SPL_CNT',
+  'IWP_FOREMAN', 'IWP_GEN_FOREMAN', 'WHRS_UNIT', 'M1', 'M2', 'M3', 'M4', 'M5', 'M6',
+  'M7', 'M8', 'VAR_AREA', 'VAR2', 'PAINT_SPEC', 'INSU_SPEC', 'HEAT_TRACE_SPEC', 'SERVICE',
+  'TA_BANK', 'TA_BAY', 'TA_LEVEL', 'PSLIP', 'WORK_TYPE', 'PCT_EARNED', 'ROC',
+] as const;
+
+const STRICT_NUMERIC_HEADERS = new Set([
+  'REC_NO', 'REV_NO', 'FLD_QTY', 'FLD_WHRS', 'ERN_QTY', 'EARN_WHRS', 'SPL_CNT', 'WHRS_UNIT',
+  'PCT_EARNED', 'ROC',
+  ...Array.from({ length: 8 }, (_, i) => `M${i + 1}`),
+  ...Array.from({ length: 8 }, (_, i) => `M${i + 1}_PCT`),
+]);
+
+const STRICT_TEXT_HEADERS = new Set([
+  'DISCIPLINE', 'DWG', 'TAG_NO', 'SPOOL_FR', 'DESC_', 'UOM', 'SPEC', 'M1_DESC', 'M2_DESC',
+  'M3_DESC', 'M4_DESC',
+  'M5_DESC', 'M6_DESC', 'M7_DESC', 'M8_DESC', 'TEST_PKG', 'CWP', 'IWP_PLAN_NO',
+  'IWP_FOREMAN', 'IWP_GEN_FOREMAN', 'VAR_AREA', 'VAR2', 'PAINT_SPEC', 'INSU_SPEC',
+  'HEAT_TRACE_SPEC', 'SERVICE', 'TA_BANK', 'TA_BAY', 'TA_LEVEL', 'PSLIP', 'WORK_TYPE',
+]);
+
+function hasCellValue(value: unknown): boolean {
+  return value !== null && value !== undefined && String(value).trim() !== '';
+}
+
+function strictNumber(value: unknown): number | undefined {
+  if (!hasCellValue(value) || typeof value === 'boolean' || value instanceof Date) return undefined;
+  if (typeof value === 'number') return Number.isFinite(value) ? value : undefined;
+  if (typeof value !== 'string') return undefined;
+  const cleaned = value.trim().replace(/,/g, '').replace(/%$/, '');
+  if (!cleaned) return undefined;
+  const number = Number(cleaned);
+  return Number.isFinite(number) ? number : undefined;
+}
+
+function strictDiscipline(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  return value.trim().toLowerCase().replace(/_/g, ' ');
+}
+
+function addInvalidCellIssue(
+  issues: ProgressValidationIssue[],
+  row: number,
+  column: string,
+  message: string,
+) {
+  issues.push({ code: 'invalid_cell', row, column, message: `Row ${row}: ${column} ${message}.` });
+}
+
+/**
+ * Validate the workbook contract before parsing or persisting any records.
+ * The old parser remains permissive by default for baseline/reference tools;
+ * upload entry points opt into this strict validator.
+ */
+export function validateProgressWorkbook(workbook: XLSX.WorkBook): ProgressValidationIssue[] {
+  const issues: ProgressValidationIssue[] = [];
+  if (workbook.SheetNames.length !== 1) {
+    issues.push({
+      code: 'sheet_count',
+      message: `Expected exactly one worksheet; found ${workbook.SheetNames.length}.`,
+    });
+    return issues;
+  }
+
+  const sheet = workbook.Sheets[workbook.SheetNames[0]!];
+  if (!sheet) {
+    issues.push({ code: 'sheet_count', message: 'The workbook does not contain a readable worksheet.' });
+    return issues;
+  }
+  const rawRows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' }) as unknown[][];
+  let headerRow = -1;
+  let disciplineHeaderRow = -1;
+  for (let i = 0; i < Math.min(rawRows.length, 10); i++) {
+    if (normalizeHeader(String(rawRows[i]?.[0] ?? '')) !== 'discipline') continue;
+    if (disciplineHeaderRow < 0) disciplineHeaderRow = i;
+    if (normalizeHeader(String(rawRows[i]?.[1] ?? '')) === 'rec_no') {
+      headerRow = i;
+      break;
+    }
+  }
+  if (headerRow < 0) {
+    if (disciplineHeaderRow >= 0) {
+      headerRow = disciplineHeaderRow;
+      issues.push({
+        code: 'header_row',
+        message: 'DISCIPLINE must be immediately followed by REC_NO in the first two columns.',
+      });
+    } else {
+      issues.push({
+        code: 'header_row',
+        message: 'Could not find the canonical header row with DISCIPLINE in column A and REC_NO in column B.',
+      });
+      return issues;
+    }
+  }
+
+  const headerValues = rawRows[headerRow] ?? [];
+  let lastHeader = headerValues.length - 1;
+  while (lastHeader >= 0 && !hasCellValue(headerValues[lastHeader])) lastHeader--;
+  const actualHeaders = headerValues.slice(0, lastHeader + 1).map((value) => String(value ?? '').trim());
+  const actualNormalized = actualHeaders.map(normalizeHeader);
+  const expectedNormalized = UNIFIED_AUDIT_HEADERS.map(normalizeHeader);
+  const expectedSet = new Set(expectedNormalized);
+  const actualSet = new Set(actualNormalized);
+
+  actualNormalized.forEach((header, index) => {
+    if (!header) return;
+    if (!expectedSet.has(header)) {
+      issues.push({
+        code: 'unexpected_header',
+        column: actualHeaders[index],
+        message: `Unexpected header "${actualHeaders[index]}" at column ${index + 1}.`,
+      });
+    }
+    if (actualNormalized.indexOf(header) !== index) {
+      issues.push({
+        code: 'duplicate_header',
+        column: actualHeaders[index],
+        message: `Header "${actualHeaders[index]}" appears more than once.`,
+      });
+    }
+  });
+  expectedNormalized.forEach((header, index) => {
+    const expectedLabel = UNIFIED_AUDIT_HEADERS[index];
+    if (!actualSet.has(header)) {
+      issues.push({
+        code: 'missing_header',
+        column: expectedLabel,
+        message: `Missing required header "${expectedLabel}".`,
+      });
+    } else if (actualNormalized[index] !== header) {
+      issues.push({
+        code: 'header_order',
+        column: expectedLabel,
+        message: `Expected "${expectedLabel}" in column ${index + 1}.`,
+      });
+    }
+  });
+
+  const indexOf = (header: string) => expectedNormalized.indexOf(normalizeHeader(header));
+  const dataRows = rawRows.slice(headerRow + 1);
+  let dataRowCount = 0;
+  for (let offset = 0; offset < dataRows.length; offset++) {
+    const row = dataRows[offset] ?? [];
+    if (!row.some(hasCellValue)) continue;
+    const excelRow = headerRow + offset + 2;
+    const disciplineValue = row[indexOf('DISCIPLINE')];
+    const recNoValue = row[indexOf('REC_NO')];
+    const discipline = strictDiscipline(disciplineValue);
+    if (discipline === 'all' && String(recNoValue ?? '').trim().toLowerCase() === 'all') continue;
+    dataRowCount++;
+
+    if (!discipline || !QMR_DISCIPLINE_CODE[discipline]) {
+      addInvalidCellIssue(issues, excelRow, 'DISCIPLINE', 'must be Civil, Electrical, Pipe, Steel, Mechanical, Instrumentation, Foundations, or Site Work');
+    }
+
+    const recNo = strictNumber(recNoValue);
+    if (recNo === undefined || !Number.isInteger(recNo) || recNo <= 0) {
+      addInvalidCellIssue(issues, excelRow, 'REC_NO', 'must be a positive whole number');
+    }
+
+    const identityHeaders = ['DWG', 'TAG_NO', 'SPOOL_FR', 'DESC_'];
+    if (!identityHeaders.some((header) => hasCellValue(row[indexOf(header)]))) {
+      addInvalidCellIssue(issues, excelRow, 'DWG/TAG_NO/SPOOL_FR/DESC_', 'must include at least one item identifier');
+    }
+
+    for (const header of STRICT_NUMERIC_HEADERS) {
+      const value = row[indexOf(header)];
+      if (!hasCellValue(value)) continue;
+      const number = strictNumber(value);
+      if (number === undefined) {
+        addInvalidCellIssue(issues, excelRow, header, 'must be numeric');
+        continue;
+      }
+      if (number < 0) addInvalidCellIssue(issues, excelRow, header, 'cannot be negative');
+      if (header.endsWith('_PCT') || header === 'PCT_EARNED') {
+        if (number > 100.001) addInvalidCellIssue(issues, excelRow, header, 'must be between 0 and 100 percent');
+      }
+      if (header === 'M1' || header === 'M2' || header === 'M3' || header === 'M4' ||
+          header === 'M5' || header === 'M6' || header === 'M7' || header === 'M8' || header === 'ROC') {
+        if (number > 1.001) addInvalidCellIssue(issues, excelRow, header, 'must be a 0 to 1 milestone weight');
+      }
+    }
+
+    for (const header of STRICT_TEXT_HEADERS) {
+      const value = row[indexOf(header)];
+      if (hasCellValue(value) && typeof value !== 'string') {
+        addInvalidCellIssue(issues, excelRow, header, 'must be text');
+      }
+    }
+  }
+  if (dataRowCount === 0) {
+    issues.push({ code: 'no_data_rows', message: 'The worksheet contains no data rows below the header.' });
+  }
+  return issues;
+}
+
 export function parseQmrWorkbook(workbook: XLSX.WorkBook): QmrParseResult {
   const auditSheets: QmrAuditSheet[] = [];
   for (const sheetName of workbook.SheetNames) {
@@ -628,7 +869,14 @@ export interface AutoParseResult extends ParseResult {
   qmrSheets?: { sheetName: string; disciplineLabel: string | null; rows: number }[];
 }
 
-export function parseProgressWorkbookAuto(workbook: XLSX.WorkBook): AutoParseResult {
+export function parseProgressWorkbookAuto(
+  workbook: XLSX.WorkBook,
+  options: ParseProgressOptions = {},
+): AutoParseResult {
+  if (options.strict) {
+    const issues = validateProgressWorkbook(workbook);
+    if (issues.length > 0) throw new ProgressFormatError(issues);
+  }
   const qmr = parseQmrWorkbook(workbook);
   if (qmr.auditSheets.length > 0) {
     return {
@@ -648,8 +896,17 @@ export function parseProgressWorkbookAuto(workbook: XLSX.WorkBook): AutoParseRes
   return parseProgressWorkbook(workbook);
 }
 
-export async function parseProgressFileAuto(file: File): Promise<AutoParseResult> {
+export async function parseProgressFileAuto(
+  file: File,
+  options: ParseProgressOptions = {},
+): Promise<AutoParseResult> {
   const ext = file.name.toLowerCase().split('.').pop();
+  if (options.strict && ext !== 'xlsx' && ext !== 'xls') {
+    throw new ProgressFormatError([{
+      code: 'file_type',
+      message: 'Only .xlsx or .xls Unified Audit workbooks can be uploaded.',
+    }]);
+  }
   let workbook: XLSX.WorkBook;
   if (ext === 'csv') {
     const text = await file.text();
@@ -658,7 +915,7 @@ export async function parseProgressFileAuto(file: File): Promise<AutoParseResult
     const buf = await file.arrayBuffer();
     workbook = XLSX.read(buf, { type: 'array' });
   }
-  return parseProgressWorkbookAuto(workbook);
+  return parseProgressWorkbookAuto(workbook, options);
 }
 
 export function recentSundayISO(): string {

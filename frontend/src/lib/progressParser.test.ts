@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import * as XLSX from 'xlsx';
-import { parseProgressWorkbook, parseProgressWorkbookAuto, parseQmrWorkbook } from './progressParser';
+import {
+  parseProgressWorkbook,
+  parseProgressWorkbookAuto,
+  parseQmrWorkbook,
+  validateProgressWorkbook,
+} from './progressParser';
 
 function workbookFromRows(rows: Record<string, unknown>[]): XLSX.WorkBook {
   const ws = XLSX.utils.json_to_sheet(rows);
@@ -470,5 +475,62 @@ describe('format auto-detection (flat + QMR through one entry point)', () => {
     ]);
     // Rows keep their per-tab discipline labels for the weekly import path.
     expect(result.rows.map((r) => r.discipline_label)).toEqual(['Civil', 'Civil', 'Pipe']);
+  });
+});
+
+describe('strict unified audit workbook validation', () => {
+  const headers = [
+    'DISCIPLINE', 'REC_NO', 'DWG', 'REV_NO', 'SCHED_ID', 'CAREA', 'CODE', 'SYSTEM',
+    'LINE_AREA', 'CIRCUIT', 'TAG_NO', 'SPOOL_FR', 'DESC_', 'SZE', 'FLD_QTY', 'UOM',
+    'FLD_WHRS', 'SPEC', 'ERN_QTY', 'EARN_WHRS', 'M1_PCT', 'M1_DESC', 'M2_PCT', 'M2_DESC',
+    'M3_PCT', 'M3_DESC', 'M4_PCT', 'M4_DESC', 'M5_PCT', 'M5_DESC', 'M6_PCT', 'M6_DESC',
+    'M7_PCT', 'M7_DESC', 'M8_PCT', 'M8_DESC', 'TEST_PKG', 'CWP', 'IWP_PLAN_NO', 'SPL_CNT',
+    'IWP_FOREMAN', 'IWP_GEN_FOREMAN', 'WHRS_UNIT', 'M1', 'M2', 'M3', 'M4', 'M5', 'M6',
+    'M7', 'M8', 'VAR_AREA', 'VAR2', 'PAINT_SPEC', 'INSU_SPEC', 'HEAT_TRACE_SPEC', 'SERVICE',
+    'TA_BANK', 'TA_BAY', 'TA_LEVEL', 'PSLIP', 'WORK_TYPE', 'PCT_EARNED', 'ROC',
+  ];
+
+  function strictWorkbook(dataRow: unknown[] = ['Site', 1, 'S-001', 0, '*C', '', '15300', '*S', '', '', '', '', 'ROCK', '', 100, 'CY', 10, '', 100, 10, 1, 'Complete']) {
+    const wb = XLSX.utils.book_new();
+    const metadata = headers.map(() => 'ALL');
+    XLSX.utils.book_append_sheet(
+      wb,
+      XLSX.utils.aoa_to_sheet([
+        ['Record Identity'],
+        headers,
+        metadata,
+        dataRow,
+      ]),
+      'Unified Audit',
+    );
+    return wb;
+  }
+
+  it('accepts the one-sheet unified audit schema and parses its data rows', () => {
+    const wb = strictWorkbook();
+
+    expect(validateProgressWorkbook(wb)).toEqual([]);
+    expect(parseProgressWorkbookAuto(wb, { strict: true }).rows).toHaveLength(1);
+  });
+
+  it('blocks legacy or multi-sheet workbooks before any rows can load', () => {
+    const wb = strictWorkbook();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['not an audit sheet']]), 'Other');
+
+    const issues = validateProgressWorkbook(wb);
+    expect(issues.some((issue) => issue.code === 'sheet_count')).toBe(true);
+  });
+
+  it('flags missing headers and nonsensical cell values', () => {
+    const wb = strictWorkbook();
+    const sheet = wb.Sheets['Unified Audit']!;
+    sheet.B2 = { t: 's', v: 'RECORD_NUMBER' };
+    sheet.O4 = { t: 's', v: 'not a quantity' };
+
+    const issues = validateProgressWorkbook(wb);
+    expect(
+      issues.some((issue) => issue.code === 'header_row' || issue.code === 'missing_header'),
+    ).toBe(true);
+    expect(issues.some((issue) => issue.code === 'invalid_cell')).toBe(true);
   });
 });

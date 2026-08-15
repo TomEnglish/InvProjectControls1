@@ -1,6 +1,6 @@
 import { useMemo, useState, type FormEvent } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Upload as UploadIcon, Download, RefreshCw } from 'lucide-react';
+import { Upload as UploadIcon, RefreshCw } from 'lucide-react';
 import { useProjectStore } from '@/stores/project';
 import { supabase } from '@/lib/supabase';
 import { useCurrentUser, useWorkTypes, useProjectClosed, hasRole } from '@/lib/queries';
@@ -12,9 +12,10 @@ import { FileDropzone } from '@/components/ui/FileDropzone';
 import { NoProjectSelected } from '@/components/ui/NoProjectSelected';
 import {
   parseProgressFileAuto,
+  ProgressFormatError,
   recentSundayISO,
   type ParsedRow,
-  type AutoParseResult,
+  type ProgressValidationIssue,
 } from '@/lib/progressParser';
 import { ClerkUploadPanel } from '@/components/upload-queue/ClerkUploadPanel';
 import { MySubmissionsCard } from '@/components/upload-queue/MySubmissionsCard';
@@ -57,9 +58,9 @@ function ReviewerDirectUploadPage() {
   const [parsed, setParsed] = useState<ParsedRow[]>([]);
   const [unmapped, setUnmapped] = useState<string[]>([]);
   const [parseErr, setParseErr] = useState<string | null>(null);
+  const [validationIssues, setValidationIssues] = useState<ProgressValidationIssue[]>([]);
   const [rocWeightsFromFile, setRocWeightsFromFile] = useState<number[]>([]);
   const [rocLabelsFromFile, setRocLabelsFromFile] = useState<string[]>([]);
-  const [qmrSheets, setQmrSheets] = useState<AutoParseResult['qmrSheets']>(undefined);
 
   const workTypes = useWorkTypes();
 
@@ -169,21 +170,21 @@ function ReviewerDirectUploadPage() {
     setParseErr(null);
     setParsed([]);
     setUnmapped([]);
+    setValidationIssues([]);
     setRocWeightsFromFile([]);
     setRocLabelsFromFile([]);
-    setQmrSheets(undefined);
     updateTemplate.reset();
     setFile(f);
     if (!f) return;
     try {
-      const result = await parseProgressFileAuto(f);
+      const result = await parseProgressFileAuto(f, { strict: true });
       setParsed(result.rows);
       setUnmapped(result.unmappedHeaders);
       setRocWeightsFromFile(result.inferredRocWeights);
       setRocLabelsFromFile(result.inferredRocLabels);
-      setQmrSheets(result.qmrSheets);
       if (!label) setLabel(f.name.replace(/\.[^.]+$/, ''));
     } catch (err) {
+      if (err instanceof ProgressFormatError) setValidationIssues(err.issues);
       setParseErr((err as Error).message);
     }
   };
@@ -226,25 +227,16 @@ function ReviewerDirectUploadPage() {
         <CardHeader
           eyebrow="Universal upload"
           title="Import progress data"
-          caption="CSV, flat Excel, or the unified QMR workbook (all audit tabs combined automatically). Column names are matched against a wide alias table — drawing, description, hours, percent, foreman, IWP, milestone columns, etc."
-          actions={
-            <a
-              href="/progress-template.csv"
-              download="progress-template.csv"
-              className="is-btn is-btn-outline is-btn-sm"
-            >
-              <Download size={14} /> Download example
-            </a>
-          }
+          caption="Upload the one-sheet Unified Audit Workbook. It must use the canonical headers, with DISCIPLINE in the first column; files with missing columns or invalid cell values are blocked."
         />
 
         <form onSubmit={onSubmit} className="grid gap-4">
           <Field label="File" required>
             <FileDropzone
-              accept=".csv,.xlsx,.xls"
+              accept=".xlsx,.xls"
               onFile={onFile}
               selected={file}
-              hint="CSV / XLSX / XLS — Sandra's audit templates parse unchanged"
+              hint="XLSX / XLS — one worksheet using the Unified Audit template"
             />
           </Field>
 
@@ -269,13 +261,19 @@ function ReviewerDirectUploadPage() {
 
           {parseErr && <div className="is-toast is-toast-danger">{parseErr}</div>}
 
-          {qmrSheets && (
-            <div className="is-toast is-toast-info text-xs">
-              Unified QMR workbook detected — combined {qmrSheets.length} audit tabs (
-              {qmrSheets
-                .map((s) => `${s.disciplineLabel ?? s.sheetName} ${s.rows}`)
-                .join(', ')}
-              ).
+          {validationIssues.length > 0 && (
+            <div className="is-toast is-toast-danger">
+              <strong>Upload blocked — fix these workbook issues:</strong>
+              <ul className="mt-1 text-xs list-disc ml-5">
+                {validationIssues.slice(0, 12).map((issue, index) => (
+                  <li key={`${issue.code}-${issue.row ?? 'file'}-${issue.column ?? index}`}>
+                    {issue.message}
+                  </li>
+                ))}
+              </ul>
+              {validationIssues.length > 12 && (
+                <div className="mt-1 text-xs">…and {validationIssues.length - 12} more issues.</div>
+              )}
             </div>
           )}
 

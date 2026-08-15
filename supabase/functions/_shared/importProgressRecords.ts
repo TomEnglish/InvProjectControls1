@@ -62,6 +62,91 @@ export type ImportedItem = {
   milestones?: ImportedMilestone[];
 };
 
+export type ImportedItemValidationIssue = {
+  code: 'invalid_item';
+  row: number;
+  field: string;
+  message: string;
+};
+
+const IMPORT_DISCIPLINES = new Set([
+  'site', 'site work', 'civil', 'foundations', 'electrical', 'pipe', 'steel',
+  'mechanical', 'instrumentation',
+]);
+
+const IMPORT_NUMERIC_FIELDS: ReadonlyArray<keyof ImportedItem> = [
+  'budget_hrs', 'actual_hrs', 'percent_complete', 'budget_qty', 'actual_qty',
+  'earned_qty_imported', 'earn_whrs_imported', 'spl_cnt', 'source_row',
+];
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value);
+}
+
+/** Server-side guard for both direct imports and queue approvals. */
+export function validateImportedItems(items: ImportedItem[]): ImportedItemValidationIssue[] {
+  const issues: ImportedItemValidationIssue[] = [];
+  items.forEach((item, index) => {
+    const row = index + 1;
+    const discipline = item.discipline_label?.trim().toLowerCase().replace(/_/g, ' ');
+    if (!discipline || !IMPORT_DISCIPLINES.has(discipline)) {
+      issues.push({
+        code: 'invalid_item',
+        row,
+        field: 'discipline_label',
+        message: `Row ${row}: DISCIPLINE is missing or invalid.`,
+      });
+    }
+    if (!isFiniteNumber(item.source_row) || !Number.isInteger(item.source_row) || item.source_row <= 0) {
+      issues.push({
+        code: 'invalid_item',
+        row,
+        field: 'source_row',
+        message: `Row ${row}: REC_NO must be a positive whole number.`,
+      });
+    }
+    if (![item.dwg, item.name, item.tag_no, item.spool_fr].some((value) => typeof value === 'string' && value.trim())) {
+      issues.push({
+        code: 'invalid_item',
+        row,
+        field: 'identity',
+        message: `Row ${row}: at least one drawing, description, tag, or spool identifier is required.`,
+      });
+    }
+    for (const field of IMPORT_NUMERIC_FIELDS) {
+      const value = item[field];
+      if (value === undefined || value === null) continue;
+      if (!isFiniteNumber(value)) {
+        issues.push({
+          code: 'invalid_item',
+          row,
+          field: String(field),
+          message: `Row ${row}: ${String(field)} must be numeric.`,
+        });
+      } else if (value < 0 || (field === 'percent_complete' && value > 100)) {
+        issues.push({
+          code: 'invalid_item',
+          row,
+          field: String(field),
+          message: `Row ${row}: ${String(field)} is outside the allowed range.`,
+        });
+      }
+    }
+    (item.milestones ?? []).forEach((milestone, milestoneIndex) => {
+      if (typeof milestone.name !== 'string' || !milestone.name.trim() ||
+          !isFiniteNumber(milestone.pct) || milestone.pct < 0 || milestone.pct > 100) {
+        issues.push({
+          code: 'invalid_item',
+          row,
+          field: `milestones[${milestoneIndex}]`,
+          message: `Row ${row}: milestone values must have a text name and a percent from 0 to 100.`,
+        });
+      }
+    });
+  });
+  return issues;
+}
+
 export type ImportParams = {
   // Edge functions create this client with the projectcontrols schema as the
   // default, so keep the schema generic instead of assuming Supabase's
@@ -84,6 +169,10 @@ export type ImportResult =
 export async function importProgressRecords(p: ImportParams): Promise<ImportResult> {
   if (!p.items.length) {
     return { ok: false, error: 'items required' };
+  }
+  const validationIssues = validateImportedItems(p.items);
+  if (validationIssues.length > 0) {
+    return { ok: false, error: validationIssues.map((issue) => issue.message).join(' ') };
   }
 
   const [iwpsRes, aliasesRes, workTypesRes, disciplinesRes, maxRowRes] = await Promise.all([

@@ -25,6 +25,7 @@ import { createClient } from 'jsr:@supabase/supabase-js@2';
 import type { SupabaseClient } from 'jsr:@supabase/supabase-js@2';
 import {
   parseProgressWorkbookAuto,
+  ProgressFormatError,
   type ParseResult,
   type ParsedRow,
 } from '../_shared/progressParser.ts';
@@ -251,25 +252,36 @@ Deno.serve(async (req) => {
     return json({ error: 'project not found in your tenant' }, 404);
   }
 
-  // Parse the file. xlsx handles csv/xlsx/xls uniformly via the workbook
-  // interface — read the buffer once and dispatch by extension hint.
+  // Parse the accepted Excel file once, then run the strict workbook validator
+  // before any Storage object or queue row is created.
   const ext = file.name.toLowerCase().split('.').pop() ?? '';
+  if (ext !== 'xlsx' && ext !== 'xls') {
+    return json({
+      error: 'Only .xlsx or .xls Unified Audit workbooks can be uploaded.',
+      validationIssues: [{
+        code: 'file_type',
+        message: 'Only .xlsx or .xls Unified Audit workbooks can be uploaded.',
+      }],
+    }, 415);
+  }
   let workbook: XLSX.WorkBook;
   try {
-    if (ext === 'csv') {
-      const text = await file.text();
-      workbook = XLSX.read(text, { type: 'string' });
-    } else {
-      const buf = await file.arrayBuffer();
-      workbook = XLSX.read(new Uint8Array(buf), { type: 'array' });
-    }
+    const buf = await file.arrayBuffer();
+    workbook = XLSX.read(new Uint8Array(buf), { type: 'array' });
   } catch (err) {
     return json({ error: `parse failed: ${(err as Error).message}` }, 400);
   }
 
-  // Auto-detects flat single-sheet templates AND unified QMR workbooks
-  // (multi-tab audit workbook flattened with per-row discipline labels).
-  const parsed = parseProgressWorkbookAuto(workbook);
+  let parsed: ReturnType<typeof parseProgressWorkbookAuto>;
+  try {
+    parsed = parseProgressWorkbookAuto(workbook, { strict: true });
+  } catch (err) {
+    const formatIssues = err instanceof ProgressFormatError ? err.issues : undefined;
+    return json({
+      error: (err as Error).message,
+      ...(formatIssues ? { validationIssues: formatIssues } : {}),
+    }, 422);
+  }
   if (parsed.rows.length === 0) {
     return json({ error: 'no rows parsed from file' }, 400);
   }

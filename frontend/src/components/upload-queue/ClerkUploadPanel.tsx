@@ -13,7 +13,7 @@ import {
   type HeuristicWarnings,
 } from '@/lib/queries';
 import { FrozenBanner } from '@/components/ui/FrozenBanner';
-import { recentSundayISO } from '@/lib/progressParser';
+import { recentSundayISO, type ProgressValidationIssue } from '@/lib/progressParser';
 
 /**
  * Clerk-side submission UI. Posts the file to queue-progress-upload which
@@ -35,6 +35,7 @@ export function ClerkUploadPanel() {
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [validationIssues, setValidationIssues] = useState<ProgressValidationIssue[]>([]);
   const [pendingWarnings, setPendingWarnings] = useState<HeuristicWarnings | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
@@ -92,6 +93,7 @@ export function ClerkUploadPanel() {
 
   const reset = () => {
     setError(null);
+    setValidationIssues([]);
     setPendingWarnings(null);
     setSuccess(null);
   };
@@ -103,6 +105,7 @@ export function ClerkUploadPanel() {
     }
     setSubmitting(true);
     setError(null);
+    setValidationIssues([]);
     setSuccess(null);
     // Drop any prior warnings — if the override re-POST itself fails
     // with a different error we don't want the stale warning panel
@@ -122,6 +125,7 @@ export function ClerkUploadPanel() {
         setPendingWarnings(resp.heuristicWarnings);
         return;
       }
+      setValidationIssues(resp.validationIssues ?? []);
       setError(resp.error);
       return;
     }
@@ -148,13 +152,13 @@ export function ClerkUploadPanel() {
       <form onSubmit={onSubmit} className="grid gap-4">
         <Field label="File" required>
           <FileDropzone
-            accept=".csv,.xlsx,.xls"
+            accept=".xlsx,.xls"
             onFile={(f) => {
               reset();
               setFile(f);
             }}
             selected={file}
-            hint="CSV / XLSX — auditor uses the same parse as the reviewer direct path"
+            hint="XLSX / XLS — one worksheet using the Unified Audit template"
           />
         </Field>
 
@@ -251,6 +255,21 @@ export function ClerkUploadPanel() {
         )}
 
         {error && <div className="is-toast is-toast-danger">{error}</div>}
+        {validationIssues.length > 0 && (
+          <div className="is-toast is-toast-danger">
+            <strong>Submission blocked — fix these workbook issues:</strong>
+            <ul className="mt-1 text-xs list-disc ml-5">
+              {validationIssues.slice(0, 12).map((issue, index) => (
+                <li key={`${issue.code}-${issue.row ?? 'file'}-${issue.column ?? index}`}>
+                  {issue.message}
+                </li>
+              ))}
+            </ul>
+            {validationIssues.length > 12 && (
+              <div className="mt-1 text-xs">…and {validationIssues.length - 12} more issues.</div>
+            )}
+          </div>
+        )}
         {success && <div className="is-toast is-toast-success">{success}</div>}
 
         <div className="flex justify-end">

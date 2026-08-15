@@ -16,6 +16,7 @@
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 import {
   importProgressRecords,
+  validateImportedItems,
   type ImportedItem,
 } from '../_shared/importProgressRecords.ts';
 
@@ -90,6 +91,13 @@ Deno.serve(async (req) => {
   }
   if (!body.projectId || !Array.isArray(body.items) || body.items.length === 0) {
     return json({ error: 'projectId and non-empty items[] required' }, 400);
+  }
+  const validationIssues = validateImportedItems(body.items);
+  if (validationIssues.length > 0) {
+    return json({
+      error: 'Upload blocked: parsed rows failed the Unified Audit data checks.',
+      validationIssues,
+    }, 422);
   }
 
   const admin = createClient(SUPABASE_URL, SERVICE_KEY, {

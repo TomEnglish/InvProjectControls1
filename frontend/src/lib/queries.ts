@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from './supabase';
 import { useAuth } from './auth';
 import type { ImportManifest, DisciplineIngestionStats } from './ingestionStats';
+import type { ProgressValidationIssue } from './progressParser';
 
 export type UserRole =
   | 'super_admin'
@@ -1681,6 +1682,7 @@ export async function submitToUploadQueue(opts: {
       error: string;
       heuristicWarnings?: HeuristicWarnings | null;
       parseSummary?: Record<string, unknown>;
+      validationIssues?: ProgressValidationIssue[];
     }
 > {
   const { data: sessionData } = await supabase.auth.getSession();
@@ -1705,6 +1707,7 @@ export async function submitToUploadQueue(opts: {
     error?: string;
     heuristicWarnings?: HeuristicWarnings | null;
     parseSummary?: Record<string, unknown>;
+    validationIssues?: ProgressValidationIssue[];
     queueId?: string;
     llmScanState?: LlmScanState;
   };
@@ -1715,6 +1718,7 @@ export async function submitToUploadQueue(opts: {
       error: body.error ?? `submit failed (${resp.status})`,
       heuristicWarnings: body.heuristicWarnings ?? null,
       parseSummary: body.parseSummary,
+      validationIssues: body.validationIssues,
     };
   }
   return {
