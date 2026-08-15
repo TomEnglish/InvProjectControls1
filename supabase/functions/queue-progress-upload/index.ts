@@ -22,6 +22,7 @@
 // (project, craft) permission via project_clerk_crafts.
 
 import { createClient } from 'jsr:@supabase/supabase-js@2';
+import type { SupabaseClient } from 'jsr:@supabase/supabase-js@2';
 import {
   parseProgressWorkbookAuto,
   type ParseResult,
@@ -71,7 +72,7 @@ function checkFilename(filename: string, declaredCraft: string): string | null {
 }
 
 async function buildHeuristicWarnings(
-  admin: ReturnType<typeof createClient>,
+  admin: SupabaseClient<any, any, any>,
   tenantId: string,
   declaredCraft: string,
   rows: ParsedRow[],

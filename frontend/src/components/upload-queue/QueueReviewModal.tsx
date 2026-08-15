@@ -73,6 +73,9 @@ export function QueueReviewModal({ row, onClose }: Props) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['upload-queue'] });
       qc.invalidateQueries({ queryKey: ['progress-rows'] });
+      qc.invalidateQueries({ queryKey: ['project-metrics', row?.project_id] });
+      qc.invalidateQueries({ queryKey: ['discipline-metrics', row?.project_id] });
+      qc.invalidateQueries({ queryKey: ['project-qty-rollup', row?.project_id] });
       qc.invalidateQueries({ queryKey: ['snapshots'] });
       onClose();
     },

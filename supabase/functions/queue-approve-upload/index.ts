@@ -99,7 +99,7 @@ Deno.serve(async (req) => {
   // Load queue row to verify tenant scope + grab the parsed-path / project.
   const { data: row, error: rowErr } = await admin
     .from('upload_queue')
-    .select('id, tenant_id, project_id, parsed_path, original_filename, week_ending, label, status')
+    .select('id, tenant_id, project_id, declared_craft, parsed_path, original_filename, week_ending, label, status')
     .eq('id', body.queueId)
     .maybeSingle();
   if (rowErr || !row) {
@@ -160,6 +160,7 @@ Deno.serve(async (req) => {
     tenantId: caller.tenant_id,
     projectId: row.project_id,
     callerId,
+    declaredDiscipline: row.declared_craft,
     weekEnding: row.week_ending ?? null,
     label: row.label ?? null,
     sourceFilename: row.original_filename ?? null,

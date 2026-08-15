@@ -14,6 +14,7 @@
 // Returns ImportResult — never throws. Caller maps to HTTP response.
 
 import type { SupabaseClient } from 'jsr:@supabase/supabase-js@2';
+import { resolveDisciplineId, type DisciplineReference } from './discipline.ts';
 import { normalizeUom } from './uom.ts';
 
 export type ImportedMilestone = { name: string; pct: number };
@@ -62,10 +63,14 @@ export type ImportedItem = {
 };
 
 export type ImportParams = {
-  admin: SupabaseClient;
+  // Edge functions create this client with the projectcontrols schema as the
+  // default, so keep the schema generic instead of assuming Supabase's
+  // public-schema default.
+  admin: SupabaseClient<any, any, any>;
   tenantId: string;
   projectId: string;
   callerId: string;
+  declaredDiscipline?: string | null;
   weekEnding?: string | null;
   label?: string | null;
   sourceFilename?: string | null;
@@ -81,10 +86,15 @@ export async function importProgressRecords(p: ImportParams): Promise<ImportResu
     return { ok: false, error: 'items required' };
   }
 
-  const [iwpsRes, aliasesRes, workTypesRes, maxRowRes] = await Promise.all([
+  const [iwpsRes, aliasesRes, workTypesRes, disciplinesRes, maxRowRes] = await Promise.all([
     p.admin.from('iwps').select('id, name').eq('project_id', p.projectId),
     p.admin.from('foreman_aliases').select('name, user_id').eq('tenant_id', p.tenantId),
     p.admin.from('work_types').select('id, work_type_code').eq('tenant_id', p.tenantId),
+    p.admin
+      .from('project_disciplines')
+      .select('id, discipline_code')
+      .eq('project_id', p.projectId)
+      .eq('is_active', true),
     p.admin
       .from('progress_records')
       .select('record_no')
@@ -115,6 +125,7 @@ export async function importProgressRecords(p: ImportParams): Promise<ImportResu
       w.id,
     ]),
   );
+  const disciplines = (disciplinesRes.data ?? []) as DisciplineReference[];
   let nextRecordNo = ((maxRowRes.data?.record_no as number | null) ?? 0) + 1;
 
   const insertRows = p.items.map((item) => {
@@ -131,6 +142,11 @@ export async function importProgressRecords(p: ImportParams): Promise<ImportResu
     return {
       tenant_id: p.tenantId,
       project_id: p.projectId,
+      discipline_id: resolveDisciplineId(
+        item.discipline_label,
+        p.declaredDiscipline,
+        disciplines,
+      ),
       iwp_id: item.iwp_name ? (iwpMap.get(item.iwp_name.toLowerCase()) ?? null) : null,
       record_no: nextRecordNo++,
       source_row: item.source_row ?? null,
