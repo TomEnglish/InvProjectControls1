@@ -14,6 +14,7 @@ import {
   ClipboardList,
   ClipboardCheck,
   Upload as UploadIcon,
+  Clock3,
   Inbox,
   Users,
   type LucideIcon,
@@ -59,7 +60,8 @@ const sections: NavSection[] = [
     items: [
       { to: '/budget', label: 'Budget', icon: Lock },
       { to: '/progress', label: 'Progress', icon: Play },
-      { to: '/progress/upload', label: 'Upload', icon: UploadIcon },
+      { to: '/progress/upload', label: 'Progress Audit', icon: UploadIcon },
+      { to: '/progress/actual-hours', label: 'Actual Hours', icon: Clock3, minRole: 'pc_reviewer' },
       // Auditor inbox — review queued clerk submissions. Hidden from
       // viewer/clerk; clerks see their own submissions inline on the
       // /progress/upload page instead.

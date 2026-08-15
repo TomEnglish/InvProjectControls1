@@ -225,9 +225,9 @@ function ReviewerDirectUploadPage() {
       <FrozenBanner projectId={projectId} />
       <Card>
         <CardHeader
-          eyebrow="Universal upload"
-          title="Import progress data"
-          caption="Upload the one-sheet Unified Audit Workbook. It must use the canonical headers, with DISCIPLINE in the first column; files with missing columns or invalid cell values are blocked."
+          eyebrow="Progress audit"
+          title="Upload Progress Audit"
+          caption="Upload a one-sheet Unified Audit Workbook to apply milestone completion and earned progress to matching locked-baseline records. Use the Actual Hours page for period actuals."
         />
 
         <form onSubmit={onSubmit} className="grid gap-4">

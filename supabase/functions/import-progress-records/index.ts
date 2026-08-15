@@ -106,11 +106,14 @@ Deno.serve(async (req) => {
 
   const { data: project } = await admin
     .from('projects')
-    .select('id, tenant_id')
+    .select('id, tenant_id, baseline_locked_at')
     .eq('id', body.projectId)
     .maybeSingle();
   if (!project || project.tenant_id !== caller.tenant_id) {
     return json({ error: 'project not in your tenant' }, 404);
+  }
+  if (!project.baseline_locked_at) {
+    return json({ error: 'project baseline must be locked before importing progress audits' }, 409);
   }
 
   const result = await importProgressRecords({

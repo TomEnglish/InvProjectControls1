@@ -641,10 +641,14 @@ export function useProgressRows(projectId: string | null) {
         current_budget_hrs: number | string;
         remaining_hrs: number | string;
       };
+      type ActualHoursRow = {
+        record_id: string;
+        actual_hrs: number | string;
+      };
 
       // Page past PostgREST max_rows (1000). Milestones are scoped through the
       // parent record so we don't pull every tenant row and still truncate.
-      const [rawRows, msRows, evRows] = await Promise.all([
+      const [rawRows, msRows, evRows, actualHoursRows] = await Promise.all([
         fetchAllPages<RawRow>('progress_records', (from, to) =>
           supabase
             .from('progress_records')
@@ -689,6 +693,13 @@ export function useProgressRows(projectId: string | null) {
             .eq('project_id', projectId!)
             .range(from, to) as PromiseLike<PageResult<EvRow>>,
         ),
+        fetchAllPages<ActualHoursRow>('v_progress_record_actual_hours', (from, to) =>
+          supabase
+            .from('v_progress_record_actual_hours')
+            .select('record_id, actual_hrs', { count: 'exact' })
+            .eq('project_id', projectId!)
+            .range(from, to) as PromiseLike<PageResult<ActualHoursRow>>,
+        ),
       ]);
 
       const msByRecord = new Map<string, { seq: number; value: number }[]>();
@@ -709,6 +720,11 @@ export function useProgressRows(projectId: string | null) {
           current_budget_hrs: Number(row.current_budget_hrs),
           remaining_hrs: Number(row.remaining_hrs),
         });
+      }
+
+      const actualHoursByRecord = new Map<string, number>();
+      for (const row of actualHoursRows) {
+        actualHoursByRecord.set(row.record_id, Number(row.actual_hrs));
       }
 
       return rawRows.map((r) => {
@@ -740,7 +756,10 @@ export function useProgressRows(projectId: string | null) {
           earned_qty: r.earned_qty != null ? Number(r.earned_qty) : null,
           budget_hrs: Number(r.budget_hrs),
           current_budget_hrs: evByRecord.get(r.id)?.current_budget_hrs ?? Number(r.budget_hrs),
-          actual_hrs: Number(r.actual_hrs),
+          // Actual-hours uploads live in the period ledger. Keep the legacy
+          // progress_records value as a fallback for records created before
+          // the ledger view existed, but let uploaded ledger totals win.
+          actual_hrs: actualHoursByRecord.get(r.id) ?? Number(r.actual_hrs),
           earned_hrs: evByRecord.get(r.id)?.earn_whrs ?? Number(r.earned_hrs),
           remaining_hrs: evByRecord.get(r.id)?.remaining_hrs ?? Math.max(0, Number(r.budget_hrs) - Number(r.earned_hrs)),
           percent_complete: Number(r.percent_complete),

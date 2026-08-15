@@ -31,6 +31,7 @@ const headers: { label: string; key: SortKey | null; align?: 'right' }[] = [
   { label: 'Budget Qty', key: null },
   { label: 'UOM', key: null },
   { label: 'Budget Hrs', key: 'budget_hrs', align: 'right' },
+  { label: 'Actual Hrs', key: null, align: 'right' },
   { label: 'M1', key: null },
   { label: 'M2', key: null },
   { label: 'M3', key: null },
@@ -142,6 +143,7 @@ export function ProgressTable({ records, selectedId, onSelect, getMilestones, to
                 </td>
                 <td style={{ padding: '8px 10px' }}>{r.uom}</td>
                 <td style={{ padding: '8px 10px' }} className="text-right font-mono">{r.budget_hrs.toFixed(1)}</td>
+                <td style={{ padding: '8px 10px' }} className="text-right font-mono">{r.actual_hrs.toFixed(1)}</td>
                 {Array.from({ length: 8 }, (_, i) => i + 1).map((seq) => {
                   const val = r.milestones.find((m) => m.seq === seq)?.value ?? 0;
                   const meta = milestoneDefs.find((m) => m.seq === seq);

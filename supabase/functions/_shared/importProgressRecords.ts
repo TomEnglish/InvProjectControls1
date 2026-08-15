@@ -16,7 +16,7 @@
 import type { SupabaseClient } from 'jsr:@supabase/supabase-js@2';
 import { resolveDisciplineId, type DisciplineReference } from './discipline.ts';
 import {
-  matchImportedRecords,
+  matchBaselineRecords,
   type ExistingProgressRecord,
   type ImportedRecordIdentity,
 } from './importMatch.ts';
@@ -180,26 +180,23 @@ export async function importProgressRecords(p: ImportParams): Promise<ImportResu
     return { ok: false, error: validationIssues.map((issue) => issue.message).join(' ') };
   }
 
-  const [iwpsRes, aliasesRes, workTypesRes, disciplinesRes, maxRowRes, existingRes] = await Promise.all([
+  const [iwpsRes, aliasesRes, workTypesRes, workTypeMilestonesRes, disciplinesRes, existingRes] = await Promise.all([
     p.admin.from('iwps').select('id, name').eq('project_id', p.projectId),
     p.admin.from('foreman_aliases').select('name, user_id').eq('tenant_id', p.tenantId),
     p.admin.from('work_types').select('id, work_type_code').eq('tenant_id', p.tenantId),
+    p.admin.from('work_type_milestones').select('work_type_id, seq, weight').eq('tenant_id', p.tenantId),
     p.admin
       .from('project_disciplines')
       .select('id, discipline_code')
       .eq('project_id', p.projectId)
       .eq('is_active', true),
+    // Audit rows may only apply to the locked baseline. Imported rows from
+    // previous weeks are intentionally excluded from matching.
     p.admin
       .from('progress_records')
-      .select('record_no')
+      .select('id, discipline_id, source_row, dwg, tag_no, spool_fr, attr_spec, source_type')
       .eq('project_id', p.projectId)
-      .order('record_no', { ascending: false })
-      .limit(1)
-      .maybeSingle(),
-    p.admin
-      .from('progress_records')
-      .select('id, discipline_id, source_row, dwg, tag_no, spool_fr, source_type')
-      .eq('project_id', p.projectId),
+      .eq('source_type', 'baseline'),
   ]);
   if (existingRes.error) {
     return { ok: false, error: 'existing records: ' + existingRes.error.message };
@@ -226,9 +223,18 @@ export async function importProgressRecords(p: ImportParams): Promise<ImportResu
       w.id,
     ]),
   );
+  const workTypeWeights = new Map<string, Map<number, number>>();
+  for (const milestone of (workTypeMilestonesRes.data ?? []) as {
+    work_type_id: string;
+    seq: number;
+    weight: number | string;
+  }[]) {
+    const weights = workTypeWeights.get(milestone.work_type_id) ?? new Map<number, number>();
+    weights.set(Number(milestone.seq), Number(milestone.weight));
+    workTypeWeights.set(milestone.work_type_id, weights);
+  }
   const disciplines = (disciplinesRes.data ?? []) as DisciplineReference[];
   const existingRecords = (existingRes.data ?? []) as ExistingProgressRecord[];
-  let nextRecordNo = ((maxRowRes.data?.record_no as number | null) ?? 0) + 1;
 
   const recordRows = p.items.map((item) => {
     // Description column accepts DESC_, falling back to TAG_NO or SPOOL_FR
@@ -240,6 +246,14 @@ export async function importProgressRecords(p: ImportParams): Promise<ImportResu
     // as "X" yet count as unmapped).
     const workTypeId = item.work_type?.trim()
       ? (workTypeMap.get(item.work_type.trim().toLowerCase()) ?? null)
+      : null;
+    const weights = workTypeId ? workTypeWeights.get(workTypeId) : null;
+    const milestonePercent = weights && (item.milestones?.length ?? 0) > 0
+      ? item.milestones!.reduce(
+          (total, milestone, index) =>
+            total + (milestone.pct / 100) * (weights.get(index + 1) ?? 0),
+          0,
+        ) * 100
       : null;
     const disciplineId = resolveDisciplineId(
       item.discipline_label,
@@ -254,6 +268,7 @@ export async function importProgressRecords(p: ImportParams): Promise<ImportResu
         dwg: item.dwg,
         tagNo: item.tag_no,
         spoolFr: item.spool_fr,
+        attrSpec: item.attr_spec,
       } satisfies ImportedRecordIdentity,
       record: {
         tenant_id: p.tenantId,
@@ -276,7 +291,11 @@ export async function importProgressRecords(p: ImportParams): Promise<ImportResu
         earn_whrs_imported: item.earn_whrs_imported ?? null,
         budget_hrs: item.budget_hrs ?? 0,
         actual_hrs: item.actual_hrs ?? 0,
-        percent_complete: item.percent_complete ?? 0,
+        // The milestone matrix is authoritative for earned progress. The
+        // generated earned_qty/earned_hrs columns and the EV view must agree
+        // with the same weighted result, even if PCT_EARNED in the source is
+        // stale or calculated using a different template.
+        percent_complete: milestonePercent ?? item.percent_complete ?? 0,
         status: 'active',
         foreman_name: item.foreman_name ?? null,
         foreman_user_id: item.foreman_name
@@ -311,28 +330,23 @@ export async function importProgressRecords(p: ImportParams): Promise<ImportResu
     };
   });
 
-  const matchedIds = matchImportedRecords(
+  const matchResult = matchBaselineRecords(
     recordRows.map((row) => row.identity),
     existingRecords,
   );
-  const recordIds = Array<string>(p.items.length).fill('');
-  const insertIndexes: number[] = [];
-  const insertRows = recordRows.flatMap((row, index) => {
-    const matchedId = matchedIds[index];
-    if (matchedId) {
-      recordIds[index] = matchedId;
-      return [];
-    }
-    insertIndexes.push(index);
-    return [{ ...row.record, record_no: nextRecordNo++ }];
-  });
+  if (matchResult.issues.length > 0) {
+    return {
+      ok: false,
+      error: matchResult.issues.map((issue) => issue.message).join(' '),
+    };
+  }
+  const recordIds = matchResult.ids as string[];
 
-  // Weekly uploads update the matching baseline/import row so the Progress
+  // Weekly uploads update the matching locked-baseline row so the Progress
   // page shows the new milestone values on the record the user already knows.
-  // New identifiers remain valid additions to project scope and are inserted.
+  // Audit uploads never create new project-scope records.
   for (let i = 0; i < recordRows.length; i++) {
-    const matchedId = matchedIds[i];
-    if (!matchedId) continue;
+    const matchedId = recordIds[i]!;
     const row = recordRows[i]!.record;
     const {
       tenant_id: _tenantId,
@@ -358,17 +372,6 @@ export async function importProgressRecords(p: ImportParams): Promise<ImportResu
       .eq('id', matchedId)
       .eq('project_id', p.projectId);
     if (updateErr) return { ok: false, error: 'records: ' + updateErr.message };
-  }
-
-  if (insertRows.length > 0) {
-    const { data: inserted, error: insertErr } = await p.admin
-      .from('progress_records')
-      .insert(insertRows)
-      .select('id');
-    if (insertErr) return { ok: false, error: 'records: ' + insertErr.message };
-    for (let i = 0; i < insertIndexes.length; i++) {
-      recordIds[insertIndexes[i]!] = inserted![i]!.id;
-    }
   }
 
   const milestoneRows: Record<string, unknown>[] = [];

@@ -19,6 +19,10 @@ function createFakeAdmin() {
     iwps: [],
     foreman_aliases: [],
     work_types: [{ id: "pipe-work-type", work_type_code: "PIPE-STD" }],
+    work_type_milestones: [
+      { work_type_id: "pipe-work-type", seq: 1, weight: 0.02 },
+      { work_type_id: "pipe-work-type", seq: 2, weight: 0.03 },
+    ],
     project_disciplines: [{ id: "pipe-discipline", discipline_code: "PIPE" }],
     max_record: { record_no: 10 },
     existing_records: [{
@@ -28,6 +32,7 @@ function createFakeAdmin() {
       dwg: "120-DR-590-SHT01",
       tag_no: null,
       spool_fr: "120-DR-590-SHT01-1",
+      attr_spec: "01HDPE",
       source_type: "baseline",
     }],
   };
@@ -116,6 +121,7 @@ Deno.test("weekly Pipe import updates the existing record and its milestones", a
     source_row: 1,
     dwg: "120-DR-590-SHT01",
     spool_fr: "120-DR-590-SHT01-1",
+    attr_spec: "01HDPE",
     unit: "LF",
     budget_qty: 136,
     budget_hrs: 584.8,
@@ -148,7 +154,7 @@ Deno.test("weekly Pipe import updates the existing record and its milestones", a
   );
   assert(recordUpdates.length === 1, "existing Pipe record should be updated");
   const update = recordUpdates[0]!.payload as Record<string, unknown>;
-  assert(update.percent_complete === 42, "record percent should be updated");
+  assert(update.percent_complete === 3.2, "record percent should follow weighted milestones");
   assert(
     !("budget_hrs" in update),
     "weekly progress must not replace baseline budget hours",

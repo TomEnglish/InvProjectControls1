@@ -38,6 +38,9 @@ const DisciplineProgressPage = lazy(() =>
   import('./pages/DisciplineProgress').then((m) => ({ default: m.DisciplineProgressPage })),
 );
 const UploadPage = lazy(() => import('./pages/Upload').then((m) => ({ default: m.UploadPage })));
+const ActualHoursUploadPage = lazy(() =>
+  import('./pages/ActualHoursUpload').then((m) => ({ default: m.ActualHoursUploadPage })),
+);
 const UploadQueuePage = lazy(() =>
   import('./pages/UploadQueue').then((m) => ({ default: m.UploadQueuePage })),
 );
@@ -136,6 +139,15 @@ export const router = createBrowserRouter([
           </ProjectScopeGuard>
         ),
         handle: { title: 'Upload Progress Data' },
+      },
+      {
+        path: '/progress/actual-hours',
+        element: (
+          <ProjectScopeGuard>
+            <ActualHoursUploadPage />
+          </ProjectScopeGuard>
+        ),
+        handle: { title: 'Upload Actual Hours' },
       },
       {
         // Tenant-scoped (no ProjectScopeGuard) — auditors review every

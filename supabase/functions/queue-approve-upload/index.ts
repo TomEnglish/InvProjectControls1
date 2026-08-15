@@ -127,6 +127,17 @@ Deno.serve(async (req) => {
     return json({ ok: true, status: 'rejected' });
   }
 
+  const { data: project, error: projectErr } = await admin
+    .from('projects')
+    .select('id, baseline_locked_at')
+    .eq('id', row.project_id)
+    .eq('tenant_id', caller.tenant_id)
+    .maybeSingle();
+  if (projectErr) return json({ error: 'project lookup failed' }, 500);
+  if (!project?.baseline_locked_at) {
+    return json({ error: 'project baseline must be locked before approving progress audits' }, 409);
+  }
+
   // Approve path: download parsed.json, run shared import, then flip
   // status with the resulting snapshot id.
   //
