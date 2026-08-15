@@ -1,6 +1,6 @@
 // _shared/importProgressRecords.ts
 //
-// The "write parsed rows into progress_records + a weekly snapshot" body,
+// The "apply parsed rows to progress_records + a weekly snapshot" body,
 // extracted from import-progress-records/index.ts so both that fn (direct
 // import path, pc_reviewer+ caller) and queue-approve-upload (auditor commits
 // a clerk-submitted file) call the same logic with the same shape.
@@ -15,6 +15,11 @@
 
 import type { SupabaseClient } from 'jsr:@supabase/supabase-js@2';
 import { resolveDisciplineId, type DisciplineReference } from './discipline.ts';
+import {
+  matchImportedRecords,
+  type ExistingProgressRecord,
+  type ImportedRecordIdentity,
+} from './importMatch.ts';
 import { normalizeUom } from './uom.ts';
 
 export type ImportedMilestone = { name: string; pct: number };
@@ -175,7 +180,7 @@ export async function importProgressRecords(p: ImportParams): Promise<ImportResu
     return { ok: false, error: validationIssues.map((issue) => issue.message).join(' ') };
   }
 
-  const [iwpsRes, aliasesRes, workTypesRes, disciplinesRes, maxRowRes] = await Promise.all([
+  const [iwpsRes, aliasesRes, workTypesRes, disciplinesRes, maxRowRes, existingRes] = await Promise.all([
     p.admin.from('iwps').select('id, name').eq('project_id', p.projectId),
     p.admin.from('foreman_aliases').select('name, user_id').eq('tenant_id', p.tenantId),
     p.admin.from('work_types').select('id, work_type_code').eq('tenant_id', p.tenantId),
@@ -191,7 +196,14 @@ export async function importProgressRecords(p: ImportParams): Promise<ImportResu
       .order('record_no', { ascending: false })
       .limit(1)
       .maybeSingle(),
+    p.admin
+      .from('progress_records')
+      .select('id, discipline_id, source_row, dwg, tag_no, spool_fr, source_type')
+      .eq('project_id', p.projectId),
   ]);
+  if (existingRes.error) {
+    return { ok: false, error: 'existing records: ' + existingRes.error.message };
+  }
 
   const iwpMap = new Map(
     ((iwpsRes.data ?? []) as { id: string; name: string }[]).map((i) => [
@@ -215,9 +227,10 @@ export async function importProgressRecords(p: ImportParams): Promise<ImportResu
     ]),
   );
   const disciplines = (disciplinesRes.data ?? []) as DisciplineReference[];
+  const existingRecords = (existingRes.data ?? []) as ExistingProgressRecord[];
   let nextRecordNo = ((maxRowRes.data?.record_no as number | null) ?? 0) + 1;
 
-  const insertRows = p.items.map((item) => {
+  const recordRows = p.items.map((item) => {
     // Description column accepts DESC_, falling back to TAG_NO or SPOOL_FR
     // if DESC_ is missing — the unified workbook treats these as discipline-
     // specific name variants, but downstream UI needs one resolved label.
@@ -228,76 +241,140 @@ export async function importProgressRecords(p: ImportParams): Promise<ImportResu
     const workTypeId = item.work_type?.trim()
       ? (workTypeMap.get(item.work_type.trim().toLowerCase()) ?? null)
       : null;
+    const disciplineId = resolveDisciplineId(
+      item.discipline_label,
+      p.declaredDiscipline,
+      disciplines,
+    );
     return {
-      tenant_id: p.tenantId,
-      project_id: p.projectId,
-      discipline_id: resolveDisciplineId(
-        item.discipline_label,
-        p.declaredDiscipline,
-        disciplines,
-      ),
-      iwp_id: item.iwp_name ? (iwpMap.get(item.iwp_name.toLowerCase()) ?? null) : null,
-      record_no: nextRecordNo++,
-      source_row: item.source_row ?? null,
-      source_type: 'import',
-      source_filename: p.sourceFilename ?? null,
-      dwg: item.dwg ?? null,
-      rev: item.rev ?? null,
-      code: item.code ?? null,
-      description,
-      tag_no: item.tag_no ?? null,
-      spool_fr: item.spool_fr ?? null,
-      uom: normalizeUom(item.unit),
-      budget_qty: item.budget_qty ?? null,
-      actual_qty: item.actual_qty ?? null,
-      earned_qty_imported: item.earned_qty_imported ?? null,
-      earn_whrs_imported: item.earn_whrs_imported ?? null,
-      budget_hrs: item.budget_hrs ?? 0,
-      actual_hrs: item.actual_hrs ?? 0,
-      percent_complete: item.percent_complete ?? 0,
-      status: 'active',
-      foreman_name: item.foreman_name ?? null,
-      foreman_user_id: item.foreman_name
-        ? (aliasMap.get(item.foreman_name.toLowerCase()) ?? null)
-        : null,
-      gen_foreman_name: item.gen_foreman_name ?? null,
-      attr_type: item.attr_type ?? null,
-      attr_size: item.attr_size ?? null,
-      attr_spec: item.attr_spec ?? null,
-      line_area: item.line_area ?? null,
-      system: item.system ?? null,
-      carea: item.carea ?? null,
-      var_area: item.var_area ?? null,
-      sched_id: item.sched_id ?? null,
-      test_pkg: item.test_pkg ?? null,
-      cwp: item.cwp ?? null,
-      spl_cnt: item.spl_cnt ?? null,
-      paint_spec: item.paint_spec ?? null,
-      insu_spec: item.insu_spec ?? null,
-      heat_trace_spec: item.heat_trace_spec ?? null,
-      service: item.service ?? null,
-      ta_bank: item.ta_bank ?? null,
-      ta_bay: item.ta_bay ?? null,
-      ta_level: item.ta_level ?? null,
-      pslip: item.pslip ?? null,
-      work_type_id: workTypeId,
-      // Raw WORK_TYPE code as it appeared in the file, so the Data Check can
-      // tell a blank WORK_TYPE from one that simply isn't in the library.
-      work_type_raw: item.work_type?.trim() || null,
-      discipline_label: item.discipline_label ?? null,
+      item,
+      identity: {
+        disciplineId,
+        sourceRow: item.source_row ?? null,
+        dwg: item.dwg,
+        tagNo: item.tag_no,
+        spoolFr: item.spool_fr,
+      } satisfies ImportedRecordIdentity,
+      record: {
+        tenant_id: p.tenantId,
+        project_id: p.projectId,
+        discipline_id: disciplineId,
+        iwp_id: item.iwp_name ? (iwpMap.get(item.iwp_name.toLowerCase()) ?? null) : null,
+        source_row: item.source_row ?? null,
+        source_type: 'import',
+        source_filename: p.sourceFilename ?? null,
+        dwg: item.dwg ?? null,
+        rev: item.rev ?? null,
+        code: item.code ?? null,
+        description,
+        tag_no: item.tag_no ?? null,
+        spool_fr: item.spool_fr ?? null,
+        uom: normalizeUom(item.unit),
+        budget_qty: item.budget_qty ?? null,
+        actual_qty: item.actual_qty ?? null,
+        earned_qty_imported: item.earned_qty_imported ?? null,
+        earn_whrs_imported: item.earn_whrs_imported ?? null,
+        budget_hrs: item.budget_hrs ?? 0,
+        actual_hrs: item.actual_hrs ?? 0,
+        percent_complete: item.percent_complete ?? 0,
+        status: 'active',
+        foreman_name: item.foreman_name ?? null,
+        foreman_user_id: item.foreman_name
+          ? (aliasMap.get(item.foreman_name.toLowerCase()) ?? null)
+          : null,
+        gen_foreman_name: item.gen_foreman_name ?? null,
+        attr_type: item.attr_type ?? null,
+        attr_size: item.attr_size ?? null,
+        attr_spec: item.attr_spec ?? null,
+        line_area: item.line_area ?? null,
+        system: item.system ?? null,
+        carea: item.carea ?? null,
+        var_area: item.var_area ?? null,
+        sched_id: item.sched_id ?? null,
+        test_pkg: item.test_pkg ?? null,
+        cwp: item.cwp ?? null,
+        spl_cnt: item.spl_cnt ?? null,
+        paint_spec: item.paint_spec ?? null,
+        insu_spec: item.insu_spec ?? null,
+        heat_trace_spec: item.heat_trace_spec ?? null,
+        service: item.service ?? null,
+        ta_bank: item.ta_bank ?? null,
+        ta_bay: item.ta_bay ?? null,
+        ta_level: item.ta_level ?? null,
+        pslip: item.pslip ?? null,
+        work_type_id: workTypeId,
+        // Raw WORK_TYPE code as it appeared in the file, so the Data Check can
+        // tell a blank WORK_TYPE from one that simply isn't in the library.
+        work_type_raw: item.work_type?.trim() || null,
+        discipline_label: item.discipline_label ?? null,
+      },
     };
   });
 
-  const { data: inserted, error: insertErr } = await p.admin
-    .from('progress_records')
-    .insert(insertRows)
-    .select('id');
-  if (insertErr) return { ok: false, error: 'records: ' + insertErr.message };
+  const matchedIds = matchImportedRecords(
+    recordRows.map((row) => row.identity),
+    existingRecords,
+  );
+  const recordIds = Array<string>(p.items.length).fill('');
+  const insertIndexes: number[] = [];
+  const insertRows = recordRows.flatMap((row, index) => {
+    const matchedId = matchedIds[index];
+    if (matchedId) {
+      recordIds[index] = matchedId;
+      return [];
+    }
+    insertIndexes.push(index);
+    return [{ ...row.record, record_no: nextRecordNo++ }];
+  });
+
+  // Weekly uploads update the matching baseline/import row so the Progress
+  // page shows the new milestone values on the record the user already knows.
+  // New identifiers remain valid additions to project scope and are inserted.
+  for (let i = 0; i < recordRows.length; i++) {
+    const matchedId = matchedIds[i];
+    if (!matchedId) continue;
+    const row = recordRows[i]!.record;
+    const {
+      tenant_id: _tenantId,
+      project_id: _projectId,
+      iwp_id: _iwpId,
+      budget_qty: _budgetQty,
+      budget_hrs: _budgetHrs,
+      source_type: _sourceType,
+      status: _status,
+      work_type_id: _workTypeId,
+      work_type_raw: _workTypeRaw,
+      ...progressUpdate
+    } = row;
+    const { error: updateErr } = await p.admin
+      .from('progress_records')
+      .update({
+        ...progressUpdate,
+        ...(row.work_type_id
+          ? { work_type_id: row.work_type_id, work_type_raw: row.work_type_raw }
+          : {}),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', matchedId)
+      .eq('project_id', p.projectId);
+    if (updateErr) return { ok: false, error: 'records: ' + updateErr.message };
+  }
+
+  if (insertRows.length > 0) {
+    const { data: inserted, error: insertErr } = await p.admin
+      .from('progress_records')
+      .insert(insertRows)
+      .select('id');
+    if (insertErr) return { ok: false, error: 'records: ' + insertErr.message };
+    for (let i = 0; i < insertIndexes.length; i++) {
+      recordIds[insertIndexes[i]!] = inserted![i]!.id;
+    }
+  }
 
   const milestoneRows: Record<string, unknown>[] = [];
   for (let i = 0; i < p.items.length; i++) {
     const item = p.items[i]!;
-    const recordId = inserted![i]!.id;
+    const recordId = recordIds[i]!;
     (item.milestones ?? []).forEach((m, idx) => {
       milestoneRows.push({
         tenant_id: p.tenantId,
@@ -315,9 +392,10 @@ export async function importProgressRecords(p: ImportParams): Promise<ImportResu
     if (msErr) return { ok: false, error: 'milestones: ' + msErr.message };
   }
 
-  const totalBudgetHrs = insertRows.reduce((acc, r) => acc + (r.budget_hrs ?? 0), 0);
-  const totalActualHrs = insertRows.reduce((acc, r) => acc + (r.actual_hrs ?? 0), 0);
-  const totalEarnedHrs = insertRows.reduce(
+  const importedRecords = recordRows.map((row) => row.record);
+  const totalBudgetHrs = importedRecords.reduce((acc, r) => acc + (r.budget_hrs ?? 0), 0);
+  const totalActualHrs = importedRecords.reduce((acc, r) => acc + (r.actual_hrs ?? 0), 0);
+  const totalEarnedHrs = importedRecords.reduce(
     (acc, r) => acc + (r.budget_hrs ?? 0) * ((r.percent_complete ?? 0) / 100),
     0,
   );
@@ -342,12 +420,12 @@ export async function importProgressRecords(p: ImportParams): Promise<ImportResu
     .single();
   if (snapErr) return { ok: false, error: 'snapshot: ' + snapErr.message };
 
-  const snapItems = inserted!.map((rec, i) => {
-    const r = insertRows[i]!;
+  const snapItems = importedRecords.map((r, i) => {
+    const recordId = recordIds[i]!;
     const pctFrac = (r.percent_complete ?? 0) / 100;
     return {
       snapshot_id: snapshot.id,
-      progress_record_id: rec.id,
+      progress_record_id: recordId,
       tenant_id: p.tenantId,
       project_id: p.projectId,
       percent_complete: r.percent_complete ?? 0,
@@ -364,5 +442,5 @@ export async function importProgressRecords(p: ImportParams): Promise<ImportResu
     if (snapItemErr) return { ok: false, error: 'snapshot_items: ' + snapItemErr.message };
   }
 
-  return { ok: true, inserted: insertRows.length, snapshotId: snapshot.id };
+  return { ok: true, inserted: importedRecords.length, snapshotId: snapshot.id };
 }

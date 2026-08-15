@@ -2,16 +2,15 @@
 //
 // Direct-import path used by pc_reviewer+ callers on the /progress/upload page.
 // Accepts the parsed-row payload produced by frontend/src/lib/progressParser.ts
-// and writes progress_records + progress_record_milestones + a weekly
+// and applies it to matching progress_records, milestones, and a weekly
 // progress_snapshots capture via the shared importProgressRecords body.
 //
 // Body shape:
 //   { projectId, weekEnding?, label?, sourceFilename?, items: ParsedRow[] }
 //
 // Whole-batch atomicity: if any DB write fails, this function returns the
-// error and the caller is expected to inspect the partial state. Each
-// upload mints fresh records with sequential record_no — Phase 4 doesn't
-// dedupe on re-upload.
+// error and the caller is expected to inspect the partial state. Matching
+// records are updated; new identifiers are inserted with sequential record_no.
 
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 import {

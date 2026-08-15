@@ -366,7 +366,7 @@ function ReviewerDirectUploadPage() {
           )}
           {submit.isSuccess && submit.data && (
             <div className="is-toast is-toast-success">
-              Inserted {submit.data.inserted} records, created snapshot {submit.data.snapshot_id}.
+              Applied {submit.data.inserted} records, created snapshot {submit.data.snapshot_id}.
             </div>
           )}
 
