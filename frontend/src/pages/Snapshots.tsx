@@ -39,6 +39,27 @@ function HowToCard() {
             Once both are set, a comparison card appears showing per-record drift in earned percent and earned hours between the two captures.
             Drift magnitudes are always positive; week-ending dates label each side. Reviewer roles also have cleanup actions: Revert restores saved before-state, while Delete history removes comparison history only.
           </p>
+
+          <div className="mt-4 border-t border-[color:var(--color-border)] pt-4">
+            <h3 className="font-semibold mb-2">Snapshot cleanup</h3>
+            <div className="grid gap-3 md:grid-cols-2">
+              <div className="rounded-md border border-[color:var(--color-border)] bg-[color:var(--color-raised)] p-3">
+                <p className="font-semibold text-sm">Revert audit</p>
+                <p className="mt-1 text-sm text-[color:var(--color-text-muted)] leading-relaxed">
+                  Removes the audit snapshot and restores earned percent, earned quantity/hours, and milestones to the state immediately before that upload. It never changes the actual-hours ledger and must be done newest audit first.
+                </p>
+              </div>
+              <div className="rounded-md border border-[color:var(--color-border)] bg-[color:var(--color-raised)] p-3">
+                <p className="font-semibold text-sm">Delete history</p>
+                <p className="mt-1 text-sm text-[color:var(--color-text-muted)] leading-relaxed">
+                  Removes the snapshot and comparison history only. It does not roll back current progress or actual hours, so it is the safe option for legacy uploads or history you no longer want to compare.
+                </p>
+              </div>
+            </div>
+            <p className="mt-3 text-xs text-[color:var(--color-text-muted)]">
+              Only new weekly uploads with saved before-state show Revert. The older snapshots currently in this project are legacy, so they show Delete history only. The first-audit baseline cannot be cleaned up here.
+            </p>
+          </div>
         </div>
       </div>
     </Card>
@@ -223,8 +244,16 @@ export function SnapshotsPage() {
                               aria-label={`Revert ${snapshotPickerLabel(s)}`}
                               onClick={() => setAction({ kind: 'revert', snapshot: s })}
                             >
-                              <RotateCcw size={13} /> Revert
+                              <RotateCcw size={13} /> Revert audit
                             </Button>
+                          )}
+                          {!s.reversible && (
+                            <span
+                              className="text-xs text-[color:var(--color-text-muted)]"
+                              title="This legacy snapshot has no saved before-state"
+                            >
+                              Legacy · no revert
+                            </span>
                           )}
                           <Button
                             variant="outline"
@@ -233,7 +262,7 @@ export function SnapshotsPage() {
                             aria-label={`Delete history for ${snapshotPickerLabel(s)}`}
                             onClick={() => setAction({ kind: 'delete', snapshot: s })}
                           >
-                            <Trash2 size={13} /> Delete
+                            <Trash2 size={13} /> Delete history
                           </Button>
                         </div>
                       )}
