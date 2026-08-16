@@ -1016,10 +1016,30 @@ export function useSnapshots(projectId: string | null) {
   });
 }
 
+export function useLegacyAuditProgress(projectId: string | null) {
+  return useQuery({
+    queryKey: ['legacy-audit-progress', projectId] as const,
+    enabled: !!projectId,
+    queryFn: async (): Promise<number> => {
+      if (!projectId) return 0;
+      const { count, error } = await supabase
+        .from('progress_records')
+        .select('id', { count: 'exact', head: true })
+        .eq('project_id', projectId)
+        .eq('source_type', 'baseline')
+        .or('earned_qty_imported.not.is.null,earn_whrs_imported.not.is.null');
+      if (error) throw error;
+      return count ?? 0;
+    },
+  });
+}
+
 type SnapshotMutationInput = { projectId: string; snapshotId: string };
+type ProjectMutationInput = { projectId: string };
 
 function invalidateSnapshotMutation(qc: ReturnType<typeof useQueryClient>, projectId: string) {
   qc.invalidateQueries({ queryKey: ['snapshots', projectId] });
+  qc.invalidateQueries({ queryKey: ['legacy-audit-progress', projectId] });
   qc.invalidateQueries({ queryKey: ['snapshot-comparison'] });
   qc.invalidateQueries({ queryKey: ['progress-rows', projectId] });
   qc.invalidateQueries({ queryKey: ['project-metrics', projectId] });
@@ -1047,6 +1067,20 @@ export function useRevertSnapshot() {
     mutationFn: async ({ snapshotId }: SnapshotMutationInput) => {
       const { data, error } = await supabase.rpc('revert_progress_snapshot', {
         p_snapshot_id: snapshotId,
+      });
+      if (error) throw error;
+      return data as Record<string, unknown>;
+    },
+    onSettled: (_data, _error, variables) => invalidateSnapshotMutation(qc, variables.projectId),
+  });
+}
+
+export function useClearLegacyAuditProgress() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ projectId }: ProjectMutationInput) => {
+      const { data, error } = await supabase.rpc('clear_legacy_audit_progress', {
+        p_project_id: projectId,
       });
       if (error) throw error;
       return data as Record<string, unknown>;

@@ -3,8 +3,10 @@ import { Camera, Download, Info, RotateCcw, Trash2 } from 'lucide-react';
 import { useProjectStore } from '@/stores/project';
 import {
   hasRole,
+  useClearLegacyAuditProgress,
   useCurrentUser,
   useDeleteSnapshot,
+  useLegacyAuditProgress,
   useRevertSnapshot,
   useSnapshotComparison,
   useSnapshots,
@@ -14,6 +16,7 @@ import { Card, CardHeader } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { NoProjectSelected } from '@/components/ui/NoProjectSelected';
 import { QueryError } from '@/components/ui/QueryError';
+import { LegacyAuditProgressModal } from '@/components/snapshots/LegacyAuditProgressModal';
 import { SnapshotActionModal, type SnapshotAction } from '@/components/snapshots/SnapshotActionModal';
 import { fmt } from '@/lib/format';
 import { downloadCsv } from '@/lib/export';
@@ -85,11 +88,14 @@ export function SnapshotsPage() {
   const projectId = useProjectStore((s) => s.currentProjectId);
   const { data: me } = useCurrentUser();
   const snapshots = useSnapshots(projectId);
+  const legacyAuditProgress = useLegacyAuditProgress(projectId);
   const deleteSnapshot = useDeleteSnapshot();
   const revertSnapshot = useRevertSnapshot();
+  const clearLegacyAuditProgress = useClearLegacyAuditProgress();
   const [a, setA] = useState<string | null>(null);
   const [b, setB] = useState<string | null>(null);
   const [action, setAction] = useState<{ kind: SnapshotAction; snapshot: Snapshot } | null>(null);
+  const [clearLegacyOpen, setClearLegacyOpen] = useState(false);
 
   const canManage = hasRole(me?.role, 'pc_reviewer');
 
@@ -129,6 +135,20 @@ export function SnapshotsPage() {
   return (
     <div className="space-y-4">
       <HowToCard />
+      {canManage && rows.length === 0 && (legacyAuditProgress.data ?? 0) > 0 && (
+        <Card>
+          <CardHeader
+            eyebrow="Legacy cleanup"
+            title="Audit progress remains"
+            caption={`${legacyAuditProgress.data} baseline ${legacyAuditProgress.data === 1 ? 'record still has' : 'records still have'} earned values from an older audit upload, even though its snapshot history is gone.`}
+            actions={
+              <Button variant="danger" size="sm" onClick={() => setClearLegacyOpen(true)}>
+                Clear legacy audit progress
+              </Button>
+            }
+          />
+        </Card>
+      )}
       <Card padded={false}>
         <div className="px-6 pt-5 pb-3">
           <CardHeader
@@ -405,6 +425,26 @@ export function SnapshotsPage() {
           } else {
             deleteSnapshot.mutate(variables, { onSuccess });
           }
+        }}
+      />
+
+      <LegacyAuditProgressModal
+        open={clearLegacyOpen}
+        pending={clearLegacyAuditProgress.isPending}
+        error={clearLegacyAuditProgress.error as Error | null}
+        recordCount={legacyAuditProgress.data ?? 0}
+        onClose={() => {
+          if (!clearLegacyAuditProgress.isPending) {
+            clearLegacyAuditProgress.reset();
+            setClearLegacyOpen(false);
+          }
+        }}
+        onConfirm={() => {
+          if (!projectId) return;
+          clearLegacyAuditProgress.mutate(
+            { projectId },
+            { onSuccess: () => setClearLegacyOpen(false) },
+          );
         }}
       />
     </div>
