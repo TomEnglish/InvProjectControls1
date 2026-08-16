@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from './supabase';
 import { useAuth } from './auth';
 import type { ImportManifest, DisciplineIngestionStats } from './ingestionStats';
@@ -980,11 +980,14 @@ export type Snapshot = {
   snapshot_date: string;
   week_ending: string | null;
   label: string;
+  source_filename: string | null;
   total_budget_hrs: number | null;
   total_earned_hrs: number | null;
   total_actual_hrs: number | null;
   cpi: number | null;
   spi: number | null;
+  record_count: number;
+  reversible: boolean;
 };
 
 export function useSnapshots(projectId: string | null) {
@@ -1000,13 +1003,55 @@ export function useSnapshots(projectId: string | null) {
         snapshot_date: r.snapshot_date as string,
         week_ending: (r.week_ending as string | null) ?? null,
         label: r.label as string,
+        source_filename: (r.source_filename as string | null) ?? null,
         total_budget_hrs: r.total_budget_hrs != null ? Number(r.total_budget_hrs) : null,
         total_earned_hrs: r.total_earned_hrs != null ? Number(r.total_earned_hrs) : null,
         total_actual_hrs: r.total_actual_hrs != null ? Number(r.total_actual_hrs) : null,
         cpi: r.cpi != null ? Number(r.cpi) : null,
         spi: r.spi != null ? Number(r.spi) : null,
+        record_count: r.record_count != null ? Number(r.record_count) : 0,
+        reversible: r.reversible === true,
       }));
     },
+  });
+}
+
+type SnapshotMutationInput = { projectId: string; snapshotId: string };
+
+function invalidateSnapshotMutation(qc: ReturnType<typeof useQueryClient>, projectId: string) {
+  qc.invalidateQueries({ queryKey: ['snapshots', projectId] });
+  qc.invalidateQueries({ queryKey: ['snapshot-comparison'] });
+  qc.invalidateQueries({ queryKey: ['progress-rows', projectId] });
+  qc.invalidateQueries({ queryKey: ['project-metrics', projectId] });
+  qc.invalidateQueries({ queryKey: ['discipline-metrics', projectId] });
+  qc.invalidateQueries({ queryKey: ['project-qty-rollup', projectId] });
+}
+
+export function useDeleteSnapshot() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ snapshotId }: SnapshotMutationInput) => {
+      const { data, error } = await supabase.rpc('delete_progress_snapshot', {
+        p_snapshot_id: snapshotId,
+      });
+      if (error) throw error;
+      return data as Record<string, unknown>;
+    },
+    onSettled: (_data, _error, variables) => invalidateSnapshotMutation(qc, variables.projectId),
+  });
+}
+
+export function useRevertSnapshot() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ snapshotId }: SnapshotMutationInput) => {
+      const { data, error } = await supabase.rpc('revert_progress_snapshot', {
+        p_snapshot_id: snapshotId,
+      });
+      if (error) throw error;
+      return data as Record<string, unknown>;
+    },
+    onSettled: (_data, _error, variables) => invalidateSnapshotMutation(qc, variables.projectId),
   });
 }
 

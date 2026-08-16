@@ -34,7 +34,13 @@ function createFakeAdmin() {
       spool_fr: "120-DR-590-SHT01-1",
       attr_spec: "01HDPE",
       source_type: "baseline",
+      percent_complete: 0,
+      earned_qty_imported: null,
+      earn_whrs_imported: null,
+      work_type_id: "pipe-work-type",
+      work_type_raw: "PIPE-STD",
     }],
+    before_milestones: [],
   };
 
   const query = (table: string) => {
@@ -45,6 +51,9 @@ function createFakeAdmin() {
         return chain;
       },
       eq() {
+        return chain;
+      },
+      in() {
         return chain;
       },
       order() {
@@ -94,6 +103,8 @@ function createFakeAdmin() {
         if (!operation) {
           const data = table === "progress_records"
             ? readData.existing_records
+            : table === "progress_record_milestones"
+              ? readData.before_milestones
             : readData[table] ?? [];
           return Promise.resolve({ data, error: null }).then(resolve, reject);
         }
@@ -194,5 +205,17 @@ Deno.test("weekly Pipe import updates the existing record and its milestones", a
   assert(
     snapshotItem.progress_record_id === "baseline-pipe-row",
     "snapshot must point to the existing record",
+  );
+  assert(
+    snapshotItem.before_percent_complete === 0,
+    "snapshot must capture the prior earned percent for revert",
+  );
+  assert(
+    Array.isArray(snapshotItem.before_milestones),
+    "snapshot must capture the prior milestone rows for revert",
+  );
+  assert(
+    !("actual_hrs" in update),
+    "weekly progress must not replace actual hours",
   );
 });

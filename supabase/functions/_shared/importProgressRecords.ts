@@ -194,7 +194,7 @@ export async function importProgressRecords(p: ImportParams): Promise<ImportResu
     // previous weeks are intentionally excluded from matching.
     p.admin
       .from('progress_records')
-      .select('id, discipline_id, source_row, dwg, tag_no, spool_fr, attr_spec, source_type')
+      .select('id, discipline_id, source_row, dwg, tag_no, spool_fr, attr_spec, source_type, percent_complete, earned_qty_imported, earn_whrs_imported, work_type_id, work_type_raw')
       .eq('project_id', p.projectId)
       .eq('source_type', 'baseline'),
   ]);
@@ -342,24 +342,58 @@ export async function importProgressRecords(p: ImportParams): Promise<ImportResu
   }
   const recordIds = matchResult.ids as string[];
 
+  const { data: beforeMilestoneRows, error: beforeMilestoneErr } = await p.admin
+    .from('progress_record_milestones')
+    .select('progress_record_id, seq, roc_milestone_id, label, value')
+    .in('progress_record_id', recordIds);
+  if (beforeMilestoneErr) {
+    return { ok: false, error: 'existing milestones: ' + beforeMilestoneErr.message };
+  }
+
+  const beforeRecordById = new Map(
+    (existingRecords as (ExistingProgressRecord & {
+      percent_complete?: number | string | null;
+      earned_qty_imported?: number | string | null;
+      earn_whrs_imported?: number | string | null;
+      work_type_id?: string | null;
+      work_type_raw?: string | null;
+    })[]).map((record) => [record.id, record]),
+  );
+  const beforeMilestonesByRecord = new Map<string, Record<string, unknown>[]>();
+  for (const milestone of (beforeMilestoneRows ?? []) as Record<string, unknown>[]) {
+    const rows = beforeMilestonesByRecord.get(String(milestone.progress_record_id)) ?? [];
+    rows.push({
+      seq: milestone.seq,
+      roc_milestone_id: milestone.roc_milestone_id ?? null,
+      label: milestone.label ?? null,
+      value: milestone.value,
+    });
+    beforeMilestonesByRecord.set(String(milestone.progress_record_id), rows);
+  }
+
+  for (const recordId of recordIds) {
+    if (!beforeRecordById.has(recordId)) {
+      return { ok: false, error: `existing record ${recordId} disappeared during import` };
+    }
+  }
+
   // Weekly uploads update the matching locked-baseline row so the Progress
   // page shows the new milestone values on the record the user already knows.
   // Audit uploads never create new project-scope records.
   for (let i = 0; i < recordRows.length; i++) {
     const matchedId = recordIds[i]!;
     const row = recordRows[i]!.record;
-    const {
-      tenant_id: _tenantId,
-      project_id: _projectId,
-      iwp_id: _iwpId,
-      budget_qty: _budgetQty,
-      budget_hrs: _budgetHrs,
-      source_type: _sourceType,
-      status: _status,
-      work_type_id: _workTypeId,
-      work_type_raw: _workTypeRaw,
-      ...progressUpdate
-    } = row;
+    const progressUpdate: Record<string, unknown> = {
+      // Audit uploads update earned progress only. Budget, identity, and
+      // actual-hours fields remain owned by the baseline/actual-hours flows.
+      percent_complete: row.percent_complete,
+      earned_qty_imported: row.earned_qty_imported ?? null,
+      earn_whrs_imported: row.earn_whrs_imported ?? null,
+    };
+    if (row.work_type_id) {
+      progressUpdate.work_type_id = row.work_type_id;
+      progressUpdate.work_type_raw = row.work_type_raw;
+    }
     const { error: updateErr } = await p.admin
       .from('progress_records')
       .update({
@@ -425,6 +459,7 @@ export async function importProgressRecords(p: ImportParams): Promise<ImportResu
 
   const snapItems = importedRecords.map((r, i) => {
     const recordId = recordIds[i]!;
+    const before = beforeRecordById.get(recordId)!;
     const pctFrac = (r.percent_complete ?? 0) / 100;
     return {
       snapshot_id: snapshot.id,
@@ -436,6 +471,12 @@ export async function importProgressRecords(p: ImportParams): Promise<ImportResu
       earned_qty: r.budget_qty != null ? r.budget_qty * pctFrac : null,
       actual_hrs: r.actual_hrs ?? 0,
       actual_qty: r.actual_qty,
+      before_percent_complete: before.percent_complete != null ? Number(before.percent_complete) : 0,
+      before_earned_qty_imported: before.earned_qty_imported != null ? Number(before.earned_qty_imported) : null,
+      before_earn_whrs_imported: before.earn_whrs_imported != null ? Number(before.earn_whrs_imported) : null,
+      before_work_type_id: before.work_type_id ?? null,
+      before_work_type_raw: before.work_type_raw ?? null,
+      before_milestones: beforeMilestonesByRecord.get(recordId) ?? [],
     };
   });
   if (snapItems.length > 0) {

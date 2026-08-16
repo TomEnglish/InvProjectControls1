@@ -1,11 +1,20 @@
 import { useMemo, useState } from 'react';
-import { Camera, Info, Download } from 'lucide-react';
+import { Camera, Download, Info, RotateCcw, Trash2 } from 'lucide-react';
 import { useProjectStore } from '@/stores/project';
-import { useSnapshotComparison, useSnapshots, type Snapshot } from '@/lib/queries';
+import {
+  hasRole,
+  useCurrentUser,
+  useDeleteSnapshot,
+  useRevertSnapshot,
+  useSnapshotComparison,
+  useSnapshots,
+  type Snapshot,
+} from '@/lib/queries';
 import { Card, CardHeader } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { NoProjectSelected } from '@/components/ui/NoProjectSelected';
 import { QueryError } from '@/components/ui/QueryError';
+import { SnapshotActionModal, type SnapshotAction } from '@/components/snapshots/SnapshotActionModal';
 import { fmt } from '@/lib/format';
 import { downloadCsv } from '@/lib/export';
 
@@ -28,7 +37,7 @@ function HowToCard() {
             <span className="is-chip is-chip-primary" style={{ padding: '1px 6px', fontSize: 11 }}>B (Later)</span>.
             Selections will automatically swap if chosen out of chronological order to ensure A is always the earlier snapshot and B is the later snapshot.
             Once both are set, a comparison card appears showing per-record drift in earned percent and earned hours between the two captures.
-            Drift magnitudes are always positive; week-ending dates label each side.
+            Drift magnitudes are always positive; week-ending dates label each side. Reviewer roles also have cleanup actions: Revert restores saved before-state, while Delete history removes comparison history only.
           </p>
         </div>
       </div>
@@ -53,9 +62,15 @@ const KIND_LABEL: Record<Snapshot['kind'], string> = {
 
 export function SnapshotsPage() {
   const projectId = useProjectStore((s) => s.currentProjectId);
+  const { data: me } = useCurrentUser();
   const snapshots = useSnapshots(projectId);
+  const deleteSnapshot = useDeleteSnapshot();
+  const revertSnapshot = useRevertSnapshot();
   const [a, setA] = useState<string | null>(null);
   const [b, setB] = useState<string | null>(null);
+  const [action, setAction] = useState<{ kind: SnapshotAction; snapshot: Snapshot } | null>(null);
+
+  const canManage = hasRole(me?.role, 'pc_reviewer');
 
   const sortedById = useMemo(() => {
     const map = new Map<string, Snapshot>();
@@ -98,7 +113,7 @@ export function SnapshotsPage() {
           <CardHeader
             eyebrow="Weekly snapshots"
             title="History"
-            caption="Frozen captures of project state. Pick two to compare."
+            caption="Frozen captures of project state. Pick two to compare, or use the Actions column to manage audit history."
           />
         </div>
         <div className="overflow-x-auto">
@@ -116,13 +131,14 @@ export function SnapshotsPage() {
                 <th className="text-right">Actual hrs</th>
                 <th className="text-right">CPI</th>
                 <th className="text-right">SPI</th>
+                {canManage && <th>Actions</th>}
               </tr>
             </thead>
             <tbody>
               {rows.length === 0 && (
                 <tr>
                   <td
-                    colSpan={11}
+                    colSpan={canManage ? 12 : 11}
                     className="text-center text-[color:var(--color-text-muted)] py-10"
                   >
                     <Camera size={20} className="inline mb-1 opacity-60" />
@@ -195,6 +211,34 @@ export function SnapshotsPage() {
                   </td>
                   <td className="text-right font-mono">{fmt.ratio(s.cpi ?? undefined)}</td>
                   <td className="text-right font-mono">{fmt.ratio(s.spi ?? undefined)}</td>
+                  {canManage && (
+                    <td className="whitespace-nowrap">
+                      {s.kind === 'weekly' && (
+                        <div className="flex items-center gap-1">
+                          {s.reversible && (
+                            <Button
+                              variant="danger"
+                              size="sm"
+                              title="Revert this audit and remove its snapshot"
+                              aria-label={`Revert ${snapshotPickerLabel(s)}`}
+                              onClick={() => setAction({ kind: 'revert', snapshot: s })}
+                            >
+                              <RotateCcw size={13} /> Revert
+                            </Button>
+                          )}
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            title="Delete snapshot history without changing current progress"
+                            aria-label={`Delete history for ${snapshotPickerLabel(s)}`}
+                            onClick={() => setAction({ kind: 'delete', snapshot: s })}
+                          >
+                            <Trash2 size={13} /> Delete
+                          </Button>
+                        </div>
+                      )}
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
@@ -305,6 +349,35 @@ export function SnapshotsPage() {
           )}
         </Card>
       )}
+
+      <SnapshotActionModal
+        open={!!action}
+        action={action?.kind ?? null}
+        snapshot={action?.snapshot ?? null}
+        pending={deleteSnapshot.isPending || revertSnapshot.isPending}
+        error={(deleteSnapshot.error ?? revertSnapshot.error) as Error | null}
+        onClose={() => {
+          if (!deleteSnapshot.isPending && !revertSnapshot.isPending) {
+            deleteSnapshot.reset();
+            revertSnapshot.reset();
+            setAction(null);
+          }
+        }}
+        onConfirm={() => {
+          if (!projectId || !action) return;
+          const variables = { projectId, snapshotId: action.snapshot.id };
+          const onSuccess = () => {
+            if (a === action.snapshot.id) setA(null);
+            if (b === action.snapshot.id) setB(null);
+            setAction(null);
+          };
+          if (action.kind === 'revert') {
+            revertSnapshot.mutate(variables, { onSuccess });
+          } else {
+            deleteSnapshot.mutate(variables, { onSuccess });
+          }
+        }}
+      />
     </div>
   );
 }
