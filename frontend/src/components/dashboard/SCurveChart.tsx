@@ -58,8 +58,8 @@ export function SCurveChart({ periods, summary }: Props) {
       {
         label: 'Planned (BCWS)',
         data: plannedSeries,
-        borderColor: '#0369a1',
-        backgroundColor: 'rgba(3, 105, 161, 0.08)',
+        borderColor: '#174fda',
+        backgroundColor: 'rgba(23, 79, 218, 0.08)',
         borderDash: [5, 5],
         tension: 0.3,
         pointRadius: 3,
