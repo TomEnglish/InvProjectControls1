@@ -85,21 +85,13 @@ export function Sidebar() {
   const { data: me } = useCurrentUser();
   return (
     <aside
-      className="fixed top-0 left-0 h-screen flex flex-col overflow-y-auto z-50 bg-[color:var(--color-surface)] border-r border-[color:var(--color-line)]"
+      className="fixed top-0 left-0 h-screen flex flex-col overflow-y-auto z-50 bg-[color:var(--color-sidebar)] text-[color:var(--color-sidebar-ink)] border-r border-[color:var(--color-sidebar-border)]"
       style={{ width: 'var(--sidebar-w)' }}
     >
-      <div className="px-4 py-5 border-b border-[color:var(--color-line)]">
-        <a href="/" className="flex items-center gap-2.5">
-          <img src="/brand/invenio-mark.svg" alt="" className="w-8 h-8 dark:hidden" />
-          <img src="/brand/invenio-mark-dark.svg" alt="" className="w-8 h-8 hidden dark:block" />
-          <div>
-            <div className="text-sm font-extrabold text-[color:var(--color-primary)] tracking-tight leading-none">
-              Invenio
-            </div>
-            <div className="text-[11px] text-[color:var(--color-text-muted)] mt-0.5">
-              ProjectControls
-            </div>
-          </div>
+      <div className="flex items-center justify-center px-2 border-b border-[color:var(--color-sidebar-border)]" style={{ height: 'var(--topbar-h)' }}>
+        <a href="/" className="flex items-center" aria-label="Invenio ProjectControls home">
+          {/* Light-text logo: the sidebar is navy in both themes. */}
+          <img src="/brand/invenio-technologies-logo-light.png" alt="Invenio Technologies" className="h-10 w-auto" />
         </a>
       </div>
 
@@ -111,7 +103,7 @@ export function Sidebar() {
           if (items.length === 0) return null;
           return (
           <div key={section.label} className="mb-1">
-            <div className="px-4 pt-3 pb-1.5 text-[10px] uppercase tracking-widest text-[color:var(--color-text-subtle)] font-bold">
+            <div className="px-5 pt-3 pb-1 text-[11px] uppercase tracking-[0.05em] text-[color:var(--color-sidebar-muted)]">
               {section.label}
             </div>
             {items.map(({ to, label, icon: Icon, end }) => (
@@ -121,10 +113,10 @@ export function Sidebar() {
                 end={end}
                 className={({ isActive }) =>
                   [
-                    'flex items-center gap-2.5 mx-2 px-2.5 py-2 text-sm rounded-md font-medium transition-colors',
+                    'flex items-center gap-2.5 pl-[17px] pr-5 py-2 text-sm border-l-[3px] transition-colors',
                     isActive
-                      ? 'bg-[color:var(--color-primary-soft)] text-[color:var(--color-primary)]'
-                      : 'text-[color:var(--color-text-muted)] hover:bg-[color:var(--color-raised)] hover:text-[color:var(--color-text)]',
+                      ? 'border-[color:var(--color-sidebar-accent)] bg-[color:var(--color-sidebar-active)] text-white font-medium [&>svg]:text-[color:var(--color-sidebar-accent)]'
+                      : 'border-transparent text-[color:var(--color-sidebar-ink)] hover:bg-[color:var(--color-sidebar-hover)] [&>svg]:text-[color:var(--color-sidebar-muted)]',
                   ].join(' ')
                 }
               >
@@ -137,7 +129,7 @@ export function Sidebar() {
         })}
       </nav>
 
-      <div className="px-4 py-3 border-t border-[color:var(--color-line)] text-[11px] text-[color:var(--color-text-subtle)]">
+      <div className="px-5 py-3 border-t border-[color:var(--color-sidebar-border)] text-[11px] text-[color:var(--color-sidebar-muted)]">
         v0.1 · Phase 0
       </div>
     </aside>

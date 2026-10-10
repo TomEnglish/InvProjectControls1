@@ -28,9 +28,8 @@ export function LoginPage() {
 
   return (
     <AuthLayout
-      eyebrow="ProjectControls"
-      title="Sign in to your account"
-      subtitle="Earned value, baselines, and change orders — under control."
+      eyebrow="Project Controls"
+      title="Sign in"
     >
       <form onSubmit={onSubmit} className="grid gap-4">
         <div className="is-form-field">

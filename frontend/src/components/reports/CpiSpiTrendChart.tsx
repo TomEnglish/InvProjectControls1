@@ -37,8 +37,8 @@ export function CpiSpiTrendChart({ periods }: { periods: ProgressPeriod[] }) {
       {
         label: 'CPI',
         data: cpi,
-        borderColor: '#0369a1',
-        backgroundColor: 'rgba(3, 105, 161, 0.1)',
+        borderColor: '#174fda',
+        backgroundColor: 'rgba(23, 79, 218, 0.1)',
         tension: 0.3,
         pointRadius: 4,
       },

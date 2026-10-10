@@ -35,8 +35,8 @@ export function BudgetByDisciplineChart({ disciplines, approvedHrs, pendingHrs }
       {
         label: 'Original',
         data: original,
-        backgroundColor: 'rgba(3, 105, 161, 0.85)',
-        borderColor: '#0369a1',
+        backgroundColor: 'rgba(23, 79, 218, 0.85)',
+        borderColor: '#174fda',
         borderWidth: 1,
       },
       {
